@@ -160,13 +160,14 @@ export class Loader {
       this.paged('deletions', ['id'], '*', (q) => q.eq('workspace_id', this.ws).gt('deleted_at', since)),
       ...tables.map((t) => changed(t, this.scope(t))),
     ])
-    const joined = [...new Set(rest[tables.indexOf('workspace_members')].map((r) => String(r.profile_id)))].filter((id) => !members.has(id))
+    const byTable = Object.fromEntries(tables.map((t, n) => [t, rest[n]])) as Record<(typeof tables)[number], Loose[]>
+    const joined = [...new Set(byTable.workspace_members.map((r) => String(r.profile_id)))].filter((id) => !members.has(id))
     const newcomers = await Promise.all(chunks(joined).map((ids) => this.paged('profiles', ['id'], '*', (q) => q.in('id', ids))))
     const inputs: Incoming[] = [
       fetched('workspaces', workspace),
       fetched('profiles', [...known.flat(), ...newcomers.flat()]),
       { from: 'deletions', rows: deletions as unknown as DeletionRow[] },
-      ...tables.map((t, n) => fetched(t, rest[n])),
+      ...tables.map((t) => fetched(t, byTable[t])),
     ]
     return { inputs, gone: workspace.length === 0 }
   }
@@ -257,7 +258,4 @@ export function sinceMark(stamp: string, seconds = 10): string {
   return `${new Date(Number(ms)).toISOString().slice(0, 23)}${us}Z`
 }
 
-/** deletions are kept 45 days: last up to date (`at`, ms on this browser's clock) longer ago, catching up could miss some */
-export function tooLongAgo(at: number, now: number, days = 44): boolean {
-  return now - at > days * 86_400_000
-}
+export { tooLongAgo } from './rows'

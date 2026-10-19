@@ -1,5 +1,7 @@
 /** The workspaces you are in, and making a new one. */
 import type { TeamDraft } from '@/model/teamDraft'
+import { useSession } from '@/session'
+import { pruneCaches } from './cacheStore'
 import { requireClient, type Db } from './client'
 
 export interface WorkspaceInfo {
@@ -8,10 +10,12 @@ export interface WorkspaceInfo {
   createdAt: string
 }
 
-/** the database rules show only the workspaces you are in */
+/** the database rules show only the workspaces you are in; the copies kept of the others go from this browser */
 export async function myWorkspaces(): Promise<WorkspaceInfo[]> {
   const { data, error } = await requireClient().from('workspaces').select('id,name,created_at').order('name')
   if (error) throw error
+  const me = useSession.getState().profileId
+  if (me) void pruneCaches(me, data.map((w) => w.id))
   return data.map((w) => ({ id: w.id, name: w.name, createdAt: w.created_at }))
 }
 

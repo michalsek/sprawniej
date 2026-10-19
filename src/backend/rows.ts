@@ -69,6 +69,14 @@ export function iso(s: string): string {
   return new Date(Number(ms)).toISOString()
 }
 
+/** deletions are kept 45 days: a browser last up to date longer ago than this could miss some */
+export const MAX_AGE_DAYS = 44
+
+/** last up to date (`at`, ms on this browser's clock) more than `days` ago: catching up could miss deletions */
+export function tooLongAgo(at: number, now: number, days = MAX_AGE_DAYS): boolean {
+  return now - at > days * 86_400_000
+}
+
 export function isoOrNull(s: string | null | undefined): string | null {
   return s == null ? null : iso(s)
 }

@@ -2,12 +2,28 @@ import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { applyRows, emptyLive, type Incoming, type LiveState, type StoreSlice } from '@/backend/apply'
-import { CACHE_FORMAT, cacheMark, check, decode, encode, inboxGone, inputsOf, keepStored, rowsOf, Saver, SCHEMA_ID, shrink, wanted, type CacheId, type CacheMeta } from '@/backend/cache'
-import { cacheState, dropCache, pruneCaches, readCache, setCacheKV, stopCaching, writeCache, type CacheKV } from '@/backend/cacheStore'
+import { IDBFactory as FakeIDBFactory, IDBKeyRange as FakeIDBKeyRange, IDBObjectStore as FakeIDBObjectStore } from 'fake-indexeddb'
+import { CACHE_FORMAT, cacheMark, check, decode, encode, inboxGone, inputsOf, keepStored, rowCount, rowsOf, SCHEMA_ID, shrink, wanted, type CacheId, type CacheMeta } from '@/backend/cache'
+import {
+  CACHE_DB,
+  cacheState,
+  dropCache,
+  idbKV,
+  pruneCaches,
+  readCache,
+  setCacheKV,
+  stopCaching,
+  touchCache,
+  wipeCaches,
+  writeCache,
+  writeCacheNow,
+  type CacheKV,
+} from '@/backend/cacheStore'
+import { compareCopy, Saver, type Shot } from '@/backend/keep'
 import { Registry } from '@/backend/registry'
 import type { Row } from '@/backend/tables'
 import { EMPTY } from '@/data/store'
-import { APP_VERSION } from '@/version'
+import { fakeTimers } from './support/fakeTimers'
 
 const WS = 'ws-1'
 const ME = 'p-ana'
@@ -152,6 +168,10 @@ describe('what a copy holds', () => {
     expect(decode('{')).toBeNull()
     expect(decode(JSON.stringify({ v: CACHE_FORMAT + 1, rows: {} }))).toBeNull()
     expect(decode(JSON.stringify({ v: CACHE_FORMAT, rows: { secrets: [] } }))).toBeNull()
+    // rows that aren't rows: applying them would fail
+    expect(decode('{"v":1,"rows":{"issues":[null]}}')).toBeNull()
+    expect(decode('{"v":1,"rows":{"issues":[[1]]}}')).toBeNull()
+    expect(decode('{"v":1,"rows":{"issues":"x"}}')).toBeNull()
     expect(decode(JSON.stringify({ v: CACHE_FORMAT, rows: {} }))).toEqual({ v: CACHE_FORMAT, rows: {} })
   })
 
@@ -170,23 +190,23 @@ describe('when a copy can be used', () => {
 
   test('another format, app version, database layout, project, person or workspace: not used', () => {
     const want = wanted(ID)
-    expect(check(meta(), want, now)).toBeNull()
-    expect(check(meta({ v: 999 }), want, now)).toBe('format')
-    expect(check(meta({ app: '0.0.1' }), want, now)).toBe('app')
-    expect(check(meta({ schema: '1' }), want, now)).toBe('schema')
-    expect(check(meta({ project: 'other.example.co' }), want, now)).toBe('project')
-    expect(check(meta({ profileId: 'p-bob' }), want, now)).toBe('profile')
-    expect(check(meta({ workspaceId: 'ws-2' }), want, now)).toBe('workspace')
-    expect(check(null, want, now)).toBe('format')
-    expect(check(meta({ mark: 'yesterday' }), want, now)).toBe('no-mark')
-    expect(want.app).toBe(APP_VERSION)
+    expect(check(meta(), want, now)).toEqual({ meta: meta() })
+    expect(check(meta({ v: 999 }), want, now)).toEqual({ bad: 'format' })
+    expect(check(meta({ app: '0.0.1' }), want, now)).toEqual({ bad: 'app' })
+    expect(check(meta({ schema: '1' }), want, now)).toEqual({ bad: 'schema' })
+    expect(check(meta({ project: 'other.example.co' }), want, now)).toEqual({ bad: 'project' })
+    expect(check(meta({ profileId: 'p-bob' }), want, now)).toEqual({ bad: 'profile' })
+    expect(check(meta({ workspaceId: 'ws-2' }), want, now)).toEqual({ bad: 'workspace' })
+    expect(check(null, want, now)).toEqual({ bad: 'format' })
+    expect(check(meta({ mark: 'yesterday' }), want, now)).toEqual({ bad: 'no-mark' })
+    expect(check({ ...meta(), chars: undefined }, want, now)).toEqual({ bad: 'format' })
   })
 
   test('last up to date 44 days ago is fine; any longer and it is read again whole', () => {
     const want = wanted(ID)
-    expect(check(meta({ caughtUpAt: now - 44 * DAY + 1_000 }), want, now)).toBeNull()
-    expect(check(meta({ caughtUpAt: now - 44 * DAY - 1_000 }), want, now)).toBe('too-old')
-    expect(check(meta({ caughtUpAt: Number.NaN }), want, now)).toBe('too-old')
+    expect('meta' in check(meta({ caughtUpAt: now - 44 * DAY + 1_000 }), want, now)).toBe(true)
+    expect(check(meta({ caughtUpAt: now - 44 * DAY - 1_000 }), want, now)).toEqual({ bad: 'too-old' })
+    expect(check(meta({ caughtUpAt: Number.NaN }), want, now)).toEqual({ bad: 'too-old' })
   })
 
   test('a gap keeps the mark back', () => {
@@ -211,13 +231,16 @@ describe('when a copy can be used', () => {
 describe('catching up from a copy', () => {
   test('the copy plus what changed since it is the same as reading everything again', () => {
     const registry = new Registry()
-    const before = load(world())
+    const i5 = issueRow('i-5', 17, { number: 5 })
+    const before = load([...world(), fetch('issues', [i5])])
     const copy = load(inputsOf(decode(encode(before.state, { id: ID, mark: before.state.mark!, caughtUpAt: 1, archive: true, now: 2 })!.body)!), emptyLive(), { ...EMPTY }, registry)
     // meanwhile: issue 1 retitled, issue 2 deleted, l-bug taken off issue 1 and put back later, a new issue with a
-    // comment, issue 1's follower gone, and note n-2 gone (notes leave no deletions behind)
+    // comment, issue 1's follower gone, issue 5 archived, and note n-2 gone (notes leave no deletions behind); and
+    // while the changes were read, issue 6 was made and deleted (its DELETE held)
+    const archived5 = issueRow('i-5', 25, { number: 5, status: 'done', archived_at: T(25) })
     const after: Incoming[] = world().map((i) => {
       if (i.from !== 'fetch') return i
-      if (i.table === 'issues') return fetch('issues', [issueRow('i-1', 20, { title: 'Retitled' }), issueRow('i-3', 12, { number: 3, status: 'done', archived_at: T(12) }), issueRow('i-4', 22, { number: 4 })])
+      if (i.table === 'issues') return fetch('issues', [issueRow('i-1', 20, { title: 'Retitled' }), issueRow('i-3', 12, { number: 3, status: 'done', archived_at: T(12) }), issueRow('i-4', 22, { number: 4 }), archived5])
       if (i.table === 'issue_labels') return fetch('issue_labels', [tagged('i-1', 'l-bug', 24), tagged('i-3', 'l-bug', 12)])
       if (i.table === 'issue_followers') return fetch('issue_followers', [])
       if (i.table === 'comments') return fetch('comments', [comment('c-1', 'i-1', 13), comment('c-2', 'i-3', 14), comment('c-4', 'i-4', 23)])
@@ -226,7 +249,7 @@ describe('catching up from a copy', () => {
     })
     const deletion = (table: string, key: Record<string, string>, s: number) => ({ id: s, workspace_id: WS, table_name: table, row_key: key, deleted_at: T(s) })
     const changes: Incoming[] = [
-      fetch('issues', [issueRow('i-1', 20, { title: 'Retitled' }), issueRow('i-4', 22, { number: 4 }), issueRow('i-1', 5, { title: 'An older copy' })]),
+      fetch('issues', [issueRow('i-1', 20, { title: 'Retitled' }), issueRow('i-4', 22, { number: 4 }), issueRow('i-1', 5, { title: 'An older copy' }), archived5, issueRow('i-6', 26, { number: 6 })]),
       fetch('issue_labels', [tagged('i-1', 'l-bug', 24)]),
       fetch('comments', [comment('c-4', 'i-4', 23)]),
       {
@@ -234,6 +257,7 @@ describe('catching up from a copy', () => {
         rows: [deletion('issues', { id: 'i-2' }, 21), deletion('issue_labels', { issue_id: 'i-1', label_id: 'l-bug' }, 21), deletion('issue_followers', { issue_id: 'i-1', profile_id: 'p-bob' }, 21)],
       } as Incoming,
       ...inboxGone(Object.keys(copy.state.server.inbox), new Set(['n-1'])),
+      { from: 'message', message: { table: 'issues', op: 'DELETE', row: { id: 'i-6' } } },
     ]
     const caught = load(changes, copy.state, { ...EMPTY, ...copy.patch } as StoreSlice, registry)
     const whole = load(after)
@@ -245,6 +269,9 @@ describe('catching up from a copy', () => {
     expect(shown.inbox).toEqual(whole.patch.inbox!)
     expect(shown.issues['i-1'].title).toBe('Retitled')
     expect(shown.issues['i-1'].labels).toEqual(['l-bug'])
+    expect(shown.issues['i-5']).toBeUndefined()
+    expect(shown.archive['i-5'].title).toBe('Issue i-5')
+    expect(shown.issues['i-6']).toBeUndefined()
   })
 
   test('inbox notes not there any more: one DELETE each, and only those go', () => {
@@ -259,35 +286,6 @@ describe('catching up from a copy', () => {
 })
 
 describe('keeping the copy a moment after changes', () => {
-  /** timers that only move when the test says */
-  function fakeTimers() {
-    let at = 0
-    let timers: { fn: () => void; due: number; id: number }[] = []
-    let n = 0
-    return {
-      now: () => at,
-      setTimeout: (fn: () => void, ms: number) => {
-        timers.push({ fn, due: at + ms, id: ++n })
-        return n
-      },
-      clearTimeout: (id: unknown) => {
-        timers = timers.filter((t) => t.id !== id)
-      },
-      async tick(ms: number) {
-        const end = at + ms
-        for (;;) {
-          const next = timers.filter((t) => t.due <= end).sort((a, b) => a.due - b.due)[0]
-          if (!next) break
-          at = next.due
-          timers = timers.filter((t) => t !== next)
-          next.fn()
-          await sleep(0)
-        }
-        at = end
-      },
-    }
-  }
-
   test('once nothing changed for 3 s, and never later than 30 s after the first change', async () => {
     const t = fakeTimers()
     let saves = 0
@@ -307,16 +305,16 @@ describe('keeping the copy a moment after changes', () => {
     expect(saves).toBe(2)
   })
 
-  test('now() keeps it at once; a change while keeping keeps it once more after', async () => {
+  test('saveNow() keeps it at once; a change while keeping keeps it once more after', async () => {
     const t = fakeTimers()
     let saves = 0
     let release!: () => void
     const s = new Saver({ quiet: 3_000, most: 30_000, save: () => new Promise<void>((r) => (release = () => (saves++, r()))) }, t)
     s.poke()
-    const kept = s.now()
-    // the timer went with now(): nothing more is kept on its own
+    const kept = s.saveNow()
+    // the timer went with saveNow(): nothing more is kept on its own
     await t.tick(5_000)
-    void s.now()
+    void s.saveNow()
     release()
     await sleep(0)
     release()
@@ -326,6 +324,18 @@ describe('keeping the copy a moment after changes', () => {
     s.poke()
     await t.tick(10_000)
     expect(saves).toBe(2)
+  })
+
+  test('what was kept last: the same copy, one only up to date again, or a new one', () => {
+    const live = load(world()).state
+    const shot = (more: Partial<Shot> = {}): Shot => ({ server: live.server, partial: live.partial, mark: T(16), caughtUpAt: 1, archive: false, ...more })
+    expect(compareCopy(null, shot())).toBe('new')
+    expect(compareCopy(shot(), shot())).toBe('same')
+    expect(compareCopy(shot(), shot({ caughtUpAt: 2 }))).toBe('touch')
+    expect(compareCopy(shot(), shot({ mark: T(17) }))).toBe('new')
+    expect(compareCopy(shot(), shot({ archive: true }))).toBe('new')
+    expect(compareCopy(shot(), shot({ server: { ...live.server } }))).toBe('new')
+    expect(rowCount(live.server)).toBe(21)
   })
 })
 
@@ -341,12 +351,24 @@ class FakeKV implements CacheKV {
     this.check('get')
     return keys.map((k) => this.map.get(k))
   }
+  /** runs inside a write, before it decides (a sign-out elsewhere, say) */
+  meanwhile: (() => void) | null = null
   async putIf(meta: [string, CacheMeta], body: [string, string], keep: (old: unknown) => boolean) {
     this.check('put')
+    this.meanwhile?.()
     if (keep(this.map.get(meta[0]))) return 'kept' as const
     this.map.set(meta[0], meta[1])
     this.map.set(body[0], body[1])
     return 'written' as const
+  }
+  putNow(meta: [string, CacheMeta], body: [string, string]) {
+    this.map.set(meta[0], meta[1])
+    this.map.set(body[0], body[1])
+    return true
+  }
+  async update(key: string, next: (old: unknown) => unknown) {
+    const v = next(this.map.get(key))
+    if (v !== null) this.map.set(key, v)
   }
   async delMany(keys: string[]) {
     for (const k of keys) this.map.delete(k)
@@ -434,7 +456,119 @@ describe('where copies are kept', () => {
   test('nothing is read or kept after signing out starts', async () => {
     await writeCache(entry())
     stopCaching()
-    expect(await readCache(ID, Date.now())).toEqual({ miss: 'blocked' })
+    expect(await readCache(ID, Date.now())).toEqual({ miss: 'stopped' })
     expect(await writeCache(entry())).toBe('off')
+    expect(writeCacheNow(entry())).toBe(false)
   })
+
+  test('a sign-out while a copy is on its way: it isn’t written back', async () => {
+    kv.meanwhile = () => stopCaching()
+    expect(await writeCache(entry())).toBe('off')
+    expect(kv.map.size).toBe(0)
+  })
+
+  test('the page going: put at once', async () => {
+    expect(writeCacheNow(entry(ID, Date.now(), T(20)))).toBe(true)
+    const r = await readCache(ID, Date.now())
+    expect('meta' in r && r.meta.mark).toBe(T(20))
+  })
+
+  test('up to date again: only the facts change, and only on the same copy', async () => {
+    const e = entry()
+    await writeCache(e)
+    const later = e.meta.caughtUpAt + 5_000
+    expect(await touchCache(ID, T(16), later)).toBe(true)
+    const r = await readCache(ID, Date.now())
+    expect('meta' in r && r.meta.caughtUpAt).toBe(later)
+    expect('body' in r && r.body.rows.issues?.length).toBe(3)
+    // another mark: another copy, left alone
+    expect(await touchCache(ID, T(15), later + 1)).toBe(false)
+  })
+})
+
+describe('IndexedDB itself', () => {
+  ;(globalThis as { IDBKeyRange?: unknown }).IDBKeyRange ??= FakeIDBKeyRange
+  const meta = (mark = T(16)): CacheMeta => ({ ...wanted(ID), mark, caughtUpAt: Date.now(), savedAt: Date.now(), chars: 2, archive: false })
+
+  test('a write keeps what is there or puts both, in one go', async () => {
+    const kv = idbKV({ factory: new FakeIDBFactory() })
+    expect(await kv.putIf(['m:x', meta()], ['b:x', '{}'], () => false)).toBe('written')
+    expect(await kv.putIf(['m:x', meta(T(20))], ['b:x', '{"new":1}'], (old) => (old as CacheMeta).mark === T(16))).toBe('kept')
+    expect(await kv.getMany(['m:x', 'b:x'])).toEqual([meta(), '{}'].map((v, n) => (n === 0 ? { ...(v as CacheMeta), caughtUpAt: expect.any(Number), savedAt: expect.any(Number) } : v)))
+    expect((await kv.metas()).map(([k]) => k)).toEqual(['m:x'])
+    expect(kv.putNow!(['m:y', meta()], ['b:y', '{}'])).toBe(true)
+    await sleep(5)
+    expect((await kv.getMany(['b:y']))[0]).toBe('{}')
+    kv.close()
+  })
+
+  test('deleted from elsewhere (a sign-out): this tab lets go at once, and hears about it', async () => {
+    const factory = new FakeIDBFactory()
+    let told = 0
+    const kv = idbKV({ factory, deleted: () => told++ })
+    await kv.putIf(['m:x', meta()], ['b:x', '{}'], () => false)
+    const blocked = await new Promise<string>((resolve) => {
+      const req = factory.deleteDatabase(CACHE_DB)
+      req.onsuccess = () => resolve('deleted')
+      req.onblocked = () => resolve('blocked')
+    })
+    expect(blocked).toBe('deleted')
+    expect(told).toBe(1)
+  })
+
+  test('signing out here deletes it even while this tab has it open', async () => {
+    const factory = new FakeIDBFactory()
+    const kv = idbKV({ factory })
+    await kv.putIf(['m:x', meta()], ['b:x', '{}'], () => false)
+    setCacheKV(kv)
+    await wipeCaches(factory)
+    const names = (await factory.databases()).map((d) => d.name)
+    expect(names).not.toContain(CACHE_DB)
+    setCacheKV(undefined)
+  })
+
+  test('a database that never opens: given up on in time', async () => {
+    const hanging = { open: () => ({}) } as unknown as IDBFactory
+    const kv = idbKV({ factory: hanging, wait: 20 })
+    const start = Date.now()
+    expect(await kv.getMany(['m:x']).then(() => 'opened', (e: Error) => e.constructor.name)).toBe('SlowOpen')
+    expect(Date.now() - start).toBeLessThan(500)
+  })
+
+  test('the browser full: the write fails with the quota error, as writeCache expects', async () => {
+    const kv = idbKV({ factory: new FakeIDBFactory() })
+    await kv.metas()
+    const put = FakeIDBObjectStore.prototype.put
+    FakeIDBObjectStore.prototype.put = function () {
+      throw new DOMException('full', 'QuotaExceededError')
+    }
+    try {
+      const r = await kv.putIf(['m:x', meta()], ['b:x', '{}'], () => false).then(() => 'written', (e: DOMException) => e.name)
+      expect(r).toBe('QuotaExceededError')
+    } finally {
+      FakeIDBObjectStore.prototype.put = put
+    }
+  })
+
+  test('a browser whose database hangs once: later loads in the tab don’t wait for it', async () => {
+    const g = globalThis as { indexedDB?: unknown; sessionStorage?: unknown }
+    const saved = { indexedDB: g.indexedDB, sessionStorage: g.sessionStorage }
+    const store = new Map<string, string>()
+    g.sessionStorage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v), removeItem: (k: string) => void store.delete(k) }
+    g.indexedDB = { open: () => ({}) }
+    try {
+      setCacheKV(undefined)
+      expect(await readCache(ID, Date.now())).toEqual({ miss: 'slow' })
+      expect(cacheState()).toEqual({ off: true, reason: 'slow' })
+      // the next load in this tab
+      setCacheKV(undefined)
+      const start = Date.now()
+      expect(await readCache(ID, Date.now())).toEqual({ miss: 'slow' })
+      expect(Date.now() - start).toBeLessThan(100)
+    } finally {
+      g.indexedDB = saved.indexedDB
+      g.sessionStorage = saved.sessionStorage
+      setCacheKV(undefined)
+    }
+  }, 5_000)
 })

@@ -6,9 +6,8 @@
  * Your own changes are saved by the writer (writes.ts), which shows them on the open workspace: it attaches once the
  * workspace is open, stays while the workspace is read again from the start, and stops when it closes.
  *
- * A copy of the workspace kept in this browser (cache.ts) makes opening quick: it shows at once, and then only what
- * changed since it is read. The copy is kept again a few seconds after things change, and when the tab is hidden or
- * the workspace closes.
+ * A copy of the workspace kept in this browser (keep.ts, cache.ts) makes opening quick: it shows at once, and then
+ * only what changed since it is read.
  *
  * Everything it talks to (the database, the channels, the browser, the stores, the writer) comes in an env, so tests
  * can give it pretend ones; index.ts gives it the real ones.
@@ -16,11 +15,13 @@
 import type { StoreApi } from 'zustand'
 import { EMPTY, type DataState } from '@/data/store'
 import { applyRows, emptyLive, type Incoming, type LiveState, type Mirror, type StoreSlice } from './apply'
-import { inboxGone, Saver } from './cache'
+import { cacheMark, inboxGone } from './cache'
 import type { ConnectionEvents } from './connection'
 import { RowFetcher, type Asked } from './fetching'
 import { isMessage, track, type ChannelEvents, type ChannelsLike, type ChannelStatus, type Topic, type Tracked } from './live'
-import { planFetch, sinceMark, tooLongAgo, type Reader } from './load'
+import { CopyKeeper, NO_COPY, readCopy, type CopyHooks, type KeptCopy, type Snapshot } from './keep'
+import { planFetch, sinceMark, type Reader } from './load'
+import { tooLongAgo } from './rows'
 import type { MyProfile } from './profiles'
 import type { Registry } from './registry'
 import { chipState, type SaveStatus } from './status'
@@ -75,33 +76,6 @@ export const NO_WRITES: WritesHooks = {
   stop: () => {},
   status: () => ({ pending: 0, waiting: false }),
 }
-
-/** a copy of the workspace kept in this browser, as read back */
-export interface KeptCopy {
-  /** its rows, as inputs for applyRows */
-  inputs: Incoming[]
-  /** the raw database time the rows are complete up to */
-  mark: string
-  /** when this browser last had everything, by its own clock */
-  caughtUpAt: number
-  /** every archived issue is in it */
-  archive: boolean
-}
-
-/** keeping the copy (cache.ts and cacheStore.ts; tests give a pretend one) */
-export interface CopyHooks {
-  /** the copy, when there is one that can be used */
-  read(): Promise<KeptCopy | null>
-  /** keep this one; false when it wasn't (nowhere to keep it, signed out, too big) */
-  write(copy: { live: LiveState; mark: string; caughtUpAt: number; archive: boolean }): Promise<boolean>
-  /** the workspace went: so does its copy */
-  drop(): Promise<void>
-  /** kept once nothing changed for `quiet` ms, and no later than `most` ms after a change */
-  quiet: number
-  most: number
-}
-
-export const NO_COPY: CopyHooks = { read: async () => null, write: async () => false, drop: async () => {}, quiet: 3_000, most: 30_000 }
 
 type Store<T> = Pick<StoreApi<T>, 'getState' | 'setState'>
 
@@ -190,20 +164,16 @@ export class LiveWorkspace implements WriteTarget {
   private checkInbox = false
   /** the floor came only from hiding the tab: shown again soon, with the channels up, nothing was missed */
   private hideFloor = false
-  /** the workspace went: no copy is kept any more */
-  private dropped = false
-  private copy: CopyHooks
-  private saver: Saver
-  private lastKept: { server: Mirror; partial: LiveState['partial']; mark: string; caughtUpAt: number; archive: boolean } | null = null
-  /** Date.now() when this tab last kept the copy (scripted checks read it) */
-  keptAt: number | null = null
+  /** the archive was asked for while opening: it is read once the first catch-up is in */
+  private archiveWanted = false
+  /** the copy kept in this browser */
+  readonly keeper: CopyKeeper
 
   constructor(env: WorkspaceEnv, workspaceId: string, me: MyProfile) {
     this.env = env
     this.workspaceId = workspaceId
     this.me = me
-    this.copy = env.copy ?? NO_COPY
-    this.saver = new Saver({ quiet: this.copy.quiet, most: this.copy.most, save: () => this.keepCopy() })
+    this.keeper = new CopyKeeper(env.copy ?? NO_COPY, () => this.snapshot())
     this.fetcher = new RowFetcher({
       wait: env.delays.fetch,
       askAgain: env.delays.askAgain,
@@ -263,9 +233,9 @@ export class LiveWorkspace implements WriteTarget {
     env.status.setState({ state: 'loading', pending: 0, detail: undefined, progress: undefined, synced: false, caughtUpAt: undefined })
     env.backend.setState({ phase: 'opening', workspaceId: this.workspaceId, failure: undefined, gone: undefined })
 
-    const kept = await this.copy.read().catch(() => null)
+    const read = await readCopy(this.env.copy ?? NO_COPY)
     if (this.closed) return
-    if (kept) this.showCopy(kept)
+    const kept = read && this.showCopy(read, again) ? read : null
     if (this.closed) return
 
     this.channels = this.newChannels()
@@ -283,19 +253,31 @@ export class LiveWorkspace implements WriteTarget {
     if (this.closed) return
     if (inputs.some((i) => i.from === 'fetch' && i.table === 'workspaces' && i.rows.length === 0)) return this.fail('gone')
 
-    const held = this.held ?? []
-    this.held = null
-    // a held delete may be older than what was just read (deleted, then made again): catching up settles it
-    const catchUp = this.gapWhileOpening || this.tracks.ws.missed || this.tracks.me.missed || held.some((m) => m.op === 'DELETE' || m.op === 'catch_up')
+    const held = this.takeHeld()
     // the first copy replaces whatever the store had
-    this.apply([...inputs, ...held.map((message): Incoming => ({ from: 'message', message }))], true)
+    this.apply([...inputs, ...held.inputs], true)
     this.caughtUpAt = this.now()
     if (this.closed || env.backend.getState().phase !== 'opening') return
     this.upToDate = true
     this.begin()
     this.refresh({ synced: true, progress: undefined })
+    this.afterHeld(held.catchUp)
+    this.keeper.poke()
+  }
+
+  /** opening is over: the messages held meanwhile, as inputs, and whether to catch up for them */
+  private takeHeld(): { inputs: Incoming[]; catchUp: boolean } {
+    const held = this.held ?? []
+    this.held = null
+    // a held delete may be older than what was just read (deleted, then made again): catching up settles it
+    const catchUp = this.gapWhileOpening || this.tracks.ws.missed || this.tracks.me.missed || held.some((m) => m.op === 'DELETE' || m.op === 'catch_up')
+    return { inputs: held.map((message): Incoming => ({ from: 'message', message })), catchUp }
+  }
+
+  /** what waited for opening to be over: a catch-up for the held messages, the archive asked for meanwhile */
+  private afterHeld(catchUp: boolean) {
     if (catchUp) void this.catchUp()
-    this.saver.poke()
+    if (this.archiveWanted) this.loadArchive()
   }
 
   /** open: the app shows, it hears about the browser, and your changes show on it */
@@ -313,7 +295,7 @@ export class LiveWorkspace implements WriteTarget {
       },
       hidden: () => {
         this.gap(true)
-        void this.saver.now()
+        void this.keepAtOnce()
       },
       visible: (away) => {
         if (away > env.delays.slept) void this.catchUp()
@@ -334,11 +316,25 @@ export class LiveWorkspace implements WriteTarget {
     env.writes.attach(this)
   }
 
-  /** the copy kept here shows at once (your unsaved changes on top); what changed since it comes next */
-  private showCopy(kept: KeptCopy) {
+  /**
+   * The copy kept here shows at once (your unsaved changes on top); what changed since it comes next. False when it
+   * can't be shown (a copy that reads back but doesn't apply): it goes, and everything is read instead.
+   */
+  private showCopy(kept: KeptCopy, again: boolean): boolean {
+    try {
+      this.apply(kept.inputs, true)
+    } catch (e) {
+      console.warn('Sprawniej couldn’t use the copy of the workspace kept in this browser', e)
+      this.keeper.discard()
+      this.live = emptyLive()
+      if (!again) {
+        this.env.registry.clear()
+        this.env.data.setState({ ...EMPTY, me: this.me.person })
+      }
+      return false
+    }
+    if (this.closed) return true
     this.source = 'copy'
-    this.apply(kept.inputs, true)
-    if (this.closed) return
     // the copy is complete up to its mark, not up to its newest row (it may have been kept during a gap)
     this.floor = kept.mark
     this.caughtUpAt = kept.caughtUpAt
@@ -347,15 +343,17 @@ export class LiveWorkspace implements WriteTarget {
       this.archive = 'done'
       this.env.data.setState({ archiveLoaded: true })
     }
-    this.lastKept = { server: this.live.server, partial: this.live.partial, mark: kept.mark, caughtUpAt: kept.caughtUpAt, archive: kept.archive }
+    this.keeper.shown({ live: this.live, mark: kept.mark, caughtUpAt: kept.caughtUpAt, archive: kept.archive })
     this.begin()
     this.refresh({ progress: undefined })
+    return true
   }
 
   /** opening from the copy: what changed since it, then the messages held meanwhile; can't be read? The copy stays */
   private async catchUpFromCopy(kept: KeptCopy) {
     const from = this.floor ?? kept.mark
     let changes: Incoming[] | null = null
+    let failure: unknown
     try {
       const r = await this.changesSince(from)
       if (this.closed) return
@@ -363,28 +361,22 @@ export class LiveWorkspace implements WriteTarget {
       changes = r.inputs
     } catch (e) {
       if (this.closed) return
-      console.warn('Sprawniej couldn’t catch up with teammates’ changes', e)
+      failure = e
     }
-    const held = this.held ?? []
-    this.held = null
-    const catchUp = this.gapWhileOpening || this.tracks.ws.missed || this.tracks.me.missed || held.some((m) => m.op === 'DELETE' || m.op === 'catch_up')
+    const held = this.takeHeld()
     // what was read goes first, so a delete held meanwhile still wins
-    this.apply([...(changes ?? []), ...held.map((message): Incoming => ({ from: 'message', message }))])
+    this.apply([...(changes ?? []), ...held.inputs])
     if (this.closed) return
-    if (!changes) {
-      this.failing = true
-      this.refresh()
-      this.retryLater()
-      return
-    }
-    this.caughtUp(from)
-    if (catchUp) void this.catchUp()
+    if (changes) this.caughtUp(from)
+    else this.failedCatchUp(failure)
+    this.afterHeld(held.catchUp && !!changes)
   }
 
   /** a catch-up from `from` worked */
   private caughtUp(from: string | null) {
     // a gap that opened while it ran stays for the next one
     if (this.floor === from) this.floor = null
+    this.hideFloor = false
     const first = !this.upToDate
     this.upToDate = true
     this.checkInbox = false
@@ -393,11 +385,19 @@ export class LiveWorkspace implements WriteTarget {
     clearTimeout(this.retryTimer)
     this.catchUps++
     this.caughtUpAt = this.now()
-    this.refresh({ caughtUpAt: Date.now(), ...(first && { synced: true, progress: undefined }) })
+    this.refresh({ caughtUpAt: this.now(), ...(first && { synced: true, progress: undefined }) })
     const refetch = this.refetch
     this.refetch = []
     if (refetch.length) this.fetcher.request(refetch)
-    this.saver.poke()
+    this.keeper.poke()
+  }
+
+  /** catching up failed: the chip stays calm, and it's tried again in a while */
+  private failedCatchUp(e: unknown) {
+    console.warn('Sprawniej couldn’t catch up with teammates’ changes', e)
+    this.failing = true
+    this.refresh()
+    this.retryLater()
   }
 
   /**
@@ -405,23 +405,25 @@ export class LiveWorkspace implements WriteTarget {
    * workspace that went keeps no copy.
    */
   close(): Promise<void> {
-    if (!this.copyToKeep()) return this.shut()
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const waited = new Promise<void>((resolve) => (timer = setTimeout(resolve, 1_000)))
-    return Promise.race([this.saver.now(), waited]).then(() => {
-      clearTimeout(timer)
-      return this.shut()
-    })
+    if (this.closed || !this.keeper.wants()) return this.shut()
+    return this.keeper.beforeClose().then(() => this.shut())
   }
 
-  /** keep the copy now (the tab is going; scripted checks call it too) */
+  /** keep the copy now (scripted checks) */
   keepNow(): Promise<void> {
-    return this.closed ? Promise.resolve() : this.saver.now()
+    return this.closed ? Promise.resolve() : this.keeper.saveNow()
+  }
+
+  /** the tab is hidden or the page goes: the copy is kept at once */
+  keepAtOnce(): Promise<void> {
+    if (this.closed) return Promise.resolve()
+    const fresh = this.upToDate && !this.failing && this.tracks.ws.up && this.tracks.me.up
+    return this.keeper.saveAtOnce(fresh)
   }
 
   private async shut(): Promise<void> {
     this.closed = true
-    this.saver.cancel()
+    this.keeper.stop()
     clearTimeout(this.flushTimer)
     clearTimeout(this.retryTimer)
     clearTimeout(this.archiveTimer)
@@ -508,7 +510,7 @@ export class LiveWorkspace implements WriteTarget {
     const r = applyRows(this.live, slice(base), inputs, { workspaceId: this.workspaceId, meId: this.me.id, registry: env.registry })
     this.live = r.state
     // the database's rows changed: the copy is kept again in a moment
-    if (r.state.server !== was.server || r.state.mark !== was.mark || r.state.partial !== was.partial) this.saver.poke()
+    if (r.state.server !== was.server || r.state.mark !== was.mark || r.state.partial !== was.partial) this.keeper.poke()
     if (fresh) env.data.setState({ ...base, ...r.patch })
     else if (Object.keys(r.patch).length) env.data.setState(r.patch)
     if (r.workspaceGone) return this.goneAway('deleted')
@@ -567,10 +569,7 @@ export class LiveWorkspace implements WriteTarget {
       return true
     } catch (e) {
       if (this.closed) return true
-      console.warn('Sprawniej couldn’t catch up with teammates’ changes', e)
-      this.failing = true
-      this.refresh()
-      this.retryLater()
+      this.failedCatchUp(e)
       return false
     }
   }
@@ -595,33 +594,13 @@ export class LiveWorkspace implements WriteTarget {
 
   // ---------- the copy kept in this browser ----------
 
-  /** what would be kept now, or null when nothing should be (still opening, the workspace went, nothing new) */
-  private copyToKeep(): { mark: string; archive: boolean } | null {
-    if (this.closed || this.dropped || this.held || this.env.backend.getState().phase !== 'open') return null
-    const mark = this.floor ?? this.live.mark
+  /** what there is to keep now, or null when nothing should be (still opening, closed, too long since up to date) */
+  private snapshot(): Snapshot | null {
+    if (this.closed || this.held || this.env.backend.getState().phase !== 'open') return null
+    const mark = cacheMark(this.live.mark, this.floor)
     // too long since this browser had everything: the copy would be read again whole anyway
     if (!mark || tooLongAgo(this.caughtUpAt, this.now())) return null
-    const archive = this.archive === 'done'
-    const k = this.lastKept
-    const same = k && k.server === this.live.server && k.partial === this.live.partial && k.mark === mark && k.caughtUpAt === this.caughtUpAt && k.archive === archive
-    return same ? null : { mark, archive }
-  }
-
-  private async keepCopy(): Promise<void> {
-    const c = this.copyToKeep()
-    if (!c) return
-    const kept = { server: this.live.server, partial: this.live.partial, caughtUpAt: this.caughtUpAt, ...c }
-    if (await this.copy.write({ live: this.live, caughtUpAt: this.caughtUpAt, ...c })) {
-      this.lastKept = kept
-      this.keptAt = Date.now()
-    }
-  }
-
-  /** the workspace went: its copy goes, and none is kept again */
-  private dropCopy() {
-    this.dropped = true
-    this.saver.cancel()
-    void this.copy.drop().catch(() => {})
+    return { live: this.live, mark, caughtUpAt: this.caughtUpAt, archive: this.archive === 'done' }
   }
 
   /** signed in again after "Please sign in again": fresh channels (the old ones lost their access), then catch up */
@@ -648,7 +627,13 @@ export class LiveWorkspace implements WriteTarget {
 
   /** archived issues into the store, once per opening; tried again a while after a failure */
   loadArchive() {
-    if (this.closed || this.held || this.archive !== 'none') return
+    if (this.closed || this.archive !== 'none') return
+    // still opening: read once the first catch-up is in (until then rows apply in a set order)
+    if (this.held) {
+      this.archiveWanted = true
+      return
+    }
+    this.archiveWanted = false
     this.archive = 'loading'
     clearTimeout(this.archiveTimer)
     this.env.reader.archived().then(
@@ -682,7 +667,7 @@ export class LiveWorkspace implements WriteTarget {
 
   private fail(failure: 'gone' | 'network') {
     if (this.closed) return
-    if (failure === 'gone') this.dropCopy()
+    if (failure === 'gone') this.keeper.drop()
     // said first: a copy that shows (opening from it) isn't kept again on the way out
     this.env.backend.setState({ phase: 'failed', failure })
     void this.close()
@@ -691,7 +676,7 @@ export class LiveWorkspace implements WriteTarget {
   /** deleted or left while open: say so, and keep what's on screen until they choose another workspace */
   private goneAway(gone: 'deleted' | 'removed' | 'missing') {
     if (this.closed) return
-    this.dropCopy()
+    this.keeper.drop()
     // nothing of yours can be saved there any more, and saying so for each change helps nobody
     this.env.writes.stop()
     void this.close()
