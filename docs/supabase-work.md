@@ -20,6 +20,7 @@ with a reason.
 - 2026-10-19: `import_rows` matches rows on the primary key (`unique (workspace_id, linear_id)` stays as a guard); `views` got `linear_id`; `invites.for_profile` is `on delete set null`; `ensure_profile`/`create_profile` return a set (no rows = pick a name); one catch-up message per import batch; workspaces leave no deletion notes.
 - 2026-10-19: Accepted advisor warnings: "signed-in users can execute SECURITY DEFINER function" for the 11 public functions (they are the API, each checks the caller, `anon` can't run them); leaked-password protection (paid plan); "insufficient MFA options" (no MFA in stage A).
 - 2026-10-19: Sign-out keeps only `sprawniej-chrome` (whether the sidebar is open): it says nothing about the person or the work.
+- 2026-10-19: GitHub Pages is on for the fork (source: GitHub Actions, https://michalsek.github.io/sprawniej/). The build's public settings are repository variables `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key) and `VITE_PUBLIC_URL`. The user approved releasing 2.0.0 and starting the Pages build once everything is green.
 - 2026-10-19: Work happens in the session's worktree; `main` is fast-forwarded to it after each step (the session
   can't write in the main checkout directly).
 
@@ -270,4 +271,4 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | Realtime "Allow public access" off (dashboard, Realtime, Settings) | done 2026-10-19 |
 | Run the Linear import with your own Linear key (phase 6) | later |
 | Database password for `db push`, approve the final wipe (phase 11) | later |
-| Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | later |
+| Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | done 2026-10-19 |
