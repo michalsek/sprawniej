@@ -4,6 +4,21 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.0.0: A new home for your work
+*2026-10-19*
+
+- Sign in with your email and a password, or with GitHub where it’s switched on. No more GitHub key to make and paste
+- Join with an invite link: open it, create your account, pick your name and @handle, and you’re in. Each link works once, for 14 days
+- Admins and owners invite people from Settings, as members or admins, and see the links nobody has used yet
+- Settings shows everyone in the workspace with their role. Admins and owners change roles and remove people; only they delete teams and import from Linear
+- Your teammates’ changes show up the moment they’re saved
+- New issues get their number as they’re saved, so two people never get the same one
+- Sprawniej needs the internet to save. If your connection drops, keep the tab open: your changes are saved as soon as you’re back
+- Opening Sprawniej is quicker: this browser keeps a copy of your workspace and only fetches what changed. Signing out removes it
+- Add GitHub or a password to your account in Settings › Your account
+- People from Linear who haven’t joined can get their own invite link: when they join, their issues, comments and views are theirs
+- Workspaces from the earlier Sprawniej don’t come along. Your workspace’s owner brings the work over from Linear
+
 ## 1.8.5: What’s new
 *2026-10-15*
 

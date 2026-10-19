@@ -24,6 +24,7 @@ with a reason.
 - 2026-10-19: Sign-out keeps only `sprawniej-chrome` (whether the sidebar is open): it says nothing about the person or the work.
 - 2026-10-19: GitHub Pages is on for the fork (source: GitHub Actions, https://michalsek.github.io/sprawniej/). The build's public settings are repository variables `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key) and `VITE_PUBLIC_URL`. The user approved releasing 2.0.0 and starting the Pages build once everything is green.
 - 2026-10-19: Catching up reads every changed row, archived ones too, so an open archive gets imported or archived issues without reading the archive again.
+- 2026-10-19: Release 2.0.0: `sprawniejapp` was wiped and rebuilt from the 10 migration files with `db reset --linked` (history matched, `db push` up to date with no database password asked, generated types identical, only accepted advisor warnings), then 90/90 database tests passed and the test data was removed. GitHub sign-in is off at release (the button is hidden until the OAuth app is pushed).
 - 2026-10-19: Work happens in the session's worktree; `main` is fast-forwarded to it after each step (the session
   can't write in the main checkout directly).
 
@@ -91,7 +92,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | P17 | roadmap planner | Nightly auto-archive must match `tidyArchive` (greatest(completed_at, updated_at), skip 0) | fixed | 95beeff: cron.sql `auto_archive` |
 | P18 | roadmap planner | Catch-up must include archived rows; index `(workspace_id, changed_at)` without the `archived_at is null` predicate | fixed | 95beeff: tables.sql catch-up indexes |
 | P19 | roadmap planner | Newer-only comparisons must keep microsecond precision of `changed_at`, not `toISOString()` | fixed | 2b367bd: `rows.ts` keeps raw `changed_at` and compares microseconds |
-| P20 | roadmap planner | Redirect URLs need `http://localhost:4173` and the Pages URL with `/**`; `publicAppUrl()` is null on localhost so sign-in needs its own redirect helper | open | redirect URLs in config.toml (95beeff); sign-in redirect helper in phase 4; Pages URL in phase 11 |
+| P20 | roadmap planner | Redirect URLs need `http://localhost:4173` and the Pages URL with `/**`; `publicAppUrl()` is null on localhost so sign-in needs its own redirect helper | fixed | phase 11 (redirect list and site address pushed; local sign-in still allowed) |
 | P21 | roadmap planner | Bucket insert needs `on conflict do nothing`; storage objects can't be deleted with plain SQL (wipe through the Storage API) | fixed | 95beeff: storage.sql; `db reset --linked` replaces wipe.sql |
 | P22 | roadmap planner | Per-table policies and triggers the plan shows once: generate them in one loop, with a test that every table has them (except `issue_events`, `issue_numbers`) | fixed | 95beeff: helpers.sql `private.wiring` loops; tests/db/wiring.test.ts |
 | P23 | roadmap planner | Realtime checks access at join: a removed member keeps receiving until they rejoin; acceptable for 8 people, document it | fixed | 95beeff: realtime.sql comment, supabase-setup.md |
@@ -151,7 +152,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E53 | phase 2 QA re-check | An invalid sort key in a team made the import wizard's Continue button silently do nothing | fixed | phase 2 last fix (error shown on the people step) |
 | E54 | phase 1 implementer | Inbox notes must be inserted without asking for the rows back (`.select()` fails: the sender can't read others' notes) | fixed | phase 5 (notes sent without `.select()`) |
 | E55 | phase 1 implementer | The realtime sign-in token must be set before joining a private channel, or the join is refused | fixed | phase 4 (`setAuth()` before joining) |
-| E56 | phase 1 implementer | `db reset --linked` also deletes sign-in accounts: fine in development, a hazard anywhere else | fixed | phase 10 (runbook warning and project check) |
+| E56 | phase 1 implementer | `db reset --linked` also deletes sign-in accounts: fine in development, a hazard anywhere else | fixed | phase 10 runbook warning and project check; used in phase 11 |
 | E57 | phase 1 implementer | Deletion notes of a deleted workspace stay until the 45-day job | won't do | harmless, nobody can read them, the job removes them |
 | E58 | phase 3 planner | `project.ts:127` sorts comments by `createdAt` with no tiebreak | fixed | phase 10 (project.ts deleted) |
 | E59 | phase 3 planner | `select.ts` `isUnread` does `read.includes` per note (quadratic for unread counts) | fixed | phase 10 |
@@ -284,11 +285,11 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E186 | phase 6 fix round | `tests/actions.test.ts` "archiving takes sub-issues along" failed about 1 in 4 full runs before the merge | fixed | phase 10 (20 full runs pass; the old sync code it touched is gone) |
 | E187 | phase 6 fix round | Leaving the import's done screen through Settings forgets the finished import | won't do | harmless: the import is saved; the done screen is only a summary |
 | E188 | phase 9 fix round | `tests/workspace.test.ts:356` calls `.subscribe` on a store type without it (hidden because tests aren't type-checked) | fixed | phase 10 |
-| E189 | phase 10 planner | Local main was far ahead of the fork's main on GitHub, so the Pages build would publish the old code | open | phase 11 (push main first) |
+| E189 | phase 10 planner | Local main was far ahead of the fork's main on GitHub, so the Pages build would publish the old code | fixed | phase 11 (main pushed before publishing) |
 | E190 | phase 10 planner | The repo is public, so backup artifacts must be encrypted | fixed | phase 10 (backup.yml encrypts, data only) |
-| E191 | phase 10 planner | `pages.yml` builds without the repository variables (the site would say it isn't set up) | open | phase 11 |
+| E191 | phase 10 planner | `pages.yml` builds without the repository variables (the site would say it isn't set up) | fixed | phase 11 (pages.yml reads the repository variables and stops without them) |
 | E192 | phase 10 planner | No password reset without an email sender | won't do | stage B; the guide says what to do meanwhile |
-| E193 | phase 10 code | 31 picture folders belong to workspaces that no longer exist | open | phase 11 (wipe and pictures cleanup) |
+| E193 | phase 10 code | 31 picture folders belong to workspaces that no longer exist | fixed | phase 11 (the wipe plus removing every leftover picture folder) |
 
 ## Waiting on the user
 
@@ -298,5 +299,5 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | `bunx supabase login` once, so the CLI can push the schema and auth settings | done 2026-10-19 |
 | Realtime "Allow public access" off (dashboard, Realtime, Settings) | done 2026-10-19 |
 | Run the Linear import with your own Linear key (phase 6) | ready: Settings, Import from Linear |
-| Database password for `db push`, approve the final wipe (phase 11) | later |
+| Database password for `db push`, approve the final wipe (phase 11) | not needed (the CLI login is enough); wipe approved and done 2026-10-19 |
 | Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | done 2026-10-19 |

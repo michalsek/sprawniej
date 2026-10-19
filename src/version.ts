@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '1.8.5'
+export const APP_VERSION = '2.0.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,24 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.0.0',
+    date: '2026-10-19',
+    title: 'A new home for your work',
+    notes: [
+      'Sign in with your email and a password, or with GitHub where it’s switched on. No more GitHub key to make and paste',
+      'Join with an invite link: open it, create your account, pick your name and @handle, and you’re in. Each link works once, for 14 days',
+      'Admins and owners invite people from Settings, as members or admins, and see the links nobody has used yet',
+      'Settings shows everyone in the workspace with their role. Admins and owners change roles and remove people; only they delete teams and import from Linear',
+      'Your teammates’ changes show up the moment they’re saved',
+      'New issues get their number as they’re saved, so two people never get the same one',
+      'Sprawniej needs the internet to save. If your connection drops, keep the tab open: your changes are saved as soon as you’re back',
+      'Opening Sprawniej is quicker: this browser keeps a copy of your workspace and only fetches what changed. Signing out removes it',
+      'Add GitHub or a password to your account in Settings › Your account',
+      'People from Linear who haven’t joined can get their own invite link: when they join, their issues, comments and views are theirs',
+      'Workspaces from the earlier Sprawniej don’t come along. Your workspace’s owner brings the work over from Linear',
+    ],
+  },
   {
     version: '1.8.5',
     date: '2026-10-15',
