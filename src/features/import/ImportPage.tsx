@@ -3,14 +3,14 @@
  * Reading happens straight from Linear. Saving the import is switched off until it moves to the database
  * (docs/supabase-work.md, phase 6): the check step shows what would come over.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'wouter'
 import { ulid } from 'ulid'
 import { CheckCircle2, ExternalLink, Loader2 } from 'lucide-react'
 import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
 import { loadArchive } from '@/data/project'
-import { useData, type DataState } from '@/data/store'
+import { useData } from '@/data/store'
 import { useSync } from '@/sync/engine'
 import { Problem } from '@/features/onboarding/Step'
 import { cn } from '@/lib/utils'
@@ -18,14 +18,14 @@ import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { LinearError, readBasics, readTeams, type LinearData } from './linearApi'
-import { buildImport, emojiFor, guessPerson, guestLogins, involvedUsers, linearName, type Existing, type ImportResult } from './linearMap'
+import { buildImport, emojiFor, existingFrom, guessPerson, guestLogins, involvedUsers, linearName, type ImportResult } from './linearMap'
 import { isGuest } from '@/model/schema'
 
 type Stage =
   | { at: 'key' }
   | { at: 'teams'; basics: Pick<LinearData, 'org' | 'teams' | 'users'> }
   | { at: 'people'; data: LinearData }
-  | { at: 'check'; data: LinearData }
+  | { at: 'check'; data: LinearData; plan: ImportResult }
   | { at: 'saving'; saved: number; total: number }
   | { at: 'done'; result: ImportResult; keys: string[] }
 
@@ -66,33 +66,6 @@ function doneText(c: ImportResult['counts']): string {
   return `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)} are here.`
 }
 
-/** the workspace as the import needs it: archived issues by Linear id, and every number each team has used */
-function existingFrom(ws: DataState, me: string): Existing {
-  const archivedByLinear: Existing['archivedByLinear'] = {}
-  const usedNumbers: Record<string, number[]> = {}
-  const mark = (team: string, n: number) => (usedNumbers[team] ??= []).push(n)
-  const archived = Object.values(ws.archive).filter((a) => !ws.issues[a.id])
-  for (const a of archived) {
-    mark(a.team, a.number)
-    if (typeof a.linearId === 'string') archivedByLinear[a.linearId] = { id: a.id, team: a.team, number: a.number }
-  }
-  for (const i of Object.values(ws.issues)) mark(i.team, i.number)
-  // lastNumber remembers numbers of issues deleted since
-  for (const t of Object.values(ws.teams)) for (let n = 1; n <= (t.lastNumber ?? 0); n++) mark(t.key, n)
-  return {
-    me,
-    people: ws.people,
-    teams: ws.teams,
-    issues: ws.issues,
-    labels: ws.labels,
-    projects: ws.projects,
-    views: ws.views,
-    comments: { ...ws.comments, ...Object.fromEntries(archived.map((a) => [a.id, a.comments])) },
-    archivedByLinear,
-    usedNumbers,
-  }
-}
-
 export function ImportPage() {
   useCrumbs([{ label: 'Settings', href: '/settings' }, { label: 'Import from Linear' }])
   const [stage, setStage] = useState<Stage>({ at: 'key' })
@@ -112,18 +85,11 @@ export function ImportPage() {
     try {
       await fn()
     } catch (e) {
-      setProblem(e instanceof LinearError ? e.message : `Something went wrong: ${(e as Error).message}`)
+      setProblem(e instanceof LinearError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(null)
     }
   }
-
-  const plan = useMemo(
-    () => (stage.at === 'check' && ws.me ? buildImport(stage.data, { teamKeys: picked, people }, existingFrom(ws, ws.me.login), ulid, new Date().toISOString(), () => crypto.randomUUID()) : null),
-    // the plan is made once when you reach the check step
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [stage],
-  )
 
   if (stage.at === 'key') {
     return (
@@ -263,7 +229,21 @@ export function ImportPage() {
             <Button variant="outline" onClick={() => setStage({ at: 'teams', basics: stage.data })}>
               Back
             </Button>
-            <Button onClick={() => setStage({ at: 'check', data: stage.data })}>Continue</Button>
+            <Button
+              disabled={!ws.me}
+              onClick={() => {
+                if (!ws.me) return
+                // what would come over is worked out once, when you go on to the check step
+                const plan = buildImport(stage.data, { teamKeys: picked, people }, existingFrom(ws, ws.me.login), {
+                  newId: ulid,
+                  newGuestId: () => crypto.randomUUID(),
+                  now: new Date().toISOString(),
+                })
+                setStage({ at: 'check', data: stage.data, plan })
+              }}
+            >
+              Continue
+            </Button>
           </>
         }
       >
@@ -302,7 +282,8 @@ export function ImportPage() {
     )
   }
 
-  if (stage.at === 'check' && plan) {
+  if (stage.at === 'check') {
+    const { plan } = stage
     const c = plan.counts
     const rows: [string, string, number][] = [
       ['new team', 'new teams', c.teams],
@@ -315,7 +296,7 @@ export function ImportPage() {
     return (
       <Panel
         step={3}
-        title="Ready to import"
+        title="What would come over"
         footer={
           <>
             <Button variant="outline" onClick={() => setStage({ at: 'people', data: stage.data })}>
@@ -356,7 +337,7 @@ export function ImportPage() {
           <div className="mt-5 text-sm text-muted-foreground">
             <p>
               {plan.inexactViews.length === 1 ? 'One view keeps' : `${plan.inexactViews.length} views keep`} only the filters that fit, so {plan.inexactViews.length === 1 ? 'it' : 'they'}{' '}
-              may not show quite the same issues as in Linear. Check {plan.inexactViews.length === 1 ? 'it' : 'them'} after the import.
+              may not show quite the same issues as in Linear.
             </p>
             <p className="mt-1 text-foreground/80">{plan.inexactViews.map((n) => `“${n}”`).join(', ')}</p>
           </div>
@@ -369,7 +350,7 @@ export function ImportPage() {
             {plan.renumbered.length > 5 ? '…' : '.'}
           </p>
         )}
-        <p className="mt-5 text-sm text-muted-foreground">Images uploaded to Linear stay as links to Linear. You can run the import again later to bring in new changes.</p>
+        <p className="mt-5 text-sm text-muted-foreground">Images uploaded to Linear would stay as links to Linear.</p>
       </Panel>
     )
   }

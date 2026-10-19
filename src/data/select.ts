@@ -36,6 +36,27 @@ export const isClosed = (issue: Issue) => {
   return g === 'completed' || g === 'canceled'
 }
 
+/** `months` months before `at`, as ISO; a day the month doesn't have becomes its last (Aug 31 minus 6 months: Feb 28) */
+export function monthsBefore(at: string | number, months: number): string {
+  const d = new Date(at)
+  const day = d.getUTCDate()
+  d.setUTCDate(1)
+  d.setUTCMonth(d.getUTCMonth() - months)
+  const last = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate()
+  d.setUTCDate(Math.min(day, last))
+  return d.toISOString()
+}
+
+/**
+ * Archived by the daily tidy-up (and by an import): finished, and finished and untouched for `months` months (so a
+ * restored issue isn't put straight back). `months` 0 means never.
+ */
+export function dueForArchive(issue: Issue, months: number, at: string | number): boolean {
+  if (months <= 0 || !isClosed(issue) || Number.isNaN(new Date(at).getTime())) return false
+  const last = issue.completedAt && issue.completedAt > issue.updatedAt ? issue.completedAt : issue.updatedAt
+  return last < monthsBefore(at, months)
+}
+
 const PRIORITY_RANK = new Map(PRIORITY_ORDER.map((p, i) => [p, i]))
 
 export function compareIssues(ordering: Ordering): (a: Issue, b: Issue) => number {

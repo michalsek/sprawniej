@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
 import { sampleData } from '@/data/sample'
-import { childIndex, groupIssues, inTab, matches, nestChildren, projectProgress } from '@/data/select'
+import { childIndex, dueForArchive, groupIssues, inTab, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
 import { findByRef, issueRef } from '@/data/store'
 import { DEFAULT_DISPLAY } from '@/data/displays'
 import type { Issue } from '@/model/schema'
@@ -135,5 +135,24 @@ describe('due dates', () => {
     const list = [{ ...a, dueDate: null }, { ...b, dueDate: '2026-12-01' }, { ...c, dueDate: '2026-11-01' }]
     const groups = groupIssues(list, { ...DEFAULT_DISPLAY, grouping: 'none', ordering: 'due' }, ctx)
     expect(groups[0].issues.map((i) => i.id)).toEqual([c.id, b.id, a.id])
+  })
+})
+
+describe('archiving finished issues', () => {
+  const done = { ...issues[0], status: 'done', completedAt: '2026-01-10T00:00:00.000Z', updatedAt: '2026-01-10T00:00:00.000Z' } as Issue
+  test('a day the month doesn’t have becomes its last', () => {
+    expect(monthsBefore('2026-08-31T12:00:00.000Z', 6)).toBe('2026-02-28T12:00:00.000Z')
+    expect(monthsBefore('2028-08-31T12:00:00.000Z', 6)).toBe('2028-02-29T12:00:00.000Z')
+    expect(monthsBefore(Date.parse('2026-10-07T00:00:00.000Z'), 13)).toBe('2025-09-07T00:00:00.000Z')
+  })
+  test('finished and untouched for that long', () => {
+    expect(dueForArchive(done, 6, '2026-08-01T00:00:00.000Z')).toBe(true)
+    expect(dueForArchive(done, 6, '2026-07-01T00:00:00.000Z')).toBe(false)
+    // 0 months: the team never archives by itself
+    expect(dueForArchive(done, 0, '2030-01-01T00:00:00.000Z')).toBe(false)
+    // changed after it was finished: counted from the change
+    expect(dueForArchive({ ...done, updatedAt: '2026-05-01T00:00:00.000Z' }, 6, '2026-08-01T00:00:00.000Z')).toBe(false)
+    // not finished
+    expect(dueForArchive({ ...done, status: 'todo', completedAt: null }, 6, '2030-01-01T00:00:00.000Z')).toBe(false)
   })
 })

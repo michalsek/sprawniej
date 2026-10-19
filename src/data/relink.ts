@@ -6,7 +6,7 @@
 import { plain } from '@/lib/plain'
 import { archiveFiles, parsedFiles } from './project'
 import { commentToFile, issueToFile, jsonToFile, classify, paths, type Parsed } from './files'
-import type { ArchivedIssue, Comment, Issue, Person, Project, View } from '@/model/schema'
+import type { Comment, Issue, Person, Project, View } from '@/model/schema'
 
 /** login → the login it is now */
 export type Relink = (login: string) => string
@@ -30,10 +30,6 @@ export function relinkIssue<T extends Issue>(i: T, r: Relink): T {
     ...(i.subscribers && { subscribers: list(i.subscribers, r) }),
     ...(i.unsubscribed && { unsubscribed: list(i.unsubscribed, r) }),
   }
-}
-
-export function relinkArchived<T extends ArchivedIssue>(a: T, r: Relink): T {
-  return { ...relinkIssue(a, r), archivedBy: r(a.archivedBy), comments: a.comments.map((c) => relinkComment(c, r)) }
 }
 
 export const relinkComment = <T extends Comment>(c: T, r: Relink): T => ({ ...c, author: r(c.author) })

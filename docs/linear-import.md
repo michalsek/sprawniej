@@ -9,20 +9,20 @@ from the browser (Linear allows that), so nothing passes through a server of our
    used for this import only and not stored.
 2. **Teams**: pick which Linear teams to bring. Each becomes a Sprawniej team with the same key (`ENG`), so
    `ENG-123` stays `ENG-123`. If a team here already uses that key, the issues join that team (handy for the
-   first team made during setup); type another key to make a new team instead. If that team already has an issue
-   with the same number, the imported one gets the next free number, and the check step lists these.
+   first team made during setup); type another key to make a new team instead. If that team already has (or once
+   had) an issue with the same number, the imported one gets the next free number, and the check step lists these.
 3. **People**: Linear people are matched to GitHub people in the workspace by name. You can fix any match. Someone
-   with no match comes as a person who **hasn't joined** (`people/~jan-kowalski.json`): their issues stay assigned to
+   with no match comes as a person who **hasn't joined** (`~jan-kowalski`): their issues stay assigned to
    them, their comments are theirs and views about them work. They get no inbox notes and can't be @mentioned. You
    can also pick **No one**: their issues come in unassigned, and their comments say who wrote them. Someone linked
    to a GitHub account before (in Settings, or by an earlier import) is matched to it by their Linear id, whatever
    their names.
 4. **Check**: how many teams, issues, comments, projects, labels and views will come over, and which views can't
    keep all their filters.
-5. **Import**: everything is written as files and saved as `Import from Linear: 412 issues`. Big imports are
-   saved in parts of 300 files (`… (part 2 of 5)`), with a progress bar; keep the page open until it's done.
+5. **Import**: switched off for now, while Sprawniej moves to its new home; the check step shows what would come over.
 
-The code: `src/features/import/linearApi.ts` reads Linear, `linearMap.ts` turns it into files (pure, tested in
+The code: `src/features/import/linearApi.ts` reads Linear, `linearMap.ts` turns it into rows (a team, label,
+project, issue, comment or view each, plus people who haven't joined), only the new or changed ones (pure, tested in
 `tests/linearImport.test.ts`), and `ImportPage.tsx` is the wizard.
 
 ## What comes over
@@ -38,7 +38,7 @@ The code: `src/features/import/linearApi.ts` reads Linear, `linearMap.ts` turns 
 | Labels | Labels (group labels are flattened: `Area/Charts` becomes `Area: Charts`) |
 | Project (name, icon, description, state, lead, target date) | Project |
 | Parent issue | Parent (sub-issues) |
-| Sort order | `sortOrder`, keeping Linear's order |
+| Sort order | New issues go on top of their team, in Linear's order; issues already here keep their place |
 | Comments | Comments, with the original author and date. Authors set to "No one" are shown as "From Linear: Name". |
 | Due date, estimate | Kept (any estimate number stays as it is) |
 | Created, updated, completed dates | Kept |
@@ -46,9 +46,9 @@ The code: `src/features/import/linearApi.ts` reads Linear, `linearMap.ts` turns 
 
 Issues Linear has archived come along too, with their comments. Issues in Linear's trash don't.
 
-Issues finished longer ago than the team keeps finished issues (six months unless it says otherwise) go straight
-into the team's archive files, with their comments, instead of becoming a file each. They keep their numbers and can
-be searched, opened and restored like any archived issue.
+Issues finished longer ago than the team keeps finished issues (six months unless it says otherwise), and untouched
+since, go straight into the archive with their comments: rows with `archivedAt`. It's the same rule as the daily
+tidy-up. They keep their numbers and can be searched, opened and restored like any archived issue.
 
 ## What doesn't
 
@@ -89,12 +89,13 @@ views from Linear fails, the import goes on without them and says so.
 
 ## Running it again
 
-Each imported file remembers its Linear id (`linearId`), and so does a team that took in a Linear team. Running the
+Each imported row remembers its Linear id (`linearId`), and so does a team that took in a Linear team (only one team
+at a time: another team that had it lets go). Running the
 import again picks those teams by itself and updates what came over instead of making copies, so you can import
 once early and again on switch-over day. People who hadn't joined don't need another import: link them in Settings
 (right after inviting them, or under People from Linear). If an import matches someone who hadn't joined to a GitHub
 account, the same happens: everything that pointed at them (imported or made here since: issues, archived issues,
-comments, project leads and views) moves to their account, their `~` file goes away, and their account remembers
-their Linear id (`linearIds`). Linear's version wins for imported issues and views (except a view's layout,
-which stays as you set it); issues and views made here are left alone.
+comments, project leads and views) moves to their account, the person who hadn't joined goes away, and their account remembers
+their Linear id (`linearIds`). Linear's version wins for imported issues and views (except an issue's place in the list and a view's layout,
+which stay as you set them); issues and views made here are left alone.
 Issues deleted in Linear stay here, and issues archived here since the last import stay archived.

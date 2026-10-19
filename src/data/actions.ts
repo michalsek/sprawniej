@@ -18,7 +18,7 @@ import { commentNotes, followLists, followers, issueNotes, type Note } from './n
 import { changedOnly, keyBetween, keysBetween } from './ordering'
 import { applyFiles, archiveFiles, highestArchived, parsedFiles, pathOf } from './project'
 import { relinkFiles } from './relink'
-import { isClosed, isUnread } from './select'
+import { dueForArchive, isUnread } from './select'
 import { issueRef, useData } from './store'
 
 const now = () => new Date().toISOString()
@@ -362,12 +362,8 @@ export function restoreIssue(id: string): Issue | undefined {
   return restored[0]
 }
 
-/** a moment `months` months before `at`, as ISO */
-function monthsBefore(at: number, months: number): string {
-  const d = new Date(at)
-  d.setMonth(d.getMonth() - months)
-  return d.toISOString()
-}
+/** how many issues go into one save, so GitHub never gets one huge change */
+const ARCHIVE_BATCH = 300
 
 /**
  * The daily tidy-up: archives issues finished (and last changed) more than a team's `autoArchive` months ago, a few
@@ -378,15 +374,10 @@ function monthsBefore(at: number, months: number): string {
 export async function tidyArchive(at = Date.now()): Promise<number> {
   const s = useData.getState()
   const due: string[] = []
-  for (const i of Object.values(s.issues)) {
-    const months = s.teams[i.team]?.autoArchive ?? AUTO_ARCHIVE_MONTHS
-    // finished that long ago and untouched since (so a restored issue isn't put straight back)
-    const last = i.completedAt && i.completedAt > i.updatedAt ? i.completedAt : i.updatedAt
-    if (months > 0 && isClosed(i) && last < monthsBefore(at, months)) due.push(i.id)
-  }
+  for (const i of Object.values(s.issues)) if (dueForArchive(i, s.teams[i.team]?.autoArchive ?? AUTO_ARCHIVE_MONTHS, at)) due.push(i.id)
   let done = 0
-  for (let n = 0; n < due.length; n += IMPORT_BATCH) {
-    done += archiveIssues(due.slice(n, n + IMPORT_BATCH), { auto: true })
+  for (let n = 0; n < due.length; n += ARCHIVE_BATCH) {
+    done += archiveIssues(due.slice(n, n + ARCHIVE_BATCH), { auto: true })
     await workspace()?.flush()
   }
   mendArchive()
@@ -826,26 +817,6 @@ export function renameWorkspace(name: string) {
   const ws = useData.getState().workspace
   if (!ws || !name.trim()) return
   save(one(paths.workspace(), jsonToFile({ ...ws, name: name.trim() })), `Rename the workspace to ${name.trim()}`)
-}
-
-// ---------- import ----------
-
-/** how many files go into one save; big imports are saved in parts so GitHub never gets one huge change */
-const IMPORT_BATCH = 300
-
-/**
- * Write a prepared import (features/import). Saves part by part and waits for each, calling `progress` with how
- * many files are saved so far.
- */
-export async function importFiles(files: Map<string, string | null>, message: string, progress?: (saved: number, total: number) => void) {
-  const entries = [...files]
-  const parts = Math.ceil(entries.length / IMPORT_BATCH)
-  for (let n = 0; n < parts; n++) {
-    const batch = new Map(entries.slice(n * IMPORT_BATCH, (n + 1) * IMPORT_BATCH))
-    save(batch, parts > 1 ? `${message} (part ${n + 1} of ${parts})` : message)
-    await workspace()?.flush()
-    progress?.(Math.min(entries.length, (n + 1) * IMPORT_BATCH), entries.length)
-  }
 }
 
 // ---------- pictures ----------

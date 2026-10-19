@@ -8,6 +8,8 @@
  */
 import { generateNKeysBetween } from 'fractional-indexing'
 import { linearIdsOf, plainName as plain } from '@/data/relink'
+import { dueForArchive } from '@/data/select'
+import type { DataState } from '@/data/store'
 import { STATUSES, type Priority, type StatusId } from '@/model/status'
 import { AUTO_ARCHIVE_MONTHS, isGuest, type Comment, type Issue, type Label, type Person, type Project, type Team, type View } from '@/model/schema'
 import { SUBSCRIBERS_READ, type LIssue, type LinearData, type LLabel, type LTeam, type LUser } from './linearApi'
@@ -152,7 +154,6 @@ export interface ImportChoices {
   people: Record<string, string | null>
 }
 
-
 /** the workspace as it is now */
 export interface Existing {
   me: string
@@ -168,14 +169,44 @@ export interface Existing {
   views?: Record<string, View>
   /** archived issues that came from Linear, by Linear id: they stay archived */
   archivedByLinear: Record<string, { id: string; team: string; number: number }>
-  /** every number each team (by key) has used, so none is given out twice (even one whose issue was deleted) */
+  /**
+   * every number each team (by key) has used: its issues', its archived issues' and deleted ones'. The only place the
+   * import looks for numbers that are taken, so none is given out twice (`existingFrom` fills it)
+   */
   usedNumbers: Record<string, number[]>
 }
 
+/** the workspace as the import needs it, from what the app holds */
+export function existingFrom(ws: Pick<DataState, 'people' | 'teams' | 'issues' | 'archive' | 'labels' | 'projects' | 'views' | 'comments'>, me: string): Existing {
+  const archivedByLinear: Existing['archivedByLinear'] = {}
+  const usedNumbers: Record<string, number[]> = {}
+  const mark = (team: string, n: number) => (usedNumbers[team] ??= []).push(n)
+  const archived = Object.values(ws.archive).filter((a) => !ws.issues[a.id])
+  for (const a of archived) {
+    mark(a.team, a.number)
+    if (typeof a.linearId === 'string') archivedByLinear[a.linearId] = { id: a.id, team: a.team, number: a.number }
+  }
+  for (const i of Object.values(ws.issues)) mark(i.team, i.number)
+  // for now every number up to lastNumber counts as used (lastNumber remembers deleted issues); the database keeps
+  // the numbers really used instead (docs/supabase-work.md, phase 6)
+  for (const t of Object.values(ws.teams)) for (let n = 1; n <= (t.lastNumber ?? 0); n++) mark(t.key, n)
+  return {
+    me,
+    people: ws.people,
+    teams: ws.teams,
+    issues: ws.issues,
+    labels: ws.labels,
+    projects: ws.projects,
+    views: ws.views,
+    comments: { ...ws.comments, ...Object.fromEntries(archived.map((a) => [a.id, a.comments])) },
+    archivedByLinear,
+    usedNumbers,
+  }
+}
+
 /** someone who hasn't joined: made once, so their name and picture show */
-export type GuestRow = Person & { id: string; linearId: string; email?: string }
-/** `isNew` false: a team that is here already and only learns which Linear team it is */
-export type TeamRow = Team & { linearId?: string; isNew: boolean }
+export type GuestRow = Person & { id: string; linearId: string }
+export type TeamRow = Team & { linearId: string }
 export type LabelRow = Label & { linearId: string }
 export type ProjectRow = Project & { linearId: string }
 /** with `archivedAt`: finished long ago, so it goes straight to the archive */
@@ -183,10 +214,21 @@ export type IssueRow = Issue & { linearId: string; archivedAt?: string; archived
 export type CommentRow = Comment & { linearId: string }
 export type ViewRow = View & { linearId: string }
 
+/** a row's own fields without the "anything else" the schemas allow, so a misspelled field doesn't compile */
+type Known<T> = { [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K] }
+
 /** what to write: only rows that are new or changed since an earlier import */
 export interface ImportResult {
   guests: GuestRow[]
+  /** a guest's e-mail address, when Linear knows it, by guest id */
+  guestEmails: { id: string; email: string }[]
+  /** new teams */
   teams: TeamRow[]
+  /**
+   * teams here that now stand for another Linear team, or (null) for none, because another team took theirs. Those
+   * come first, as a Linear team stands for one team here
+   */
+  teamLinks: { key: string; linearId: string | null }[]
   labels: LabelRow[]
   projects: ProjectRow[]
   /** new or changed, not ordered by parent */
@@ -202,12 +244,21 @@ export interface ImportResult {
    * or archived here since)
    */
   counts: { teams: number; labels: number; projects: number; issues: number; comments: number; archived: number; views: number }
-  /** imported issues that couldn't keep their number, because the team here already used it */
+  /** imported issues that couldn't keep their number, because the team here already used it ("DES-1" became "ENG-10") */
   renumbered: { from: string; to: string }[]
   /** views whose Linear filters couldn't all come over, by name */
   inexactViews: string[]
   /** views none of whose filters could come over, so they're left out, by name */
   skippedViews: string[]
+}
+
+export interface ImportOptions {
+  /** an id for a new team row's things: labels, projects, issues, comments, views */
+  newId: () => string
+  /** an id for someone who hasn't joined */
+  newGuestId: () => string
+  /** the moment of the import, as ISO */
+  now: string
 }
 
 const linearIdOf = (x: object): string | undefined => {
@@ -238,39 +289,49 @@ function canon(x: unknown): unknown {
   )
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(canon(a)) === JSON.stringify(canon(b))
-/** Linear can send the same thing twice (pages that shift while we read): one of each */
-const once = <T extends { id: string }>(xs: T[]) => [...new Map(xs.map((x) => [x.id, x])).values()]
 
-/** Linear sends higher numbers for later in a list; this turns their order into ours, team by team */
-function orderKeys(issues: LIssue[]): Map<string, string> {
-  const out = new Map<string, string>()
-  const byTeam = new Map<string, LIssue[]>()
-  for (const i of issues) byTeam.set(i.team.id, [...(byTeam.get(i.team.id) ?? []), i])
-  for (const list of byTeam.values()) {
-    list.sort((a, b) => a.sortOrder - b.sortOrder || a.number - b.number)
-    const keys = generateNKeysBetween(null, null, list.length)
-    list.forEach((i, n) => out.set(i.id, keys[n]))
-  }
-  return out
+/** Linear can send the same thing twice (pages that shift while we read): one of each */
+function dedupe(data: LinearData): LinearData {
+  const once = <T extends { id: string }>(xs: T[]) => [...new Map(xs.map((x) => [x.id, x])).values()]
+  return { ...data, issues: once(data.issues), comments: once(data.comments), labels: once(data.labels), projects: once(data.projects), views: data.views && once(data.views) }
 }
 
-export function buildImport(data: LinearData, choices: ImportChoices, ws: Existing, newId: () => string, now: string, newUuid: () => string): ImportResult {
-  data = { ...data, issues: once(data.issues), comments: once(data.comments), labels: once(data.labels), projects: once(data.projects), views: data.views && once(data.views) }
+export function buildImport(data: LinearData, choices: ImportChoices, ws: Existing, { newId, newGuestId, now }: ImportOptions): ImportResult {
+  const linear = dedupe(data)
   const counts = { teams: 0, labels: 0, projects: 0, issues: 0, comments: 0, archived: 0, views: 0 }
   const renumbered: ImportResult['renumbered'] = []
-  const out: ImportResult = { guests: [], teams: [], labels: [], projects: [], issues: [], comments: [], views: [], links: [], removedViews: [], counts, renumbered, inexactViews: [], skippedViews: [] }
+  const out: ImportResult = {
+    guests: [],
+    guestEmails: [],
+    teams: [],
+    teamLinks: [],
+    labels: [],
+    projects: [],
+    issues: [],
+    comments: [],
+    views: [],
+    links: [],
+    removedViews: [],
+    counts,
+    renumbered,
+    inexactViews: [],
+    skippedViews: [],
+  }
   const login = (u: { id: string } | null | undefined) => (u ? (choices.people[u.id] ?? null) : null)
-  const teams = data.teams.filter((t) => choices.teamKeys[t.id])
+  const teams = linear.teams.filter((t) => choices.teamKeys[t.id])
   const teamIds = new Set(teams.map((t) => t.id))
-  const issues = data.issues.filter((i) => teamIds.has(i.team.id))
+  const issues = linear.issues.filter((i) => teamIds.has(i.team.id))
   const keyOf = (t: { id: string }) => choices.teamKeys[t.id]
+  const linearKey = new Map(linear.teams.map((t) => [t.id, t.key]))
 
   // people who haven't joined: a row each, so their name and picture show (made once; later imports leave it)
   const people = ws.people ?? {}
-  for (const u of data.users) {
+  for (const u of linear.users) {
     const l = choices.people[u.id]
     if (!l || !isGuest(l) || people[l] || out.guests.some((g) => g.login === l)) continue
-    out.guests.push({ id: newUuid(), login: l, githubId: 0, name: linearName(u), avatarUrl: u.avatarUrl ?? '', linearId: u.id, ...(u.email ? { email: u.email } : {}) })
+    const guest = { id: newGuestId(), login: l, githubId: 0, name: linearName(u), avatarUrl: u.avatarUrl ?? '', linearId: u.id } satisfies Known<GuestRow>
+    out.guests.push(guest)
+    if (u.email) out.guestEmails.push({ id: guest.id, email: u.email })
   }
   // someone who has joined since an earlier import and is matched now: what pointed at them moves to their account
   const relinked = new Map<string, string>()
@@ -289,16 +350,17 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   // teams: new ones get a row; ones that are already here stay as they are
   const members = new Map<string, Set<string>>()
   for (const i of issues) for (const p of [login(i.assignee), login(i.creator)]) if (p && !isGuest(p)) members.set(keyOf(i.team), (members.get(keyOf(i.team)) ?? new Set()).add(p))
-  // two Linear teams can join the same team here: the first one decides
-  const seen = new Set<string>()
+  /** key here → the Linear team it stands for now; two Linear teams can join the same team here, the first one decides */
+  const standsFor = new Map<string, string>()
+  const relinkedTeams: ImportResult['teamLinks'] = []
   teams.forEach((t: LTeam, n) => {
     const key = keyOf(t)
-    if (seen.has(key)) return
-    seen.add(key)
+    if (standsFor.has(key)) return
+    standsFor.set(key, t.id)
     const here = ws.teams[key]
     if (here) {
       // remember which Linear team it is, so the next import picks it again
-      if (linearIdOf(here) !== t.id) out.teams.push({ ...here, linearId: t.id, isNew: false })
+      if (linearIdOf(here) !== t.id) relinkedTeams.push({ key, linearId: t.id })
       return
     }
     out.teams.push({
@@ -308,10 +370,16 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       members: [...new Set([ws.me, ...(members.get(key) ?? [])])],
       createdAt: now,
       linearId: t.id,
-      isNew: true,
-    })
+    } satisfies Known<TeamRow>)
     counts.teams++
   })
+  // a team here that stood for one of these Linear teams before, and doesn't now, lets go of it
+  const linearTeams = new Set(standsFor.values())
+  for (const t of Object.values(ws.teams)) {
+    const id = linearIdOf(t)
+    if (id && linearTeams.has(id) && !standsFor.has(t.key)) out.teamLinks.push({ key: t.key, linearId: null })
+  }
+  out.teamLinks.push(...relinkedTeams)
 
   // labels: group labels are flattened ("Area: Charts"); the same name in several teams becomes one label
   const usedLabels = new Set(issues.flatMap((i) => i.labels.nodes.map((l) => l.id)))
@@ -327,31 +395,31 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     if (found) {
       // one made here with the same name: it remembers the Linear label, so the next import finds it by that
       if (!linearIdOf(found)) {
-        const linked: LabelRow = { ...found, linearId: l.id }
+        const linked = { ...found, linearId: l.id } satisfies Known<LabelRow>
         out.labels.push(linked)
         labelsByName.set(name.toLowerCase(), linked)
       }
       labelId.set(l.id, found.id)
       return found.id
     }
-    const label: LabelRow = { id: newId(), name, color: l.color, linearId: l.id }
+    const label = { id: newId(), name, color: l.color, linearId: l.id } satisfies Known<LabelRow>
     out.labels.push(label)
     labelsByName.set(name.toLowerCase(), label)
     labelId.set(l.id, label.id)
     counts.labels++
     return label.id
   }
-  for (const l of data.labels) if (!l.isGroup && usedLabels.has(l.id)) bringLabel(l)
+  for (const l of linear.labels) if (!l.isGroup && usedLabels.has(l.id)) bringLabel(l)
 
   // projects: the ones these teams' issues belong to, or that belong to these teams
   const usedProjects = new Set(issues.flatMap((i) => (i.project ? [i.project.id] : [])))
   const projectsByLinear = byLinearId(Object.values(ws.projects))
   const projectId = new Map<string, string>()
-  for (const p of data.projects) {
+  for (const p of linear.projects) {
     if (!usedProjects.has(p.id) && !p.teams.nodes.some((t) => teamIds.has(t.id))) continue
     const old = projectsByLinear.get(p.id)
     const state = p.status?.type ?? p.state ?? 'planned'
-    const project: ProjectRow = {
+    const project = {
       ...old,
       id: old?.id ?? newId(),
       name: p.name,
@@ -363,7 +431,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       targetDate: p.targetDate,
       createdAt: old?.createdAt ?? p.createdAt,
       linearId: p.id,
-    }
+    } satisfies Known<ProjectRow>
     projectId.set(p.id, project.id)
     counts.projects++
     if (!old || !same(old, project)) out.projects.push(project)
@@ -373,23 +441,14 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   const issuesByLinear = byLinearId(Object.values(ws.issues))
   /** an issue archived here since an earlier import: it stays as it is */
   const archivedHere = (linearId: string) => (issuesByLinear.has(linearId) ? undefined : ws.archivedByLinear[linearId])
-  const order = orderKeys(issues)
   const idOf = new Map(issues.map((i) => [i.id, issuesByLinear.get(i.id)?.id ?? archivedHere(i.id)?.id ?? newId()]))
   const refs = new Set(issues.map((i) => `${keyOf(i.team)}-${i.number}`))
-  // every number used here counts, including issues an earlier import brought in (they keep theirs) and deleted ones
-  const taken = new Map<string, Set<number>>()
-  const mark = (team: string, n: number) => taken.set(team, (taken.get(team) ?? new Set()).add(n))
-  for (const [team, ns] of Object.entries(ws.usedNumbers)) for (const n of ns) mark(team, n)
-  for (const i of Object.values(ws.issues)) mark(i.team, i.number)
-  for (const a of Object.values(ws.archivedByLinear)) mark(a.team, a.number)
+  const taken = new Map(Object.entries(ws.usedNumbers).map(([team, ns]) => [team, new Set(ns)]))
   const highest = new Map<string, number>()
   const raise = (team: string, n: number) => highest.set(team, Math.max(highest.get(team) ?? 0, n))
   for (const [team, used] of taken) for (const n of used) raise(team, n)
-  for (const t of Object.values(ws.teams)) raise(t.key, t.lastNumber ?? 0)
-  for (const li of issues) {
-    const at = issuesByLinear.get(li.id) ?? archivedHere(li.id)
-    raise(at?.team ?? keyOf(li.team), at?.number ?? li.number)
-  }
+  // a moved number also goes past the ones new issues bring, so it never lands on a later one
+  for (const li of issues) if (!issuesByLinear.has(li.id) && !archivedHere(li.id)) raise(keyOf(li.team), li.number)
   const plan: { li: LIssue; team: string; number: number }[] = []
   for (const li of [...issues].sort((a, b) => a.number - b.number)) {
     if (archivedHere(li.id)) {
@@ -406,25 +465,32 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     if (!old && used.has(number)) {
       const n = (highest.get(team) ?? 0) + 1
       raise(team, n)
-      renumbered.push({ from: `${team}-${number}`, to: `${team}-${n}` })
+      renumbered.push({ from: `${linearKey.get(li.team.id)}-${number}`, to: `${team}-${n}` })
       number = n
     }
     used.add(number)
     plan.push({ li, team, number })
   }
-  // new issues finished longer ago than their team keeps finished issues go straight into the archive
-  const archiveBefore = (team: string) => {
-    const months = ws.teams[team]?.autoArchive ?? AUTO_ARCHIVE_MONTHS
-    if (!months) return null
-    const d = new Date(now)
-    d.setMonth(d.getMonth() - months)
-    return Number.isNaN(d.getTime()) ? null : d.toISOString()
+  // order: issues here keep their place; new ones go on top of their team here, in Linear's order, like a new issue
+  const top = new Map<string, string>()
+  for (const i of Object.values(ws.issues)) if (!top.has(i.team) || i.sortOrder < top.get(i.team)!) top.set(i.team, i.sortOrder)
+  const fresh = new Map<string, LIssue[]>()
+  for (const { li, team } of plan) {
+    if (issuesByLinear.has(li.id)) continue
+    const list = fresh.get(team)
+    if (list) list.push(li)
+    else fresh.set(team, [li])
+  }
+  const order = new Map<string, string>()
+  for (const [team, list] of fresh) {
+    list.sort((a, b) => a.sortOrder - b.sortOrder || a.number - b.number)
+    generateNKeysBetween(null, top.get(team) ?? null, list.length).forEach((key, n) => order.set(list[n].id, key))
   }
   /** the issue rows by Linear id, so comments find theirs */
   const imported = new Map<string, IssueRow>()
   // who commented on what, so subscribers who follow an issue anyway (by commenting) aren't listed twice
   const commenters = new Map<string, Set<string>>()
-  for (const c of data.comments) {
+  for (const c of linear.comments) {
     const who = login(c.user)
     if (c.issue && who) commenters.set(c.issue.id, (commenters.get(c.issue.id) ?? new Set()).add(who))
   }
@@ -441,7 +507,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     const whole = !!li.subscribers && li.subscribers.nodes.length < SUBSCRIBERS_READ
     const left = whole ? [...implicit].filter((l): l is string => !!l && !theirs.has(l)) : []
     const unsubscribed = [...new Set([...(old?.unsubscribed ?? []).map(relink), ...left])].filter((l) => !theirs.has(l)).sort()
-    const issue: IssueRow = {
+    const fields = {
       ...old,
       id: idOf.get(li.id)!,
       team,
@@ -453,10 +519,11 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       assignee,
       labels: [...new Set(li.labels.nodes.map((l) => labelId.get(l.id)).filter((x): x is string => !!x))],
       project: li.project ? (projectId.get(li.project.id) ?? null) : null,
-      parent: li.parent ? (idOf.get(li.parent.id) ?? null) : null,
+      // a parent in a team not picked this time may have come over before
+      parent: li.parent ? (idOf.get(li.parent.id) ?? issuesByLinear.get(li.parent.id)?.id ?? ws.archivedByLinear[li.parent.id]?.id ?? null) : null,
       ...(li.dueDate && /^\d{4}-\d{2}-\d{2}$/.test(li.dueDate) ? { dueDate: li.dueDate } : old?.dueDate && { dueDate: null }),
       ...(typeof li.estimate === 'number' && li.estimate >= 0 ? { estimate: li.estimate } : old?.estimate != null && { estimate: null }),
-      sortOrder: order.get(li.id)!,
+      sortOrder: old?.sortOrder ?? order.get(li.id)!,
       createdBy,
       ...(subscribers.length ? { subscribers } : old?.subscribers && { subscribers: [] }),
       ...(unsubscribed.length ? { unsubscribed } : old?.unsubscribed && { unsubscribed: [] }),
@@ -464,15 +531,11 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       updatedAt: li.updatedAt,
       completedAt: li.completedAt ?? li.canceledAt ?? null,
       linearId: li.id,
-    }
-    const before = archiveBefore(team)
-    // the same rule as tidying the archive: finished that long ago and untouched since
-    const last = issue.completedAt && issue.completedAt > issue.updatedAt ? issue.completedAt : issue.updatedAt
-    if (!old && before && ['done', 'canceled', 'duplicate'].includes(issue.status) && last < before) {
-      issue.archivedAt = now
-      issue.archivedBy = ws.me
-      counts.archived++
-    }
+    } satisfies Known<IssueRow>
+    // a new issue finished longer ago than its team keeps finished issues goes straight into the archive
+    const archive = !old && dueForArchive(fields, ws.teams[team]?.autoArchive ?? AUTO_ARCHIVE_MONTHS, now)
+    const issue: IssueRow = archive ? { ...fields, archivedAt: now, archivedBy: ws.me } : fields
+    if (archive) counts.archived++
     imported.set(li.id, issue)
     counts.issues++
     if (!old || !same(old, issue)) out.issues.push(issue)
@@ -480,7 +543,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
 
   // comments: matched authors keep their name; others are written by you, saying who wrote them
   const commentsByLinear = byLinearId(Object.values(ws.comments).flat())
-  for (const c of [...data.comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
+  for (const c of [...linear.comments].sort((a, b) => a.createdAt.localeCompare(b.createdAt))) {
     if (!c.body.trim() || !c.issue) continue
     const issue = imported.get(c.issue.id)
     // an issue archived here: a comment written in Linear since joins it, once (ones it has stay as they are)
@@ -491,7 +554,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     if (kept && old) continue
     const author = login(c.user)
     const body = rewriteLinks(c.body, refs).replace(/\s+$/, '')
-    const comment: CommentRow = {
+    const comment = {
       ...old,
       id: old?.id ?? newId(),
       issue: target.id,
@@ -499,7 +562,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       createdAt: c.createdAt,
       body: author ? body : `*From Linear: ${c.user?.name ?? 'someone'}*\n\n${body}`,
       linearId: c.id,
-    }
+    } satisfies Known<CommentRow>
     counts.comments++
     if (!old || !same(old, comment)) out.comments.push(comment)
   }
@@ -507,10 +570,10 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   // views: the chosen teams' and the whole workspace's, with the filters that can come over
   const viewsByLinear = byLinearId(Object.values(ws.views ?? {}))
   const ctx: FilterContext = {
-    states: new Map((data.states ?? []).map((st) => [st.id, st])),
+    states: new Map((linear.states ?? []).map((st) => [st.id, st])),
     // someone matched to "no one" can't stand in a filter: "assigned to Bob" mustn't become "assigned to no one"
     person: (id) => choices.people[id] ?? undefined,
-    labels: data.labels,
+    labels: linear.labels,
     label: bringLabel,
     labelHere: (name) => labelsByName.get(name.toLowerCase())?.id,
     project: (id) => projectId.get(id),
@@ -519,7 +582,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       return t ? keyOf(t) : undefined
     },
   }
-  for (const v of data.views ?? []) {
+  for (const v of linear.views ?? []) {
     if (v.team && !teamIds.has(v.team.id)) continue
     const old = viewsByLinear.get(v.id)
     const { filters, exact, nothing } = mapViewFilter(v.filterData, ctx)
@@ -530,7 +593,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       continue
     }
     if (v.team) delete filters.teams // a team's view is about that team already
-    const view: ViewRow = {
+    const view = {
       ...old,
       id: old?.id ?? newId(),
       name: v.name,
@@ -543,7 +606,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       display: old?.display ?? { layout: 'list', grouping: 'status', ordering: 'manual', showCompleted: true, showSubIssues: true },
       createdAt: old?.createdAt ?? v.createdAt,
       linearId: v.id,
-    }
+    } satisfies Known<ViewRow>
     counts.views++
     if (!exact) out.inexactViews.push(v.name)
     if (!old || !same(old, view)) out.views.push(view)
