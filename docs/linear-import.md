@@ -22,12 +22,15 @@ from the browser (Linear allows that), so nothing passes through a server of our
 5. **Import**: admins and owners only. A progress bar shows how much is saved; keep the page open until it's done.
    If it stops partway (the connection dropped, or a teammate added an issue that took a number the import needed),
    it says why. Everything saved until then stays, and **Try again** works out the rest from what's here now and
-   brings it over: nothing comes over twice.
+   brings it over: nothing comes over twice. That also works after reloading the page: a team the import brings
+   issues into that has nobody in it yet gets the members a new team would (you, and the people matched to its
+   issues' assignees and creators), and people who haven't joined get their email address. Going to another page while it
+   saves doesn't stop it; coming back to Settings › Import from Linear shows how far it is.
 
 The code: `src/features/import/linearApi.ts` reads Linear, `linearMap.ts` works out what is new or changed, in the
 app's own shapes (a team, label, project, issue, comment or view each, plus people who haven't joined, and what
 Linear took off since an earlier import; pure, tested in `tests/linearImport.test.ts`), and `ImportPage.tsx` is the
-wizard. `src/backend/importRows.ts` turns that into the steps that save it (`planImport`, pure, tested in
+wizard (`prepareImport.ts` puts the pieces together for it and for the database test; `importRun.ts` keeps the import that is saving). `src/backend/importRows.ts` turns that into the steps that save it (`planImport`, pure, tested in
 `tests/importRows.test.ts`) and sends them (`runImport`), through the database's `import_rows`, which saves quietly
 (no history, keeping Linear's numbers and dates) and changes nothing when a row is already as it should be. The
 steps, in order: people who haven't joined; teams that let go of a Linear team, new teams and their members, teams
@@ -121,7 +124,11 @@ What else a later import does:
 - **People who haven't joined** get their name and picture from Linear again, when they changed there.
 - **Links to Linear issues** in descriptions and comments follow the issue's number and key here, also when the
   issue got another number (`ENG-2` became `ENG-4`) or its team another key (`DES` became `DSN`).
-- **Who made an issue, who wrote a comment and who owns a view** stay as the first import had them (a comment that
-  came in as "No one" keeps saying who wrote it in Linear). Matching someone later only moves what was given to a
-  person who hadn't joined.
+- **Who made an issue, who wrote a comment and who owns a view** stay as the first import had them. A comment that
+  came in as "No one" keeps saying who wrote it in Linear, until it's matched to its writer; a comment whose writer
+  is its author never gets that line. Matching someone later only moves what was given to a person who hadn't
+  joined.
+- **An issue's team and a view's team** stay as they are here: picking other keys for the teams later doesn't move
+  them.
+- The check step counts everything the import covers, also comments on issues archived here that are already here.
 - Every number a team ever used counts as taken, also numbers of issues deleted since, so no number is given twice.

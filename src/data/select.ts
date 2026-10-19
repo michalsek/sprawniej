@@ -2,7 +2,7 @@
  * Pure helpers that turn the store into what a list or board shows: filter, sort, group. No React, no store
  * access, so they are easy to test (tests/select.test.ts).
  */
-import type { Comment, Display, Filters, InboxItem, Issue, Ordering, Person, Project, ReadState } from '@/model/schema'
+import type { Comment, Display, Filters, InboxItem, Issue, Member, Ordering, Person, Project, ReadState } from '@/model/schema'
 import { followers } from './notify'
 import { PRIORITY_NAMES, PRIORITY_ORDER, STATUSES, TAB_GROUPS, statusOf, type IssueTab, type Priority } from '@/model/status'
 
@@ -212,3 +212,6 @@ export function projectProgress(projectId: string, issues: Issue[]): { done: num
 /** not marked as read yet (state/<login>.json, or read_at in the database) */
 export const isUnread = (n: Pick<InboxItem, 'id' | 'at' | 'readAt'>, r: ReadState) =>
   !n.readAt && !r.read.includes(n.id) && (!r.readUntil || n.at > r.readUntil)
+
+/** you are an owner or an admin of the open workspace (deleting teams, renaming it, importing) */
+export const isAdmin = (s: { me: Person | null; members: Record<string, Member> }): boolean => !!s.me && ['owner', 'admin'].includes(s.members[s.me.login]?.role ?? '')

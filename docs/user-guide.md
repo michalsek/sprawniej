@@ -258,10 +258,9 @@ import tells you which views lost some, so you can check them. If the import sto
 dropped), what came over so far stays: press **Try again** to bring over the rest.
 
 People who aren't in Sprawniej yet come over too, marked "hasn't joined": their issues, comments and views stay
-theirs. To give them their work, link them to their GitHub account: right after you invite them, or later in
-**Settings › People › People from Linear** (**Link to GitHub account**, admins only). Everything that was theirs
-moves to their account. Linking can't be undone, so check the name first. You can run the import again later to
-bring in new changes; nothing is copied twice, and people you linked stay linked.
+theirs. Once they've joined, run the import again and pick their name on the **Who's who** step: everything that
+was theirs moves to them. That can't be undone, so check the name first. You can run the import again later to
+bring in new changes; nothing is copied twice, and people you matched stay matched.
 
 Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish letters: "lukasz" finds Łukasz.
 

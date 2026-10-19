@@ -162,22 +162,43 @@ describe('the steps of an import', () => {
     expect(b.registry.profileId('~bob-stone')).toBeUndefined()
   })
 
-  test('trying again after it stopped partway: the teams the first try made get their members', () => {
-    const firstTry = plan()
-    // it stopped after making DES, before its members: DES is here now, so the import doesn't see it as new
+  test('a team an import made but stopped before its members gets them; a guest without their email gets it', () => {
+    // it stopped after making DES and Bob: DES is here now (so not new), with nobody in it, and Bob has no email kept
     const w = world()
-    w.registry.learnTeam('new-team-1', 'DES')
+    w.registry.learnTeam('des-here', 'DES')
+    w.registry.learnProfile('p-bob', '~bob-stone')
     w.existing.teams.DES = team('DES', { members: [], linearId: 't-des' })
-    // and one it never got to make is made again, with a new id: what the first try had for it doesn't come
-    const stale: ImportPlan = { ...firstTry, steps: [...firstTry.steps, { kind: 'rows', table: 'team_members', part: 'team_members', rows: [{ team_id: 'never-made', profile_id: 'p-me' }] }] }
-    const again = planImport(build(data, choices, w).r, w.existing, { workspaceId: WS, registry: w.registry, newTeamId: () => 'x', carry: stale })
+    w.existing.people!['~bob-stone'] = person('~bob-stone', 'Bob Stone', { linearId: 'u-bob' })
+    const again = plan(build(data, choices, w))
     expect(again.newTeams).toEqual({})
     expect(rowsOf(again, 'team_members')).toEqual([
-      { team_id: 'new-team-1', profile_id: 'p-me' },
-      { team_id: 'new-team-1', profile_id: 'p-ana' },
+      { team_id: 'des-here', profile_id: 'p-me' },
+      { team_id: 'des-here', profile_id: 'p-ana' },
     ])
-    // without the first try nobody would be in DES
-    expect(rowsOf(plan(build(data, choices, w)), 'team_members')).toEqual([])
+    expect(again.steps.filter((s) => s.kind === 'email')).toEqual([{ kind: 'email', profile: 'p-bob', email: 'bstone@acme.dev' }])
+    // once both are there, neither comes again
+    w.existing.teams.DES = team('DES', { members: ['mikolaj', 'ana'], linearId: 't-des' })
+    w.existing.guestEmails = { '~bob-stone': 'bstone@acme.dev' }
+    const settled = plan(build(data, choices, w))
+    expect(rowsOf(settled, 'team_members')).toEqual([])
+    expect(settled.steps.filter((s) => s.kind === 'email')).toEqual([])
+  })
+
+  test('an issue already here sends only the labels and followers it doesn’t have yet', () => {
+    const first = build()
+    const w = world()
+    for (const i of first.r.issues) if (!i.archivedAt) w.existing.issues[i.id] = { ...i }
+    w.registry.learnProfile('guest-1', '~bob-stone')
+    w.existing.people!['~bob-stone'] = person('~bob-stone', 'Bob Stone', { linearId: 'u-bob' })
+    w.existing.guestEmails = { '~bob-stone': 'bstone@acme.dev' }
+    w.existing.labels = Object.fromEntries(first.r.labels.map((l) => [l.id, l]))
+    w.existing.projects = Object.fromEntries(first.r.projects.map((p) => [p.id, p]))
+    const charts = first.r.issues.find((i) => i.linearId === 'i-1')!
+    const renamed = { ...data, issues: data.issues.map((i) => (i.id === 'i-1' ? { ...i, title: 'Charts are slower', labels: { nodes: [...i.labels.nodes, { id: 'l-unused' }] } } : i)) }
+    const p = plan(build(renamed, choices, w))
+    const unused = first.r.labels.find((l) => l.name === 'Unused')!.id
+    expect(rowsOf(p, 'issue_labels')).toEqual([{ issue_id: charts.id, label_id: unused }])
+    expect(rowsOf(p, 'issue_followers').filter((f) => f.issue_id === charts.id)).toEqual([])
   })
 
   test('what Linear took off becomes deletes; a login nobody knows is a mistake', () => {
@@ -191,12 +212,16 @@ describe('the steps of an import', () => {
       removedViews: ['v-1', 'v-2'],
     }
     const p = planImport(r, b.existing, { workspaceId: WS, registry: b.registry, newTeamId: () => 'new-team' })
+    // one delete per issue (or project), kept to the workspace when sent
     expect(p.steps.filter((s) => s.kind === 'remove')).toEqual([
-      { kind: 'remove', table: 'project_teams', keys: [{ project_id: 'p-1', team_id: 't-old-here' }] },
-      { kind: 'remove', table: 'issue_labels', keys: [{ issue_id: i1.id, label_id: 'l-x' }, { issue_id: i1.id, label_id: 'l-y' }, { issue_id: i2.id, label_id: 'l-x' }] },
-      { kind: 'remove', table: 'issue_followers', keys: [{ issue_id: i1.id, profile_id: 'p-ana' }] },
-      { kind: 'remove', table: 'views', keys: [{ id: 'v-1' }, { id: 'v-2' }] },
+      { kind: 'remove', table: 'project_teams', eq: { project_id: 'p-1' }, col: 'team_id', values: ['t-old-here'] },
+      { kind: 'remove', table: 'issue_labels', eq: { issue_id: i1.id }, col: 'label_id', values: ['l-x', 'l-y'] },
+      { kind: 'remove', table: 'issue_labels', eq: { issue_id: i2.id }, col: 'label_id', values: ['l-x'] },
+      { kind: 'remove', table: 'issue_followers', eq: { issue_id: i1.id }, col: 'profile_id', values: ['p-ana'] },
+      { kind: 'remove', table: 'views', eq: {}, col: 'id', values: ['v-1', 'v-2'] },
     ])
+    const many = planImport({ ...b.r, removedViews: Array.from({ length: 150 }, (_, n) => `v-${n}`) }, b.existing, { workspaceId: WS, registry: b.registry, newTeamId: () => 'x' })
+    expect(many.steps.filter((s) => s.kind === 'remove').map((s) => (s.kind === 'remove' ? s.values.length : 0))).toEqual([100, 50])
     const stranger = { ...b.r, issues: [{ ...b.r.issues[0], assignee: 'nobody-here' }] }
     expect(() => planImport(stranger, b.existing, { workspaceId: WS, registry: b.registry, newTeamId: () => 'x' })).toThrow('Unknown person: nobody-here')
   })
@@ -259,6 +284,7 @@ interface Answer {
   data?: unknown
   error?: { code?: string; message?: string } | null
   status?: number
+  count?: number
 }
 
 /** a pretend database: answers import_rows and the other calls from `answer`, and writes down every call */
@@ -267,7 +293,7 @@ function fakeDb(answer: (fn: string, args: Record<string, unknown>, n: number) =
   const reply = async (fn: string, args: Record<string, unknown>) => {
     calls.push({ fn, args })
     const a = await answer(fn, args, calls.length)
-    return { data: a.data ?? null, error: a.error ?? null, status: a.status ?? (a.error ? 400 : 200) }
+    return { data: a.data ?? null, error: a.error ?? null, status: a.status ?? (a.error ? 400 : 200), count: a.count ?? null }
   }
   const db = {
     rpc: (fn: string, args: Record<string, unknown>) => reply(fn, args),
@@ -287,6 +313,8 @@ function fakeDb(answer: (fn: string, args: Record<string, unknown>, n: number) =
 }
 
 const noSleep = () => Promise.resolve()
+const one = (step: ImportStep): ImportPlan => ({ workspaceId: WS, total: stepSize(step), newTeams: {}, archive: false, steps: [step] })
+const issueRows = (n: number): ImportStep => ({ kind: 'rows', table: 'issues', part: 'first', rows: Array.from({ length: n }, (_, k) => ({ id: `i${k}` })) })
 let errors: ReturnType<typeof spyOn>
 beforeEach(() => {
   errors = spyOn(console, 'error').mockImplementation(() => {})
@@ -296,7 +324,7 @@ afterEach(() => errors.mockRestore())
 describe('sending an import', () => {
   test('sends every step, says how far it got, and adds up what changed', async () => {
     const p = plan()
-    const { db, calls } = fakeDb((fn, args) => ({ data: fn === 'import_rows' ? (args.p_rows as unknown[]).length : null }))
+    const { db, calls } = fakeDb((fn, args) => ({ data: fn === 'import_rows' ? (args.p_rows as unknown[]).length : null, count: fn.startsWith('delete') ? 1 : undefined }))
     const seen: number[] = []
     const changed = await runImport(db, WS, p, (saved, total) => {
       expect(total).toBe(p.total)
@@ -305,18 +333,19 @@ describe('sending an import', () => {
     expect(seen[0]).toBe(0)
     expect(seen.at(-1)).toBe(p.total)
     expect(seen).toEqual([...seen].sort((a, b) => a - b))
-    expect(changed).toBe(p.steps.reduce((n, s) => n + (s.kind === 'rows' ? s.rows.length : 0), 0))
+    // rows written, rows deleted and people linked; emails don't count
+    expect(changed).toBe(p.steps.reduce((n, s) => n + (s.kind === 'rows' ? s.rows.length : s.kind === 'remove' || s.kind === 'link' ? 1 : 0), 0))
     expect(calls.map((c) => c.fn)).toEqual(p.steps.map((s) => (s.kind === 'rows' ? 'import_rows' : s.kind === 'email' ? 'set_guest_email' : s.kind === 'link' ? 'link_person' : `delete ${s.table}`)))
   })
 
-  test('deletes go per issue, kept to the workspace', async () => {
-    const p: ImportPlan = { workspaceId: WS, total: 3, newTeams: {}, archived: 0, steps: [{ kind: 'remove', table: 'issue_labels', keys: [{ issue_id: 'a', label_id: 'x' }, { issue_id: 'a', label_id: 'y' }, { issue_id: 'b', label_id: 'x' }] }] }
-    const { db, calls } = fakeDb()
-    await runImport(db, WS, p, () => {}, noSleep)
-    expect(calls.map((c) => c.args.filters)).toEqual([
-      ['workspace_id=ws-1', 'issue_id=a', 'label_id in x,y'],
-      ['workspace_id=ws-1', 'issue_id=b', 'label_id in x'],
-    ])
+  test('a delete is kept to the workspace and its issue', async () => {
+    const { db, calls } = fakeDb(() => ({ count: 2 }))
+    expect(await runImport(db, WS, one({ kind: 'remove', table: 'issue_labels', eq: { issue_id: 'a' }, col: 'label_id', values: ['x', 'y'] }), () => {}, noSleep)).toBe(2)
+    expect(calls.map((c) => c.args.filters)).toEqual([['workspace_id=ws-1', 'issue_id=a', 'label_id in x,y']])
+    const failing = fakeDb(() => ({ error: { code: '42501', message: 'permission denied for table issue_labels' }, status: 403 }))
+    await expect(runImport(failing.db, WS, one({ kind: 'remove', table: 'issue_labels', eq: { issue_id: 'a' }, col: 'label_id', values: ['x'] }), () => {}, noSleep)).rejects.toThrow(
+      "You aren't allowed to do that here.",
+    )
   })
 
   test('a dropped connection is tried again; one that stays down stops it partway, saying so', async () => {
@@ -336,27 +365,51 @@ describe('sending an import', () => {
     expect(down.calls).toHaveLength(2 + 4)
   })
 
-  test('a batch too slow for the database is halved until it goes through', async () => {
-    const rows = Array.from({ length: 100 }, (_, n) => ({ id: `i${n}` }))
-    const p: ImportPlan = { workspaceId: WS, total: 100, newTeams: {}, archived: 0, steps: [{ kind: 'rows', table: 'issues', part: 'first', rows }] }
-    const { db, calls } = fakeDb((_fn, args) => {
-      const n = (args.p_rows as unknown[]).length
-      return n > 30 ? { error: { code: '57014', message: 'canceling statement due to statement timeout' }, status: 500 } : { data: n }
-    })
-    expect(await runImport(db, WS, p, () => {}, noSleep)).toBe(100)
-    expect(calls.map((c) => (c.args.p_rows as unknown[]).length)).toEqual([100, 50, 25, 25, 50, 25, 25])
+  test('a busy moment is tried again too: 408, 429, 5xx and the connection codes', async () => {
+    for (const [status, code] of [[408, ''], [429, ''], [503, ''], [500, 'PGRST000'], [503, 'PGRST003'], [500, '40001'], [500, '08006']] as const) {
+      let n = 0
+      const { db } = fakeDb(() => (++n === 1 ? { error: { code, message: 'busy' }, status } : { data: 1 }))
+      expect({ status, code, changed: await runImport(db, WS, one(issueRows(1)), () => {}, noSleep) }).toEqual({ status, code, changed: 1 })
+    }
   })
 
-  test('someone linked already counts as done; a number taken meanwhile stops it with words to show', async () => {
-    const linked: ImportPlan = { workspaceId: WS, total: 1, newTeams: {}, archived: 0, steps: [{ kind: 'link', guest: 'g', to: 'p' }] }
-    expect(await runImport(fakeDb(() => ({ error: { code: 'P0002', message: 'That person isn’t here any more.' } })).db, WS, linked, () => {}, noSleep)).toBe(0)
-    const issues: ImportPlan = { workspaceId: WS, total: 1, newTeams: {}, archived: 0, steps: [{ kind: 'rows', table: 'issues', part: 'first', rows: [{ id: 'x' }] }] }
-    const taken = fakeDb(() => ({ error: { code: '23505', message: 'duplicate key value violates unique constraint "issues_team_id_number_key"' }, status: 409 }))
-    await expect(runImport(taken.db, WS, issues, () => {}, noSleep)).rejects.toThrow('Someone added an issue to one of these teams while you were importing, so a number was taken.')
+  test('a sign-in that ran out is tried again, then says so', async () => {
+    const { db, calls } = fakeDb(() => ({ error: { code: 'PGRST301', message: 'JWT expired' }, status: 401 }))
+    await expect(runImport(db, WS, one(issueRows(1)), () => {}, noSleep)).rejects.toThrow('You were signed out, so the import stopped partway. Sign in again, then press Try again.')
+    expect(calls).toHaveLength(4)
+  })
+
+  test('something that throws without being the connection stops at once', async () => {
+    const db = { rpc: () => Promise.reject(new RangeError('Invalid array length')) } as unknown as Db
+    await expect(runImport(db, WS, one(issueRows(1)), () => {}, async () => void expect.unreachable())).rejects.toThrow('Something went wrong, so the import stopped partway.')
+    const offline = { rpc: () => Promise.reject(new TypeError('Failed to fetch')) } as unknown as Db
+    await expect(runImport(offline, WS, one(issueRows(1)), () => {}, noSleep)).rejects.toThrow("We couldn't reach Sprawniej")
+  })
+
+  test('a batch too slow or too big for the database is halved until it goes through, not below 25 rows', async () => {
+    for (const fail of [{ code: '57014', message: 'canceling statement due to statement timeout', status: 500 }, { code: '', message: 'Payload Too Large', status: 413 }]) {
+      const { db, calls } = fakeDb((_fn, args) => {
+        const n = (args.p_rows as unknown[]).length
+        return n > 30 ? { error: { code: fail.code, message: fail.message }, status: fail.status } : { data: n }
+      })
+      expect(await runImport(db, WS, one(issueRows(100)), () => {}, noSleep)).toBe(100)
+      expect(calls.map((c) => (c.args.p_rows as unknown[]).length)).toEqual([100, 50, 25, 25, 50, 25, 25])
+    }
+    const never = fakeDb(() => ({ error: { code: '57014', message: 'canceling statement due to statement timeout' }, status: 500 }))
+    await expect(runImport(never.db, WS, one(issueRows(50)), () => {}, noSleep)).rejects.toThrow('Something went wrong, so the import stopped partway.')
+    expect(never.calls.map((c) => (c.args.p_rows as unknown[]).length)).toEqual([50, 25])
+  })
+
+  test('someone linked already counts as done; a number taken or a row changed meanwhile stops it with words to show', async () => {
+    expect(await runImport(fakeDb(() => ({ error: { code: 'P0002', message: 'That person isn’t here any more.' } })).db, WS, one({ kind: 'link', guest: 'g', to: 'p' }), () => {}, noSleep)).toBe(0)
+    const taken = fakeDb(() => ({ error: { code: '23505', message: 'duplicate key value violates unique constraint "issue_numbers_pkey"' }, status: 409 }))
+    await expect(runImport(taken.db, WS, one(issueRows(1)), () => {}, noSleep)).rejects.toThrow('Someone added an issue to one of these teams while you were importing, so a number was taken.')
+    const twice = fakeDb(() => ({ error: { code: '23505', message: 'duplicate key value violates unique constraint "issues_workspace_id_linear_id_key"' }, status: 409 }))
+    await expect(runImport(twice.db, WS, one(issueRows(1)), () => {}, noSleep)).rejects.toThrow('Something here changed while you were importing.')
     const refused = fakeDb(() => ({ error: { code: '42501', message: 'Only admins can import.' }, status: 403 }))
-    await expect(runImport(refused.db, WS, issues, () => {}, noSleep)).rejects.toThrow('Only admins can import.')
+    await expect(runImport(refused.db, WS, one(issueRows(1)), () => {}, noSleep)).rejects.toThrow('Only admins can import.')
     const odd = fakeDb(() => ({ error: { code: 'SP010', message: 'This import has something Sprawniej can’t take.' }, status: 400 }))
-    await expect(runImport(odd.db, WS, issues, () => {}, noSleep)).rejects.toThrow('Something went wrong, so the import stopped partway.')
+    await expect(runImport(odd.db, WS, one(issueRows(1)), () => {}, noSleep)).rejects.toThrow('Something went wrong, so the import stopped partway.')
     expect(errors).toHaveBeenCalled()
   })
 })

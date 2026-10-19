@@ -25,7 +25,7 @@ import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
-import { isUnread } from './select'
+import { isAdmin, isUnread } from './select'
 import { issueRef, useData } from './store'
 
 const now = () => new Date().toISOString()
@@ -764,7 +764,6 @@ export function teamContents(key: string): { issues: number; archived: number; c
   }
 }
 
-const isAdmin = (s: ReturnType<typeof useData.getState>) => !!s.me && ['owner', 'admin'].includes(s.members[s.me.login]?.role ?? '')
 
 /**
  * Delete a team for everyone: its issues, comments, archive and its own views go. Sub-issues in other teams lose their

@@ -7,7 +7,8 @@ import { create } from 'zustand'
 import { useData } from '@/data/store'
 import { useAuth } from './auth'
 import type { Existing, ImportExtras, ImportResult } from '@/features/import/linearMap'
-import { getClient } from './client'
+import { getClient, type Db } from './client'
+import { friendlyDbError } from './problem'
 import { ImportProblem, planImport, readExisting, runImport, type ImportPlan } from './importRows'
 import { watchConnection } from './connection'
 import { Channels, type ChannelStatus, type Topic } from './live'
@@ -75,7 +76,7 @@ const NOT_OPEN = 'Open the workspace to import into first.'
 let importing = false
 
 /** the open workspace and the connection, for the import */
-function openForImport(): { ws: LiveWorkspace; db: NonNullable<ReturnType<typeof getClient>> } {
+function openForImport(): { ws: LiveWorkspace; db: Db } {
   const ws = life.current
   const db = getClient()
   if (!ws || ws.closed || !db || useBackend.getState().phase !== 'open') throw new ImportProblem(NOT_OPEN)
@@ -97,14 +98,19 @@ export const backend = {
   /** how many archived issues a team has */
   countArchived: (teamKey: string): Promise<number> => life.current?.countArchived(teamKey) ?? Promise.resolve(0),
   /** what the Linear import needs to know that the store doesn't hold (importRows.ts) */
-  readExisting: (): Promise<ImportExtras> => {
+  readExisting: async (): Promise<ImportExtras> => {
     const { ws, db } = openForImport()
-    return readExisting(db, ws.workspaceId, registry)
+    try {
+      return await readExisting(db, ws.workspaceId, registry)
+    } catch (e) {
+      console.error('Sprawniej couldn’t read what the import needs', e)
+      throw new ImportProblem(friendlyDbError(e, "We couldn't check what's here already. Try again in a moment."))
+    }
   },
-  /** the steps an import takes (pure, apart from the new teams' ids); `carry`: an earlier try that stopped partway */
-  planImport: (r: ImportResult, existing: Existing, carry?: ImportPlan): ImportPlan => {
+  /** the steps an import takes (pure, apart from the new teams' ids) */
+  planImport: (r: ImportResult, existing: Existing): ImportPlan => {
     const { ws } = openForImport()
-    return planImport(r, existing, { workspaceId: ws.workspaceId, registry, newTeamId: () => crypto.randomUUID(), carry })
+    return planImport(r, existing, { workspaceId: ws.workspaceId, registry, newTeamId: () => crypto.randomUUID() })
   },
   /**
    * Saves an import. Your own changes are sent first; catching up waits until the end and happens once then (an
@@ -122,7 +128,7 @@ export const backend = {
         return await runImport(db, ws.workspaceId, plan, progress)
       } finally {
         await ws.releaseCatchUp()
-        if (plan.archived > 0) ws.reloadArchive()
+        if (plan.archive) ws.reloadArchive()
       }
     } finally {
       importing = false

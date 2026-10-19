@@ -54,6 +54,9 @@ export interface Delays {
   catchUpMax: number
 }
 
+/** tables whose "catch up" message may mean archived rows changed */
+const ARCHIVED_PARTS: ReadonlySet<string> = new Set(['issues', 'issue_labels', 'issue_followers', 'comments'])
+
 export const DELAYS: Delays = {
   flush: 16,
   fetch: 50,
@@ -150,11 +153,13 @@ export class LiveWorkspace implements WriteTarget {
   /** read the archive again once the read under way is done (an import added to it meanwhile) */
   private archiveAgain = false
   private archiveTries = 0
-  /** while above 0 (your import is saving), "catch up" messages only mark that one is due */
-  private holding = 0
-  private deferred = false
+  /** your import is saving: "catch up" messages wait, and it catches up once at the end (releaseCatchUp) */
+  private importing = false
+  /** "catch up" messages wait for this (catchUpSoon) */
   private debounceTimer: ReturnType<typeof setTimeout> | undefined
   private debounceFirst: number | null = null
+  /** one of the messages waiting was about issues or their parts: an archive already read is read again too */
+  private archiveDue = false
   private archiveTimer: ReturnType<typeof setTimeout> | undefined
   /** rows whose fetch failed: asked for again after the next catch-up */
   private refetch: Asked[] = []
@@ -272,7 +277,7 @@ export class LiveWorkspace implements WriteTarget {
     clearTimeout(this.retryTimer)
     clearTimeout(this.archiveTimer)
     clearTimeout(this.cascadeTimer)
-    clearTimeout(this.debounceTimer)
+    this.stopWaiting()
     this.fetcher.stop()
     this.unwatch?.()
     await this.channels?.close()
@@ -348,51 +353,53 @@ export class LiveWorkspace implements WriteTarget {
     if (r.workspaceGone) return this.goneAway('deleted')
     if (env.data.getState().members[this.me.person.login]?.removedAt) return this.goneAway('removed')
     if (r.fetch.length) this.fetcher.request(r.fetch)
-    if (r.catchUp) this.catchUpSoon()
+    if (r.catchUp) this.catchUpSoon(inputs.some((i) => i.from === 'message' && i.message.op === 'catch_up' && (i.message.table === undefined || ARCHIVED_PARTS.has(i.message.table))))
   }
 
   // ---------- catching up ----------
 
-  /** a "catch up" message: soon, once they stop coming (or once your import is saved) */
-  private catchUpSoon() {
-    if (this.closed) return
-    if (this.holding > 0) {
-      this.deferred = true
-      return
-    }
+  /**
+   * A "catch up" message (an import sends one per batch, a link one in all): soon, once they stop coming, and not
+   * during your own import (it catches up at the end). One about issues reads an archive already open again too, since
+   * catching up after many changes reads only the open issues again.
+   */
+  private catchUpSoon(archiveToo: boolean) {
+    if (this.closed || this.importing) return
+    this.archiveDue ||= archiveToo
     const { catchUpQuiet, catchUpMax } = this.env.delays
     const now = Date.now()
     this.debounceFirst ??= now
     clearTimeout(this.debounceTimer)
     this.debounceTimer = setTimeout(
       () => {
+        const archive = this.archiveDue
         this.debounceTimer = undefined
         this.debounceFirst = null
-        void this.catchUp()
+        this.archiveDue = false
+        void this.catchUp().then(() => archive && this.reloadArchive())
       },
       Math.max(0, Math.min(catchUpQuiet, this.debounceFirst + catchUpMax - now)),
     )
   }
 
-  /** your import is saving: its own "catch up" messages wait (releaseCatchUp catches up once, at the end) */
+  private stopWaiting() {
+    clearTimeout(this.debounceTimer)
+    this.debounceTimer = undefined
+    this.debounceFirst = null
+    this.archiveDue = false
+  }
+
+  /** your import is saving: its own "catch up" messages are left (releaseCatchUp catches up once, at the end) */
   holdCatchUp() {
-    this.holding++
+    this.importing = true
+    this.stopWaiting()
   }
 
   /** the import is done (or stopped): catch up once, now */
   async releaseCatchUp(): Promise<void> {
-    this.holding = Math.max(0, this.holding - 1)
-    if (this.holding > 0) return
-    this.deferred = false
-    clearTimeout(this.debounceTimer)
-    this.debounceTimer = undefined
-    this.debounceFirst = null
+    this.importing = false
+    this.stopWaiting()
     await this.catchUp()
-  }
-
-  /** a catch-up message came while held, and is still due (for tests) */
-  get catchUpDue(): boolean {
-    return this.deferred || this.debounceTimer !== undefined
   }
 
   catchUp(): Promise<void> {

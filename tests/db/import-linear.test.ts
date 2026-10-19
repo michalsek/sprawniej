@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import { applyRows, emptyLive } from '@/backend/apply'
-import { ImportProblem, planImport, readExisting, runImport, type ImportPlan } from '@/backend/importRows'
+import { ImportProblem, planImport, readExisting, runImport, type ImportPlan, type ImportStep } from '@/backend/importRows'
 import { Loader } from '@/backend/load'
 import { Registry } from '@/backend/registry'
 import { EMPTY } from '@/data/store'
 import type { LinearData } from '@/features/import/linearApi'
-import { buildImport, existingFrom, type ImportChoices, type ImportResult } from '@/features/import/linearMap'
+import type { ImportChoices, ImportResult } from '@/features/import/linearMap'
+import { prepareImport } from '@/features/import/prepareImport'
 import { linearFixture } from '../fixtures/linear'
 import { anyTable, closeChannels, enabled, getWorld, newIssue, newWorkspace, ok, ulid, type Someone, type World } from './support'
 
@@ -37,9 +38,12 @@ describe.skipIf(!enabled)('importing from Linear', () => {
     const r = applyRows(emptyLive(), { ...EMPTY }, inputs, { workspaceId: into, meId: who.profileId, registry })
     const store = { ...EMPTY, ...r.patch }
     const extras = await readExisting(who.db, into, registry)
-    const existing = existingFrom(store, extras, who.login)
-    const result = buildImport(d, choices, existing, { newId: ulid, newGuestId: () => crypto.randomUUID(), now: NOW })
-    const plan = planImport(result, existing, { workspaceId: into, registry, newTeamId: () => crypto.randomUUID() })
+    const { plan, result } = prepareImport(store, extras, d, choices, {
+      now: NOW,
+      newId: ulid,
+      newGuestId: () => crypto.randomUUID(),
+      plan: (r, existing) => planImport(r, existing, { workspaceId: into, registry, newTeamId: () => crypto.randomUUID() }),
+    })
     return { plan, result, extras }
   }
 
@@ -145,6 +149,25 @@ describe.skipIf(!enabled)('importing from Linear', () => {
     const gone = await ok(w.ana.db.from('deletions').select('row_key').eq('workspace_id', ws).eq('table_name', 'issue_labels'))
     expect(gone.map((d) => d.row_key)).toContainEqual({ issue_id: charts.id, label_id: bug.id })
     expect((await prepare(off)).plan.total).toBe(0)
+  })
+
+  test('an import that stopped partway, run again: its new team gets members, its guests their emails', async () => {
+    const other = await newWorkspace(w.ana, 'linear partway')
+    const full = await prepare(fixture, w.ana, other.ws)
+    // it stopped right after making the teams and the guests: before the members and every email
+    const upTo = full.plan.steps.findIndex((s: ImportStep) => s.kind === 'rows' && s.table === 'team_members')
+    await runImport(w.ana.db, other.ws, { ...full.plan, steps: full.plan.steps.slice(0, upTo) }, () => {})
+    const des = await ok(w.ana.db.from('teams').select('id').eq('workspace_id', other.ws).eq('key', 'DES').single())
+    expect(await ok(w.ana.db.from('team_members').select('profile_id').eq('team_id', des.id))).toEqual([])
+    expect(await ok(w.ana.db.rpc('guest_emails', { p_ws: other.ws }))).toEqual([])
+    // worked out again from what's here (a reload): the rest comes, members and emails too
+    const again = await prepare(fixture, w.ana, other.ws)
+    expect(again.result.teams).toEqual([])
+    await runImport(w.ana.db, other.ws, again.plan, () => {})
+    expect(await ok(w.ana.db.from('team_members').select('profile_id').eq('team_id', des.id))).toEqual([{ profile_id: w.ana.profileId }])
+    const emails = await ok(w.ana.db.rpc('guest_emails', { p_ws: other.ws }))
+    expect(emails.map((e) => e.email)).toEqual(['bstone@acme.dev'])
+    expect((await prepare(fixture, w.ana, other.ws)).plan.total).toBe(0)
   })
 
   test('a number taken while importing stops it, saying why', async () => {

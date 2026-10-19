@@ -4,6 +4,8 @@ import { linearIdsOf } from '@/model/schema'
 import { EMPTY } from '@/data/store'
 import { buildImport, existingFrom, guestLogins, emojiFor, freeKey, guessPerson, involvedUsers, mapStatus, rewriteLinks, type Existing, type ImportChoices, type ImportExtras, type ImportResult, type IssueRow } from '@/features/import/linearMap'
 import type { Issue, Project, Team, View } from '@/model/schema'
+import { ImportProblem } from '@/backend/importRows'
+import { prepareImport } from '@/features/import/prepareImport'
 import { linearFixture as data } from './fixtures/linear'
 
 const person = (login: string, name: string) => ({ login, githubId: 1, name, avatarUrl: '' })
@@ -102,6 +104,7 @@ const written = (r: ImportResult) => ({
   guestEmails: r.guestEmails,
   teams: r.teams,
   teamLinks: r.teamLinks,
+  teamMembers: r.teamMembers,
   labels: r.labels,
   projects: r.projects,
   issues: r.issues,
@@ -118,6 +121,7 @@ const nothing = {
   guestEmails: [],
   teams: [],
   teamLinks: [],
+  teamMembers: [],
   labels: [],
   projects: [],
   issues: [],
@@ -152,7 +156,9 @@ function apply(ws: Existing, r: ImportResult): Existing {
     const { id: _id, ...person } = g
     people[g.login] = person
   }
+  next.guestEmails = { ...ws.guestEmails, ...Object.fromEntries(r.guestEmails.map((e) => [e.login, e.email])) }
   for (const t of r.teams) next.teams[t.key] = t
+  for (const t of r.teamMembers) next.teams[t.key] = { ...next.teams[t.key], members: t.members }
   for (const { key, linearId } of r.teamLinks) {
     const { linearId: _was, ...team } = next.teams[key]
     next.teams[key] = linearId ? { ...team, linearId } : team
@@ -299,7 +305,7 @@ describe('people who haven’t joined', () => {
     // their e-mail address comes along, apart, when Linear knows it
     const ana = run(data, { ...guests, people: { ...guests.people, 'u-ana': '~ana-nowak' } })
     expect(ana.guests[0]).toMatchObject({ id: '00000000-0000-4000-8000-000000000001', login: '~ana-nowak' })
-    expect(ana.guestEmails).toEqual([{ id: '00000000-0000-4000-8000-000000000001', email: 'ana@acme.dev' }])
+    expect(ana.guestEmails).toEqual([{ login: '~ana-nowak', email: 'ana@acme.dev' }])
     // made once: a later import leaves them
     expect(run(data, guests, apply(empty(), g)).guests).toEqual([])
   })
@@ -651,11 +657,80 @@ describe('running it again after changes here or in Linear', () => {
     expect(run(data, guests, first, '2026-03-02T00:00:00.000Z').comments).toEqual([])
   })
 
+  test('an import that stopped partway: its team gets members, guests get their emails, when it runs again', () => {
+    const withEmail = { ...guests, people: { ...guests.people, 'u-bob': '~bob-stone' } }
+    const ws = apply(empty(), run(data, withEmail))
+    expect(run(data, withEmail, ws, '2026-03-02T00:00:00.000Z').guestEmails).toEqual([])
+    // it stopped right after making ENG and Bob, before ENG's members and Bob's email were saved
+    const stopped = { ...ws, teams: { ENG: { ...ws.teams.ENG, members: [] } }, guestEmails: {} }
+    const again = run(data, withEmail, stopped, '2026-03-02T00:00:00.000Z')
+    expect(again.teamMembers).toEqual([{ key: 'ENG', members: ['mikolaj', 'ana-n'] }])
+    expect(again.guestEmails).toEqual([{ login: '~bob-stone', email: 'bstone@acme.dev' }])
+    expect(again.guests).toEqual([])
+    // an email that changed in Linear comes again; a team here with nobody in it that takes in a Linear team gets members too
+    const moved = { ...data, users: data.users.map((u) => (u.id === 'u-bob' ? { ...u, email: 'bob@acme.dev' } : u)) }
+    expect(run(moved, withEmail, ws, '2026-03-02T00:00:00.000Z').guestEmails).toEqual([{ login: '~bob-stone', email: 'bob@acme.dev' }])
+    expect(run(data, withEmail, { ...stopped, teams: { ENG: { ...eng, members: [] } } }, '2026-03-02T00:00:00.000Z').teamMembers).toEqual([{ key: 'ENG', members: ['mikolaj', 'ana-n'] }])
+  })
+
+  test('a view keeps its team here, so a later import after the teams swap settles', () => {
+    const first = apply(empty(), run(data, both))
+    const swapped = { ...choices, teamKeys: { 't-eng': 'DES', 't-des': 'ENG' } }
+    const second = run(data, swapped, first, '2026-03-02T00:00:00.000Z')
+    expect(second.views.map((v) => v.name)).not.toContain('Open bugs')
+    expect(Object.values(first.views!).find((v) => v.name === 'Open bugs')?.team).toBe('ENG')
+    const settled = run(data, swapped, apply(first, second), '2026-03-03T00:00:00.000Z')
+    expect(written(settled)).toEqual(nothing)
+  })
+
+  test('comments on issues archived here count as covered', () => {
+    const ws = apply(empty(), run({ ...data, comments: [...data.comments, { id: 'c-a', body: 'Old talk', createdAt: '2026-01-05T00:00:00.000Z', user: { id: 'u-bob', name: 'Bob Stone' }, issue: { id: 'i-2' } }] }, choices, empty(), '2026-10-07T00:00:00.000Z'))
+    const again = run({ ...data, comments: [...data.comments, { id: 'c-a', body: 'Old talk', createdAt: '2026-01-05T00:00:00.000Z', user: { id: 'u-bob', name: 'Bob Stone' }, issue: { id: 'i-2' } }] }, choices, ws, '2026-10-08T00:00:00.000Z')
+    expect(again.comments).toEqual([])
+    expect(again.counts.comments).toBe(3)
+  })
+
+  test('the "From Linear" line follows the author here', () => {
+    const ws = apply(empty(), run())
+    const bobs = (r: ImportResult | Existing) => ('counts' in r ? r.comments : Object.values(r.comments).flat()).find((c) => c.linearId === 'c-1')
+    expect(bobs(ws)).toMatchObject({ author: 'bstone', body: 'On it' })
+    // Bob is matched to no one now: he stays the author, so no line saying someone else wrote it
+    expect(bobs(run(data, { ...choices, people: { ...choices.people, 'u-bob': null } }, ws, '2026-03-02T00:00:00.000Z'))).toBeUndefined()
+    // came in as "No one", then matched to you: you are its author, and it says so plainly
+    const mine = apply(empty(), run(data, { ...choices, people: { ...choices.people, 'u-old': null } }))
+    const now = run(data, { ...choices, people: { ...choices.people, 'u-old': 'mikolaj' } }, mine, '2026-03-02T00:00:00.000Z')
+    expect(now.comments.find((c) => c.linearId === 'c-2')).toMatchObject({ author: 'mikolaj', body: 'Back in my day' })
+  })
+
   test('a comment on an issue archived here that came over before stays as it is', () => {
     const ws = apply(empty(), run(data, choices, empty(), '2026-10-07T00:00:00.000Z'))
     const axis = ws.archivedByLinear['i-2']
     const late = { id: 'c-late', body: 'Still broken?', createdAt: '2026-10-01T00:00:00.000Z', user: { id: 'u-bob', name: 'Bob Stone' }, issue: { id: 'i-2' } }
     const known = { ...ws, archivedComments: { 'c-late': { id: 'k-late', issue: axis.id } } }
     expect(run({ ...data, comments: [...data.comments, late] }, choices, known, '2026-10-08T00:00:00.000Z').comments).toEqual([])
+  })
+})
+
+describe('getting an import ready', () => {
+  const extras: ImportExtras = { archived: [], archivedComments: [], usedNumbers: {}, guests: [], guestEmails: {} }
+  const store = {
+    ...EMPTY,
+    me: person('mikolaj', 'Mikołaj'),
+    people: { mikolaj: person('mikolaj', 'Mikołaj'), 'ana-n': person('ana-n', 'Ana Nowak'), bstone: person('bstone', 'Robert') },
+    members: { mikolaj: { role: 'owner' as const, removedAt: null }, 'ana-n': { role: 'member' as const, removedAt: null }, bstone: { role: 'member' as const, removedAt: null } },
+  }
+  const o = { now: NOW, newId: ids(), newGuestId: uuids(), plan: () => ({ workspaceId: 'ws', steps: [], total: 0, newTeams: {}, archive: false }) }
+
+  test('works out what comes over and the steps', () => {
+    const p = prepareImport(store, extras, data, choices, o)
+    expect(p.result.counts.issues).toBe(3)
+    expect(p.existing.me).toBe('mikolaj')
+    expect(p.plan.total).toBe(0)
+  })
+
+  test('someone picked who has left since: it says so in words, not with their login', () => {
+    const left = { ...store, members: { ...store.members, bstone: { role: 'member' as const, removedAt: NOW } } }
+    expect(() => prepareImport(left, extras, data, choices, o)).toThrow("Robert isn't in this workspace any more. Go back to Who's who and pick someone else.")
+    expect(() => prepareImport({ ...store, me: null }, extras, data, choices, o)).toThrow(ImportProblem)
   })
 })

@@ -1,8 +1,9 @@
 /**
  * Settings › Import from Linear: a short wizard. Key → teams → people → check → import → done.
- * Reading happens straight from Linear; the check step works out what is new or changed (linearMap.ts) and the steps
- * that save it (src/backend/importRows.ts); Import saves them (actions.importFromLinear), with a progress bar. An
- * import that stops partway says so and can be tried again: nothing comes over twice.
+ * Reading happens straight from Linear; the check step works out what is new or changed and the steps that save it
+ * (prepareImport.ts); Import saves them (importRun.ts, through actions.importFromLinear), with a progress bar. An
+ * import that stops partway says so and can be tried again: nothing comes over twice. Leaving the page while it
+ * saves doesn't stop it, and coming back shows it again.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'wouter'
@@ -11,28 +12,25 @@ import { CheckCircle2, ExternalLink, Loader2 } from 'lucide-react'
 import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
 import { backend } from '@/backend'
-import { ImportProblem, type ImportPlan } from '@/backend/importRows'
-import { importFromLinear } from '@/data/actions'
+import { ImportProblem } from '@/backend/importRows'
+import { isAdmin } from '@/data/select'
 import { useData } from '@/data/store'
 import { Problem } from '@/features/onboarding/Step'
 import { cn } from '@/lib/utils'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
+import { leaveImport, startImport, useImportRun } from './importRun'
 import { LinearError, readBasics, readTeams, type LinearData } from './linearApi'
-import { buildImport, emojiFor, existingFrom, guessPerson, guestLogins, involvedUsers, linearName, type ImportResult } from './linearMap'
+import { emojiFor, guessPerson, guestLogins, involvedUsers, linearName, type ImportChoices, type ImportResult } from './linearMap'
+import { prepareImport, type Prepared } from './prepareImport'
 import { isGuest, type Member, type Person } from '@/model/schema'
 
 type Stage =
   | { at: 'key' }
   | { at: 'teams'; basics: Pick<LinearData, 'org' | 'teams' | 'users'> }
   | { at: 'people'; data: LinearData }
-  | { at: 'check'; data: LinearData; result: ImportResult; plan: ImportPlan }
-  | { at: 'saving'; saved: number; total: number }
-  | { at: 'failed'; data: LinearData; message: string; plan: ImportPlan }
-  | { at: 'done'; counts: ImportResult['counts']; keys: string[]; nothing: boolean }
-
-const canImport = (me: Person | null, members: Record<string, Member>) => !!me && ['owner', 'admin'].includes(members[me.login]?.role ?? '')
+  | { at: 'check'; data: LinearData; choices: ImportChoices; prepared: Prepared }
 
 /** the people a Linear person can be matched to: members now (a link to someone who left is refused) */
 const hereNow = (people: Record<string, Person>, members: Record<string, Member>) =>
@@ -41,6 +39,7 @@ const hereNow = (people: Record<string, Person>, members: Record<string, Member>
 const STEPS = ['Key', 'Teams', 'People', 'Import']
 const NOBODY = '__nobody'
 const KEY_RE = /^[A-Z][A-Z0-9]{0,6}$/
+const WENT_WRONG = 'Something went wrong. Try again in a moment.'
 
 function Steps({ now }: { now: number }) {
   return (
@@ -83,48 +82,28 @@ export function ImportPage() {
   const [problem, setProblem] = useState<string | null>(null)
   const [picked, setPicked] = useState<Record<string, string>>({})
   const [people, setPeople] = useState<Record<string, string | null>>({})
-  // a try that stopped partway: Try again (or going back and on again) brings what it didn't finish
-  const [stopped, setStopped] = useState<ImportPlan>()
   const everyone = useData((s) => s.people)
   const teams = useData((s) => s.teams)
   const me = useData((s) => s.me)
   const members = useData((s) => s.members)
-  const allowed = canImport(me, members)
+  const allowed = useData(isAdmin)
+  // the import saving (or one that ended) shows instead of the steps, also after going elsewhere and coming back
+  const importRun = useImportRun((s) => s.run)
+  useEffect(() => leaveImport, [])
 
-  // closing the tab while it saves stops the import partway: ask first
-  const saving = stage.at === 'saving'
-  useEffect(() => {
-    if (!saving) return
-    const hold = (e: BeforeUnloadEvent) => e.preventDefault()
-    window.addEventListener('beforeunload', hold)
-    return () => window.removeEventListener('beforeunload', hold)
-  }, [saving])
-
-  /** what comes over and the steps that save it, from what's here now; `carry`: a try that stopped partway */
-  async function prepare(data: LinearData, carry = stopped) {
+  /** what comes over and the steps that save it, from what's here now */
+  async function prepare(data: LinearData, choices: ImportChoices) {
     // what an earlier try saved (and teammates' changes) is here first, so it isn't brought again as new
     await backend.catchUp()
     const extras = await backend.readExisting()
-    const s = useData.getState()
-    if (!s.me) throw new Error('Sign in first.')
-    const existing = existingFrom(s, extras, s.me.login)
-    const result = buildImport(data, { teamKeys: picked, people }, existing, { newId: ulid, newGuestId: () => crypto.randomUUID(), now: new Date().toISOString() })
-    const plan = backend.planImport(result, existing, carry)
-    setStage({ at: 'check', data, result, plan })
-  }
-
-  async function save(stage: Extract<Stage, { at: 'check' }>) {
-    const keys = [...new Set(Object.values(picked))]
-    setStage({ at: 'saving', saved: 0, total: stage.plan.total })
-    try {
-      const changed = await importFromLinear(stage.plan, (saved, total) => setStage({ at: 'saving', saved, total }))
-      setStopped(undefined)
-      setStage({ at: 'done', counts: stage.result.counts, keys, nothing: changed === 0 && stage.plan.steps.every((s) => s.kind === 'rows') })
-    } catch (e) {
-      const message = e instanceof ImportProblem ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`
-      setStopped(stage.plan)
-      setStage({ at: 'failed', data: stage.data, message, plan: stage.plan })
-    }
+    const prepared = prepareImport(useData.getState(), extras, data, choices, {
+      now: new Date().toISOString(),
+      newId: ulid,
+      newGuestId: () => crypto.randomUUID(),
+      plan: backend.planImport,
+    })
+    useImportRun.setState({ run: null })
+    setStage({ at: 'check', data, choices, prepared })
   }
 
   async function run(what: string, fn: () => Promise<void>) {
@@ -133,11 +112,73 @@ export function ImportPage() {
     try {
       await fn()
     } catch (e) {
-      setProblem(e instanceof LinearError || e instanceof ImportProblem ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`)
+      if (e instanceof LinearError || e instanceof ImportProblem) setProblem(e.message)
+      else {
+        console.error('Sprawniej couldn’t go on with the import', e)
+        setProblem(WENT_WRONG)
+      }
     } finally {
       setBusy(null)
     }
   }
+
+  if (importRun?.at === 'saving') {
+    return (
+      <Panel step={3} title="Importing…">
+        <p className="text-muted-foreground">Keep this page open until it's done.</p>
+        <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={importRun.total} aria-valuenow={importRun.saved}>
+          <div className="h-full bg-foreground transition-[width]" style={{ width: `${(100 * importRun.saved) / Math.max(1, importRun.total)}%` }} />
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground tabular-nums">
+          {importRun.saved.toLocaleString()} of {importRun.total.toLocaleString()} saved
+        </p>
+      </Panel>
+    )
+  }
+
+  if (importRun?.at === 'failed') {
+    const { data, choices } = importRun
+    return (
+      <Panel
+        step={3}
+        title="The import stopped partway"
+        footer={
+          <>
+            <Button disabled={!!busy} onClick={() => run('Checking what’s here already…', () => prepare(data, choices))}>
+              {busy ? <Loader2 className="animate-spin" /> : null} {busy ?? 'Try again'}
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/settings">Back to Settings</Link>
+            </Button>
+          </>
+        }
+      >
+        <Problem>{importRun.message}</Problem>
+        <p className="mt-4 text-muted-foreground">Everything saved so far stays here. Try again to bring over the rest: nothing comes over twice.</p>
+        <Problem>{problem}</Problem>
+      </Panel>
+    )
+  }
+
+  if (importRun?.at === 'done') {
+    return (
+      <Panel step={4} title="All done">
+        <p className="flex items-center gap-2">
+          <CheckCircle2 className="size-5 text-status-review" /> {importRun.nothing ? 'Everything was already here.' : doneText(importRun.counts)}
+        </p>
+        <div className="mt-6 flex flex-wrap gap-3">
+          {importRun.keys.map((k) => (
+            <Button key={k} asChild variant="outline">
+              <Link href={`/team/${k}/issues/all`}>
+                {teams[k]?.emoji} {teams[k]?.name ?? k}
+              </Link>
+            </Button>
+          ))}
+        </div>
+      </Panel>
+    )
+  }
+
 
   if (stage.at === 'key') {
     return (
@@ -278,7 +319,7 @@ export function ImportPage() {
             <Button
               disabled={!me || !!busy}
               // what comes over is worked out once, when you go on to the check step
-              onClick={() => run('Checking what’s here already…', () => prepare(stage.data))}
+              onClick={() => run('Checking what’s here already…', () => prepare(stage.data, { teamKeys: picked, people }))}
             >
               {busy ? <Loader2 className="animate-spin" /> : null} {busy ?? 'Continue'}
             </Button>
@@ -287,7 +328,7 @@ export function ImportPage() {
       >
         <p className="text-muted-foreground">
           We matched people by name. Fix anyone we got wrong. Someone who isn't here yet still comes over with their name, so their issues, comments
-          and views stay theirs. Once they join, run the import again and match them to themselves: everything moves to their account.
+          and views stay theirs. Once they've joined, run the import again and pick their name here: everything that was theirs moves to them.
         </p>
         <Problem>{problem}</Problem>
         <ul className="mt-5 flex flex-col divide-y rounded-lg border">
@@ -322,8 +363,8 @@ export function ImportPage() {
   }
 
   if (stage.at === 'check') {
-    const { result: plan } = stage
-    const c = plan.counts
+    const { result } = stage.prepared
+    const c = result.counts
     const rows: [string, string, number][] = [
       ['new team', 'new teams', c.teams],
       ['issue', 'issues', c.issues],
@@ -341,14 +382,14 @@ export function ImportPage() {
             <Button variant="outline" onClick={() => setStage({ at: 'people', data: stage.data })}>
               Back
             </Button>
-            <Button disabled={!allowed} onClick={() => void save(stage)}>
+            <Button disabled={!allowed} onClick={() => void startImport(stage.prepared, stage.data, stage.choices)}>
               Import
             </Button>
           </>
         }
       >
         <p className="mb-5 text-muted-foreground">This is what comes over from Linear. Nothing changes in Linear.</p>
-        {stage.plan.total === 0 && <p className="mb-5 text-sm text-muted-foreground">Everything is already here: nothing changed in Linear since the last import.</p>}
+        {stage.prepared.plan.total === 0 && <p className="mb-5 text-sm text-muted-foreground">Everything is already here: nothing changed in Linear since the last import.</p>}
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {rows.map(([one, many, n]) => (
             <li key={many} className="rounded-lg border px-4 py-3">
@@ -363,91 +404,34 @@ export function ImportPage() {
             archived here already. You can still find and open {c.archived === 1 ? 'it' : 'them'}.
           </p>
         )}
-        {plan.skippedViews.length > 0 && (
+        {result.skippedViews.length > 0 && (
           <div className="mt-5 text-sm text-muted-foreground">
             <p>
-              {plan.skippedViews.length === 1 ? 'One view stays' : `${plan.skippedViews.length} views stay`} in Linear: none of {plan.skippedViews.length === 1 ? 'its' : 'their'} filters can
-              come over (like “is not”, dates, or people you set to “No one”), and without them {plan.skippedViews.length === 1 ? 'it' : 'they'} would show
+              {result.skippedViews.length === 1 ? 'One view stays' : `${result.skippedViews.length} views stay`} in Linear: none of {result.skippedViews.length === 1 ? 'its' : 'their'} filters can
+              come over (like “is not”, dates, or people you set to “No one”), and without them {result.skippedViews.length === 1 ? 'it' : 'they'} would show
               every issue.
             </p>
-            <p className="mt-1 text-foreground/80">{plan.skippedViews.map((n) => `“${n}”`).join(', ')}</p>
+            <p className="mt-1 text-foreground/80">{result.skippedViews.map((n) => `“${n}”`).join(', ')}</p>
           </div>
         )}
-        {plan.inexactViews.length > 0 && (
+        {result.inexactViews.length > 0 && (
           <div className="mt-5 text-sm text-muted-foreground">
             <p>
-              {plan.inexactViews.length === 1 ? 'One view keeps' : `${plan.inexactViews.length} views keep`} only the filters that fit, so {plan.inexactViews.length === 1 ? 'it' : 'they'}{' '}
+              {result.inexactViews.length === 1 ? 'One view keeps' : `${result.inexactViews.length} views keep`} only the filters that fit, so {result.inexactViews.length === 1 ? 'it' : 'they'}{' '}
               may not show quite the same issues as in Linear.
             </p>
-            <p className="mt-1 text-foreground/80">{plan.inexactViews.map((n) => `“${n}”`).join(', ')}</p>
+            <p className="mt-1 text-foreground/80">{result.inexactViews.map((n) => `“${n}”`).join(', ')}</p>
           </div>
         )}
         {stage.data.viewsFailed && <p className="mt-5 text-sm text-muted-foreground">Linear didn’t share its views with this key, so only issues and the rest come over.</p>}
-        {plan.renumbered.length > 0 && (
+        {result.renumbered.length > 0 && (
           <p className="mt-5 text-sm text-muted-foreground">
-            {plan.renumbered.length === 1 ? 'One issue gets' : `${plan.renumbered.length} issues get`} a new number, because the team here already
-            used it: {plan.renumbered.slice(0, 5).map((r) => `${r.from} → ${r.to}`).join(', ')}
-            {plan.renumbered.length > 5 ? '…' : '.'}
+            {result.renumbered.length === 1 ? 'One issue gets' : `${result.renumbered.length} issues get`} a new number, because the team here already
+            used it: {result.renumbered.slice(0, 5).map((r) => `${r.from} → ${r.to}`).join(', ')}
+            {result.renumbered.length > 5 ? '…' : '.'}
           </p>
         )}
         <p className="mt-5 text-sm text-muted-foreground">Images uploaded to Linear stay as links to Linear, so they open only for people signed in there.</p>
-      </Panel>
-    )
-  }
-
-  if (stage.at === 'saving') {
-    return (
-      <Panel step={3} title="Importing…">
-        <p className="text-muted-foreground">Keep this page open until it's done.</p>
-        <div className="mt-5 h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={stage.total} aria-valuenow={stage.saved}>
-          <div className="h-full bg-foreground transition-[width]" style={{ width: `${(100 * stage.saved) / Math.max(1, stage.total)}%` }} />
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground tabular-nums">
-          {stage.saved.toLocaleString()} of {stage.total.toLocaleString()} saved
-        </p>
-      </Panel>
-    )
-  }
-
-  if (stage.at === 'failed') {
-    const { data } = stage
-    return (
-      <Panel
-        step={3}
-        title="The import stopped partway"
-        footer={
-          <>
-            <Button disabled={!!busy} onClick={() => run('Checking what’s here already…', () => prepare(data, stage.plan))}>
-              {busy ? <Loader2 className="animate-spin" /> : null} {busy ?? 'Try again'}
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/settings">Back to Settings</Link>
-            </Button>
-          </>
-        }
-      >
-        <Problem>{stage.message}</Problem>
-        <p className="mt-4 text-muted-foreground">Everything saved so far stays here. Try again to bring over the rest: nothing comes over twice.</p>
-        <Problem>{problem}</Problem>
-      </Panel>
-    )
-  }
-
-  if (stage.at === 'done') {
-    return (
-      <Panel step={4} title="All done">
-        <p className="flex items-center gap-2">
-          <CheckCircle2 className="size-5 text-status-review" /> {stage.nothing ? 'Everything was already here.' : doneText(stage.counts)}
-        </p>
-        <div className="mt-6 flex flex-wrap gap-3">
-          {stage.keys.map((k) => (
-            <Button key={k} asChild variant="outline">
-              <Link href={`/team/${k}/issues/all`}>
-                {teams[k]?.emoji} {teams[k]?.name ?? k}
-              </Link>
-            </Button>
-          ))}
-        </div>
       </Panel>
     )
   }

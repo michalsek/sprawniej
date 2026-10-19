@@ -162,6 +162,8 @@ export interface Existing {
   archivedByLinear: Record<string, { id: string; team: string; number: number }>
   /** comments with a Linear id on archived issues, by Linear id: they stay as they are */
   archivedComments: Record<string, { id: string; issue: string }>
+  /** the emails kept for people who haven't joined, by login */
+  guestEmails?: Record<string, string>
   /**
    * every number each team (by key) has used: its issues', its archived issues' and deleted ones'. The only place the
    * import looks for numbers that are taken, so none is given out twice (`existingFrom` fills it)
@@ -179,6 +181,8 @@ export interface ImportExtras {
   usedNumbers: Record<string, number[]>
   /** this workspace's people from Linear who haven't joined, as they are now, with their Linear ids */
   guests: Person[]
+  /** the emails kept for them, by login */
+  guestEmails: Record<string, string>
 }
 
 /** the workspace as the import needs it: what the app holds, and what was read for the import */
@@ -204,6 +208,7 @@ export function existingFrom(
     comments: ws.comments,
     archivedByLinear: Object.fromEntries(archived.map((a) => [a.linearId, { id: a.id, team: a.team, number: a.number }])),
     archivedComments: Object.fromEntries(more.archivedComments.filter((c) => !ws.issues[c.issue]).map((c) => [c.linearId, { id: c.id, issue: c.issue }])),
+    guestEmails: more.guestEmails,
     usedNumbers: Object.fromEntries([...used].map(([team, ns]) => [team, [...ns]])),
   }
 }
@@ -224,10 +229,12 @@ export type ViewRow = View & { linearId: string }
 /** what to write: only rows that are new or changed since an earlier import */
 export interface ImportResult {
   guests: GuestUpdate[]
-  /** a guest's e-mail address, when Linear knows it, by guest id */
-  guestEmails: { id: string; email: string }[]
+  /** a guest's e-mail address, when Linear knows it and it isn't kept already */
+  guestEmails: { login: string; email: string }[]
   /** new teams */
   teams: TeamRow[]
+  /** teams here this import brings things into that have nobody in them (an import stopped right after making them, say) */
+  teamMembers: { key: string; members: string[] }[]
   /**
    * teams here that now stand for another Linear team, or (null) for none, because another team took theirs. Those
    * come first, as a Linear team stands for one team here
@@ -300,6 +307,31 @@ function canon(x: unknown): unknown {
 }
 const same = (a: unknown, b: unknown) => JSON.stringify(canon(a)) === JSON.stringify(canon(b))
 
+/**
+ * A list that was saved before, changed to `wanted`: what is still wanted keeps its place, what's new follows in
+ * `wanted`'s order. Join rows are read back in the order they were added, so nothing looks changed on every import.
+ */
+export function keptOrder<T>(old: readonly T[], wanted: readonly T[]): T[] {
+  return [...new Set([...old.filter((x) => wanted.includes(x)), ...wanted])]
+}
+
+/** someone an earlier import brought: their name and picture follow Linear's; undefined when nothing changed */
+export function refreshGuest(have: Person, u: LUser): GuestUpdate | undefined {
+  const name = linearName(u)
+  const avatarUrl = u.avatarUrl ?? ''
+  if (!linearIdsOf(have).includes(u.id) || (have.name === name && have.avatarUrl === avatarUrl)) return undefined
+  return { ...have, name, avatarUrl, linearId: u.id }
+}
+
+/** follower rows of an issue that aren't needed any more (people the links move are left to them) */
+function droppedFollowers(old: Issue, keep: readonly string[], relinked: ReadonlyMap<string, string>): string[] {
+  const still = new Set(keep)
+  return [...new Set([...(old.subscribers ?? []), ...(old.unsubscribed ?? [])])].filter((l) => !relinked.has(l) && !still.has(l))
+}
+
+/** how a comment written here for someone else starts: "*From Linear: Bob Stone*" */
+const FROM_LINEAR = '*From Linear: '
+
 /** Linear can send the same thing twice (pages that shift while we read): one of each */
 function dedupe(data: LinearData): LinearData {
   const once = <T extends { id: string }>(xs: T[]) => [...new Map(xs.map((x) => [x.id, x])).values()]
@@ -314,6 +346,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     guests: [],
     guestEmails: [],
     teams: [],
+    teamMembers: [],
     teamLinks: [],
     labels: [],
     projects: [],
@@ -345,16 +378,13 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     const l = choices.people[u.id]
     if (!l || !isGuest(l) || out.guests.some((g) => g.login === l)) continue
     const have = people[l]
-    if (have) {
-      // brought by an earlier import: their name and picture follow Linear's (not counted, nothing new)
-      const name = linearName(u)
-      const avatarUrl = u.avatarUrl ?? ''
-      if (linearIdsOf(have).includes(u.id) && (have.name !== name || have.avatarUrl !== avatarUrl)) out.guests.push({ ...have, name, avatarUrl, linearId: u.id })
-      continue
+    if (!have) out.guests.push({ id: newGuestId(), login: l, githubId: 0, name: linearName(u), avatarUrl: u.avatarUrl ?? '', linearId: u.id } satisfies Known<GuestRow>)
+    else {
+      const refreshed = refreshGuest(have, u)
+      if (refreshed) out.guests.push(refreshed)
     }
-    const guest = { id: newGuestId(), login: l, githubId: 0, name: linearName(u), avatarUrl: u.avatarUrl ?? '', linearId: u.id } satisfies Known<GuestRow>
-    out.guests.push(guest)
-    if (u.email) out.guestEmails.push({ id: guest.id, email: u.email })
+    // their email, when Linear knows it and it isn't kept yet (also when an import stopped before it got that far)
+    if (u.email && ws.guestEmails?.[l] !== u.email) out.guestEmails.push({ login: l, email: u.email })
   }
   // someone who has joined since an earlier import and is matched now: what pointed at them moves to their account
   const relinked = new Map<string, string>()
@@ -381,16 +411,20 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     if (standsFor.has(key)) return
     standsFor.set(key, t.id)
     const here = ws.teams[key]
+    const theirMembers = [...new Set([ws.me, ...(members.get(key) ?? [])])]
     if (here) {
       // remember which Linear team it is, so the next import picks it again
       if (linearIdOf(here) !== t.id) relinkedTeams.push({ key, linearId: t.id })
+      // nobody in it (made by an import that stopped before its members were saved, say): it gets the members a new
+      // team would, so its issues show for someone
+      if (!here.members.length) out.teamMembers.push({ key, members: theirMembers })
       return
     }
     out.teams.push({
       key,
       name: t.name,
       emoji: emojiFor(t.icon, TEAM_EMOJI[n % TEAM_EMOJI.length]),
-      members: [...new Set([ws.me, ...(members.get(key) ?? [])])],
+      members: theirMembers,
       createdAt: now,
       linearId: t.id,
     } satisfies Known<TeamRow>)
@@ -445,8 +479,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     const state = p.status?.type ?? p.state ?? 'planned'
     // teams not picked this time stay on it; picked ones follow Linear (taken off there, taken off here)
     const theirs = [...new Set(p.teams.nodes.filter((t) => teamIds.has(t.id)).map(keyOf))]
-    const kept = (old?.teams ?? []).filter((k) => !covered.has(k) || theirs.includes(k))
-    const projectTeams = [...new Set([...kept, ...theirs])]
+    const projectTeams = keptOrder(old?.teams ?? [], [...(old?.teams ?? []).filter((k) => !covered.has(k)), ...theirs])
     if (old) for (const k of old.teams) if (!projectTeams.includes(k)) out.removedProjectTeams.push({ project: old.id, team: k })
     const project = {
       ...old,
@@ -544,14 +577,10 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     const unsubscribed = [...new Set([...(old?.unsubscribed ?? []).map(relink), ...left])].filter((l) => !theirs.has(l)).sort()
     // labels still wanted keep their order here, new ones follow in Linear's order (the order they are added in)
     const wanted = [...new Set(li.labels.nodes.map((l) => labelId.get(l.id)).filter((x): x is string => !!x))]
-    const labels = [...new Set([...(old?.labels ?? []).filter((l) => wanted.includes(l)), ...wanted])]
+    const labels = keptOrder(old?.labels ?? [], wanted)
     if (old) {
       for (const l of old.labels) if (!labels.includes(l)) out.removedLabels.push({ issue: old.id, label: l })
-      const still = new Set([...subscribers, ...unsubscribed])
-      // what the links move isn't removed: the guest's rows go with them
-      for (const l of new Set([...(old.subscribers ?? []), ...(old.unsubscribed ?? [])])) {
-        if (!relinked.has(l) && !still.has(l)) out.removedFollowers.push({ issue: old.id, login: l })
-      }
+      for (const l of droppedFollowers(old, [...subscribers, ...unsubscribed], relinked)) out.removedFollowers.push({ issue: old.id, login: l })
     }
     const fields = {
       ...old,
@@ -597,22 +626,25 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     const target = issue ?? kept
     if (!target) continue
     const old = commentsByLinear.get(c.id)
+    // counted as covered, also when it's already here and stays as it is
+    counts.comments++
     if (kept && (old || ws.archivedComments[c.id])) continue
     const theirs = login(c.user)
     // who wrote it is kept from the first import (the links move it to someone's account): it's never changed after
     const author = old ? relink(old.author) : (theirs ?? ws.me)
     const body = rewriteLinks(c.body, refs).replace(/\s+$/, '')
+    // the line saying who wrote it follows the author here: there when someone else stands in for the writer (a
+    // comment that came in as "No one" keeps it until it's matched to its author), never on the writer's own comment
+    const said = old ? old.body.startsWith(FROM_LINEAR) && author !== theirs : !theirs
     const comment = {
       ...old,
       id: old?.id ?? newId(),
       issue: target.id,
       author,
       createdAt: c.createdAt,
-      // written here by someone else than who wrote it in Linear: it says who did
-      body: author === theirs ? body : `*From Linear: ${c.user?.name ?? 'someone'}*\n\n${body}`,
+      body: said ? `${FROM_LINEAR}${c.user?.name ?? 'someone'}*\n\n${body}` : body,
       linearId: c.id,
     } satisfies Known<CommentRow>
-    counts.comments++
     if (!old || !same(old, comment)) out.comments.push(comment)
   }
 
@@ -649,8 +681,9 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       emoji: emojiFor(v.icon, old?.emoji ?? '🔎'),
       description: v.description ?? '',
       // kept from the first import (the links move it to someone's account): it's never changed after
-      owner: old ? relink(old.owner) : (v.owner && choices.people[v.owner.id]) || ws.me,
-      team: v.team ? keyOf(v.team) : null,
+      owner: old ? relink(old.owner) : ((v.owner && choices.people[v.owner.id]) || ws.me),
+      // kept too, like an issue's team: an import can't move a view to another team
+      team: old ? old.team : v.team ? keyOf(v.team) : null,
       filters,
       // how it looks is chosen here (a later import keeps it)
       display: old?.display ?? { layout: 'list', grouping: 'status', ordering: 'manual', showCompleted: true, showSubIssues: true },
