@@ -1430,6 +1430,7 @@ the switch.
 - *How many people?* 6 to 8 for triage first: the free tier is plenty (section 9).
 - *Where do the tasks come from?* Linear. The Linear import moves onto rows first; the GitHub workspace import waits
   until someone needs it (section 8).
+- *History from Linear?* It stays in Linear; the import brings issues as they are now, as it does today.
 - *Email sender and our own address?* Not now. Stage A runs from localhost with no email (section 6); both come back
   before the team joins.
 
@@ -1444,15 +1445,13 @@ the switch.
 4. **Invites by email** (sent by Sprawniej), or links only, as today?
 5. **Google sign-in in stage B:** for everyone with a Google account, or only company Google accounts (an "Internal"
    consent screen and a domain check)?
-6. **History from Linear:** an issue's history before the import stays in Linear (proposed, as the import does today),
-   or should it come over? Linear's API has it, at about one request per issue.
-7. **Simultaneous description edits:** is "the later save wins for the whole description" acceptable, or should the
+6. **Simultaneous description edits:** is "the later save wins for the whole description" acceptable, or should the
    line merge come back in the editor right away?
-8. **Where do backups go?** GitHub Actions artifacts in this repo (30 days, visible to everyone with access to the
+7. **Where do backups go?** GitHub Actions artifacts in this repo (30 days, visible to everyone with access to the
    repo), or a separate private repo, possibly encrypted?
-9. **Login handles for Google and email sign-ups:** chosen by the person (proposed), or made from their email
+8. **Login handles for Google and email sign-ups:** chosen by the person (proposed), or made from their email
     automatically?
-10. **One workspace or several?** The design allows several per person, as today. Is there a reason to limit it to one
+9. **One workspace or several?** The design allows several per person, as today. Is there a reason to limit it to one
     (which would simplify sign-up to "anyone with a company address joins")?
-11. **Inbox notes:** written by the app with the existing rules (proposed), or moved into the database as triggers (more
+10. **Inbox notes:** written by the app with the existing rules (proposed), or moved into the database as triggers (more
     robust, but the rules would live in SQL)?
