@@ -12,6 +12,16 @@ What stays the same for people: issues, teams, projects, views, the inbox, statu
 issue numbers (`ENG-12`), links and mentions. What changes: how you sign in, how you invite people, and the GitHub key
 goes away.
 
+**Decided so far** (2026-10-19):
+
+- The `sprawniej-test` organization is the home for this first run: a copy of the tasks from a real project, to prove
+  everything works. So **the whole setup must be easy to repeat** in another Supabase account or project: everything
+  lives in the repo and one runbook sets up a fresh project (section 1).
+- The first team is **6 to 8 people**, for triage. That is far inside the free tier (section 9).
+- **No email sender and no domain for now.** The first days run from localhost, by one person, to check that
+  everything behaves. Sign-in starts with GitHub and email and password; Google, our own email sender and a public
+  address come before teammates join (section 6, section 11).
+
 ## Contents
 
 1. [The Supabase project](#1-the-supabase-project)
@@ -29,7 +39,7 @@ goes away.
 
 ## 1. The Supabase project
 
-Found with the `supabase-sprawniej` MCP server (the company account):
+The project for this run, found with the `supabase-sprawniej` MCP server (the company account):
 
 | | |
 | --- | --- |
@@ -40,10 +50,46 @@ Found with the `supabase-sprawniej` MCP server (the company account):
 | State | healthy, `public` schema empty, storage has no buckets |
 | Extensions on | `pgcrypto`, `uuid-ossp`, `pg_stat_statements`, `supabase_vault` (`pg_cron` is available, not on yet) |
 
-The schema lives in the repo as migrations (`supabase/migrations/<timestamp>_<name>.sql`), written and tested
-against a local stack (`supabase start`, Docker), then applied to the project with `supabase db push` (or the MCP
-`apply_migration`). Database branches cost money, so the local stack is where we try things. Types for the client come
-from `supabase gen types typescript` into `src/backend/database.types.ts`.
+### Any project, from the repo alone
+
+Nothing in the app or the SQL names this project. Moving to another account, making a second project for tests, or
+starting over is the same short runbook, kept as `docs/supabase-setup.md` (written in step 1 of the plan):
+
+```
+supabase/
+  config.toml        auth and API settings as code; secrets only as env(...)
+  migrations/        every table, rule, function, trigger, the pictures bucket, the realtime rule, pg_cron jobs
+  tests/             pgTAP tests for the rules and triggers
+  seed.sql           a small test workspace, for the local stack only
+  templates/         email templates (when we have a sender)
+  .env.example       the names of the secrets config.toml reads (never the values)
+```
+
+1. Create a project in the Supabase dashboard (any account, any region). Write down its ref.
+2. `supabase login`, then `supabase link --project-ref <ref>`.
+3. `supabase db push`: the whole schema, including the bucket, the realtime rule and the nightly jobs, because all of
+   them are plain SQL in `migrations/` (nothing is clicked together in the dashboard).
+4. Make a GitHub OAuth app for this project (its callback is `https://<ref>.supabase.co/auth/v1/callback`; GitHub
+   allows one callback per app, so each project gets its own app). Put its id and secret in your shell, then
+   `supabase config push`: sign-in providers, redirect URLs, identity linking and password rules come from
+   `config.toml`.
+5. Put the project's URL and publishable key in `.env.local` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY`) and run the app.
+6. Sign in, create the workspace, import (section 8).
+
+The same files drive the local stack: `supabase start` and `supabase db reset` rebuild everything from scratch, which is
+also the proof that the runbook works. Step 10 of the plan repeats the runbook on a second, throwaway project.
+
+Rules that keep it repeatable:
+
+- **Every change to the database is a migration in the repo.** No edits in the dashboard or the SQL editor; if one
+  happens by accident, `supabase db pull` turns it into a migration.
+- **Every setting is in `config.toml`** (`supabase config push`), with secrets read from the environment.
+- **No project ref, URL or key in the code**; the app reads them at build time.
+- Seed data is only for the local stack (`db push` doesn't send it).
+
+The MCP server (`apply_migration`) is fine for looking around and for emergencies; normal changes go through the
+CLI so that the files in the repo stay the truth. Database branches cost money, so the local stack is where we try
+things. Types for the client come from `supabase gen types typescript` into `src/backend/database.types.ts`.
 
 ## 2. Tables
 
@@ -870,7 +916,8 @@ create policy "members listen to their workspace" on realtime.messages for selec
 
 ### Opening a workspace
 
-1. Show what this browser already has (a read cache in IndexedDB, see section 9), so the screen is there at once.
+1. Show what this browser already has (a read cache in IndexedDB, see section 9; it comes before the team joins, and
+   until then this step is skipped and step 3 loads everything), so the screen is there at once.
 2. Join both channels (`supabase.channel('ws:…', { config: { private: true } })`, after `supabase.realtime.setAuth()`).
    Messages that arrive before step 3 finishes are held.
 3. Fetch what changed since the cache's mark: for each table `select … where workspace_id = $1 and changed_at > $mark`,
@@ -932,6 +979,40 @@ come back for realtime only.
 
 Supabase Auth with three ways in: **GitHub**, **Google**, and **email and password**.
 
+### In stages
+
+| Stage | Who | Ways in | Emails | Address |
+| --- | --- | --- | --- | --- |
+| **A. Solo on localhost** (first days) | you | GitHub, email and password with **"confirm email" off** | none needed | `http://localhost:5173` only |
+| **B. The team** (6 to 8 people) | everyone | GitHub, email and password with confirmation, Google | our own sender (for confirmations and password resets) | the public address |
+
+Stage A needs no email and no domain: GitHub sign-in sends no email, and with confirmations off an email account works
+at once. The built-in sender would only reach the project team's own addresses, a couple of times an hour, so we don't
+rely on it; "Forgot your password?" stays hidden until stage B. In `config.toml`:
+
+```toml
+[auth]
+site_url = "env(SPRAWNIEJ_SITE_URL)"                       # http://localhost:5173 in stage A
+additional_redirect_urls = ["http://localhost:5173", "http://localhost:5297", "http://localhost:5298", "http://localhost:5299"]
+enable_manual_linking = true
+
+[auth.email]
+enable_signup = true
+enable_confirmations = false                               # stage A only; true in stage B
+
+[auth.external.github]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET)"
+```
+
+Stage B changes `site_url`, adds the public address to the redirect URLs, turns confirmations on, adds
+`[auth.external.google]` and `[auth.email.smtp]`, and is pushed with `supabase config push`. Moving from A to B changes
+no code, only settings.
+
+`main` deploys to GitHub Pages, where people use today's version, so the Supabase version **stays on its branch** during
+stage A and runs only from localhost. It reaches `main` at the switch (section 11).
+
 ### PKCE, because the app uses hash routes
 
 Routes live in the URL hash (`#/team/ENG/issues/active`). The older "implicit" sign-in puts the session in the hash and
@@ -948,18 +1029,18 @@ createClient(url, publishableKey, { auth: { flowType: 'pkce', detectSessionInUrl
 - **Email links** (confirm your address, reset your password) also use PKCE. The email templates link to
   `{{ .SiteURL }}/?token_hash={{ .TokenHash }}&type=email` (or `type=recovery`), and the app calls
   `verifyOtp({ token_hash, type })`. A recovery opens a "Choose a new password" screen.
-- **Redirect URLs** allowed in Auth settings: the public address (`VITE_PUBLIC_URL`, GitHub Pages today) and
-  `http://localhost:5173`, `:5297`, `:5298`, `:5299` for development and tests.
-- Email sign-ups must confirm their address before they can sign in.
+- **Redirect URLs** allowed in Auth settings: `http://localhost:5173`, `:5297`, `:5298`, `:5299` for development and
+  tests, and in stage B the public address (`VITE_PUBLIC_URL`, GitHub Pages today).
+- In stage B, email sign-ups must confirm their address before they can sign in.
 
 ### Providers
 
-- **GitHub**: an OAuth app (in the company's GitHub organization), callback
-  `https://wkqofiacqfuxowavuqxj.supabase.co/auth/v1/callback`. Asks only for the profile and email; no access to repos.
-  (The later GitHub App for pull requests is a separate thing, installed on repositories, not used for sign-in.)
-- **Google**: an OAuth client in Google Cloud with the same callback, consent screen in "External" or "Internal"
-  depending on whether everyone has a company Google account (open question).
-- **Email and password**: minimum length 8, leaked-password check if the plan allows it.
+- **GitHub** (stage A): an OAuth app per Supabase project, callback `https://<project ref>.supabase.co/auth/v1/callback`
+  (for this run, `wkqofiacqfuxowavuqxj`). Asks only for the profile and email; no access to repos. (The later GitHub
+  App for pull requests is a separate thing, installed on repositories, not used for sign-in.)
+- **Email and password** (stage A): minimum length 8, leaked-password check if the plan allows it.
+- **Google** (stage B): an OAuth client in Google Cloud with the same callback, consent screen "External" or
+  "Internal" depending on whether everyone has a company Google account (open question).
 
 ### Who you are: profiles and logins
 
@@ -984,10 +1065,11 @@ After any sign-in the app calls `ensure_profile()`:
   Settings then claims their old profile: `ensure_profile()` runs again and moves everything over with the same code as
   `link_person`.
 
-### Emails: our own sender
+### Emails: our own sender (stage B)
 
-Supabase's built-in email sender only allows a couple of emails an hour and only to the project team's own addresses,
-so sign-up confirmations and password resets need **custom SMTP**: the company's mail server, or a service with a free
+Not needed in stage A. Supabase's built-in email sender only allows a couple of emails an hour and only to the project
+team's own addresses, so before teammates join, sign-up confirmations and password resets need **custom SMTP**
+(`[auth.email.smtp]` in `config.toml`, password from the environment): the company's mail server, or a service with a free
 allowance (for example Resend or Brevo) on a domain we control, with SPF and DKIM set. Templates are rewritten in
 Sprawniej's plain, friendly words (no "token", no "redirect").
 
@@ -1111,6 +1193,18 @@ The free plan (check the current numbers on supabase.com/pricing before deciding
 storage, 5 GB egress a month, 200 realtime connections at once, 2 million realtime messages a month, 50,000 monthly
 users, **no downloadable backups**, and the project is **paused after a week without activity**.
 
+For the first team of 6 to 8 people that leaves a lot of room:
+
+| | Rough use with 8 people | Free limit |
+| --- | --- | --- |
+| Realtime connections | 8 people × 2 or 3 tabs = about 25 | 200 |
+| Realtime messages | 8 × 100 changes a day × about 20 listening tabs = 16,000 a day, about 500,000 a month | 2,000,000 |
+| Database | a few thousand issues with comments and history: tens of MB | 500 MB |
+| Egress | depends mostly on how many issues every app start downloads (below) | 5 GB |
+
+So the shared leader tab and leaving channels in hidden tabs are **not needed** now; they stay listed below as what to
+do if the team grows.
+
 ### A daily backup that also keeps the project awake
 
 `.github/workflows/backup.yml` in this repo (or a private one, see open questions):
@@ -1152,14 +1246,15 @@ into the same place. A restore is tried once, into the local stack, before we go
 
 - **Load only what changed.** Each browser keeps a **read cache** of the workspace's rows in IndexedDB (not an offline
   mode: nothing can be changed without the server). Opening the app downloads only rows with a newer `changed_at` and
-  the deletions since. Without it, 30 people opening a 5,000-issue workspace a few times a day would use the whole 5 GB
-  in a couple of weeks.
+  the deletions since. Without it, every app start downloads all open issues: 2,000 issues are about 3 MB, and 8 people
+  starting the app 10 times a day makes about 7 GB a month, over the limit. With a few hundred issues it wouldn't
+  matter. Not needed while one person tests on localhost (stage A); it comes before the team starts (step 11 of the
+  plan), so the first version of `load.ts` simply loads everything.
 - **Archived issues, history and comments of archived issues load only when asked** (Archived tab, search, an issue
   page).
 - **Realtime messages carry only the changed fields**, not whole rows (a status change doesn't resend the description).
-- **Hidden tabs leave their channels** after 5 minutes and catch up when shown again. Most open tabs are in the
-  background most of the day; this is the biggest saving on connections and messages (every message counts once per
-  listening tab).
+- **If the team grows:** hidden tabs leave their channels after a few minutes and catch up when shown again, and the
+  shared leader tab can come back for realtime. Not needed for 8 people.
 - **Pictures** come through signed URLs that stay the same for a day, so the browser's cache serves them again.
 - The description saves a moment after you stop typing, like the title, not on every key.
 - `select` lists the columns it needs.
@@ -1204,67 +1299,88 @@ email; your workspace owner brings your work over once."
 
 ## 11. Step-by-step plan
 
-Each step ends with something we can check. Steps 1 and 2 need people more than code.
+Each step ends with something we can check. The work happens on a branch; `main` keeps serving today's version until
+the switch.
 
-1. **Decide the open questions** (section 12). Done = answers written into this file.
-2. **Set up the project's surroundings.** GitHub OAuth app and Google OAuth client, Auth providers on, manual identity
-   linking on, redirect URLs, custom SMTP and email templates, `pg_cron` on. Done = a test account can sign in three
-   ways on the bare project.
-3. **Schema in the repo.** `supabase/` with the migrations from sections 2 to 5, pgTAP tests for: members only, comment
-   authors, inbox privacy, numbers under two parallel inserts, history rows, deletions, broadcasts, the import flag.
-   Done = `supabase test db` passes locally and the advisors report nothing.
-4. **`src/backend` and `rows.ts`.** Client, types, row mapping with tests (times, logins, `extra`). Done = `bun test`.
-5. **Opening a workspace.** `load.ts`, `cache.ts`, `live.ts` with `applyRows` and its tests; the store fills from the
-   database. Done = two browsers on the local stack see each other's changes within a second, and a browser that was
-   offline for a while catches up, including deletions.
-6. **Saving.** `writes.ts`, `actions.ts` rewired function by function (issues, comments, labels, projects, views,
-   teams, inbox, pictures, move to team, archive and restore). Done = `tests/actions.test.ts` updated and green; the
-   whole app works against the local stack; the two-person table in docs/architecture.md checked by hand.
-7. **Signing in and onboarding.** Sign-in screen, pick a login, choose or create a workspace, invites, Settings ›
-   members and ways to sign in, sign out. Done = a new person goes from an invite link to their first issue without
-   help.
-8. **History.** `issue_events` on the issue page. Done = the history test cases pass with event rows.
-9. **The importer** and the **Linear import** on rows. Done = a copy of a real workspace repo (a throwaway copy)
-   imports with matching counts of issues, comments, archived issues, labels, views and pictures; a second run changes
-   nothing.
-10. **Free-tier care.** Backup workflow, picture backup, nightly jobs, hidden-tab leaving. Done = a backup restored into
-    the local stack.
-11. **Remove the old code** (`src/sync`, most of `src/github`, `src/data/project.ts`, old tests) and update
+**Building (local stack only)**
+
+1. **Schema and settings in the repo.** `supabase/` with `config.toml`, the migrations from sections 2 to 5, a small
+   `seed.sql`, pgTAP tests (members only, comment authors, inbox privacy, numbers under two parallel inserts, history
+   rows, deletions, broadcasts, the import flag), and the runbook `docs/supabase-setup.md`. Done = `supabase db reset`
+   builds everything from nothing, `supabase test db` passes, the advisors report nothing.
+2. **`src/backend` and `rows.ts`.** Client, generated types, row mapping with tests (times, logins, `extra`). Done =
+   `bun test`.
+3. **Opening a workspace.** `load.ts` (loads everything for now) and `live.ts` with `applyRows` and its tests. Done = two
+   browsers on the local stack see each other's changes within a second, and one that lost its connection catches up,
+   including deletions.
+4. **Saving.** `writes.ts`, `actions.ts` rewired function by function (issues, comments, labels, projects, views, teams,
+   inbox, pictures, move to team, archive and restore). Done = `tests/actions.test.ts` updated and green; the whole app
+   works against the local stack; the two-person table in docs/architecture.md checked by hand.
+5. **Signing in, stage A.** Sign-in screen (GitHub, email and password), pick a login, choose or create a workspace,
+   Settings › ways to sign in, sign out. Done = sign in both ways on the local stack and reach the workspace.
+6. **History.** `issue_events` on the issue page. Done = the history test cases pass with event rows.
+7. **The importer** (and the Linear import on rows). Done = a throwaway copy of a workspace imports into the local stack
+   with matching counts of issues, comments, archived issues, labels, views and pictures; a second run changes nothing.
+
+**Stage A: solo on localhost, on the real project**
+
+8. **Set up `sprawniejapp` with the runbook only**: `supabase link`, `db push`, a GitHub OAuth app, `config push`,
+   `.env.local`. Anything the runbook missed gets added to it, not done by hand. Done = the app on localhost signs in
+   against `sprawniejapp`.
+9. **Import the copy of the real project's tasks and use it for a few days**, alone, from localhost. Keep a list of
+   anything that behaves differently from today's app. Done = the list is empty or turned into fixes.
+10. **Prove it repeats:** run the runbook on a second, throwaway free project (or a fresh account), import, sign in,
+    then delete that project. Done = it works with no steps beyond the runbook.
+
+**Before the team joins (stage B)**
+
+11. **What a team needs:** invites and Settings › members and roles, the read cache (section 9), Google sign-in, our own
+    email sender and templates with confirmations on, the backup workflow and picture backup, and a restore tried once
+    into the local stack.
+12. **Where the team opens it:** the public address in `config.toml` and `VITE_PUBLIC_URL` (see open question 3).
+13. **Remove the old code** (`src/sync`, most of `src/github`, `src/data/project.ts`, old tests) and update
     docs/architecture.md, docs/data-format.md (becomes "the database"), docs/user-guide.md, Help, README, CLAUDE.md.
-12. **Apply the migrations to `sprawniejapp`**, run the advisors, deploy a preview build pointed at it, and try the
-    whole flow with two or three people on a test workspace.
-13. **Switch.** Release 2.0.0 (version, changelog, `package.json`, `bun scripts/changelog.ts`), the owner imports the
-    real workspace (a final re-run right after the release), everyone signs in. The old repo is archived on GitHub.
-14. **Later:** the GitHub App and an Edge Function (`supabase/functions/github-webhook`) that moves issues when linked
-    pull requests open or merge, writing as the person who opened the PR (`sprawniej.actor`) and reusing `notify.ts`.
+14. **Switch.** Release 2.0.0 (version, changelog, `package.json`, `bun scripts/changelog.ts`), a final re-import, the
+    team signs in.
+
+**Later**
+
+15. The GitHub App and an Edge Function (`supabase/functions/github-webhook`) that moves issues when linked pull
+    requests open or merge, writing as the person who opened the PR (`sprawniej.actor`) and reusing `notify.ts`. Its
+    secrets go in through `supabase secrets set`, so it repeats with the runbook too.
 
 ## 12. Open questions
 
-1. **Is `sprawniej-test` / `sprawniejapp` the real home?** The organization's name says "test". If production should
-   be a different project, we create it before step 12 (the free plan allows two active projects per organization).
-2. **How many people and how busy?** The free tier's 2 million realtime messages count once per listening tab. Roughly
-   30 people making 50 changes a day each, with 40 tabs listening, is about 1.8 million a month; leaving channels in
-   hidden tabs brings that well down, but a bigger team may need the Pro plan (about 25 USD a month) or the shared
-   leader tab back.
-3. **Who may delete teams, labels and projects?** Today anyone can. Keep that, or only admins?
-4. **Invites by email** (sent by Sprawniej), or links only, as today?
-5. **Email sender:** the company's mail server or a service like Resend or Brevo, and from which domain?
-6. **Google sign-in:** for everyone with a Google account, or only company Google accounts (an "Internal" consent
-   screen and a domain check)?
-7. **Our own address?** Staying on GitHub Pages is fine; a custom domain changes the redirect URLs, the email links and
-   `VITE_PUBLIC_URL`, so it is easier to decide before step 2.
-8. **History from before the move:** leave it on GitHub (proposed), or bring it over at about one GitHub request per
+**Answered** (2026-10-19):
+
+- *Is `sprawniej-test` the real home?* Yes, for this run: a copy of a real project's tasks, to prove everything works.
+  The setup must repeat easily in other accounts (section 1).
+- *How many people?* 6 to 8 for triage first: the free tier is plenty (section 9).
+- *Email sender and our own address?* Not now. Stage A runs from localhost with no email (section 6); both come back
+  before the team joins.
+
+**Still open:**
+
+1. **Where does the copy of your real project's tasks come from?** A Sprawniej workspace repo on GitHub (section 8's
+   importer) or Linear (the existing Linear import, moved onto rows)? That decides which importer step 7 builds first.
+2. **Who opens it in stage B?** Today `main` deploys to GitHub Pages for the people using the GitHub version. Should
+   2.0.0 replace that for everyone, or should the Supabase version live at a second address (another Pages site or a
+   preview) while today's version keeps running for its users?
+3. **Which public address** for stage B: GitHub Pages as now, or a custom domain? (Redirect URLs, email links and
+   `VITE_PUBLIC_URL` follow from it.)
+4. **Who may delete teams, labels and projects?** Today anyone can. Keep that, or only admins?
+5. **Invites by email** (sent by Sprawniej), or links only, as today?
+6. **Google sign-in in stage B:** for everyone with a Google account, or only company Google accounts (an "Internal"
+   consent screen and a domain check)?
+7. **History from before the move:** leave it where it was (proposed), or bring it over at about one GitHub request per
    issue during the import?
-9. **Simultaneous description edits:** is "the later save wins for the whole description" acceptable, or should the
+8. **Simultaneous description edits:** is "the later save wins for the whole description" acceptable, or should the
    line merge come back in the editor right away?
-10. **The read cache in IndexedDB:** it is there only to keep downloads small (no offline editing). Fine?
-11. **Where do backups go?** GitHub Actions artifacts in this repo (30 days, visible to everyone with access to the
-    repo), or a separate private repo, possibly encrypted?
-12. **Login handles for Google and email sign-ups:** chosen by the person (proposed), or made from their email
+9. **Where do backups go?** GitHub Actions artifacts in this repo (30 days, visible to everyone with access to the
+   repo), or a separate private repo, possibly encrypted?
+10. **Login handles for Google and email sign-ups:** chosen by the person (proposed), or made from their email
     automatically?
-13. **One workspace or several?** The design allows several per person, as today. Is there a reason to limit it to the
-    company's one workspace (which would simplify sign-up to "anyone with a company address joins")?
-14. **Inbox notes:** written by the app with the existing rules (proposed), or moved into the database as triggers (more
+11. **One workspace or several?** The design allows several per person, as today. Is there a reason to limit it to one
+    (which would simplify sign-up to "anyone with a company address joins")?
+12. **Inbox notes:** written by the app with the existing rules (proposed), or moved into the database as triggers (more
     robust, but the rules would live in SQL)?
-15. **Cut-over day:** is a short "please don't change anything for an hour" window acceptable, or should the final
-    re-import run while people keep working in the old version?
