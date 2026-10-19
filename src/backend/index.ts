@@ -10,13 +10,17 @@ import { useAuth } from './auth'
 import { cacheState } from './cacheStore'
 import { getClient } from './client'
 import { watchConnection } from './connection'
+import type { EventRow } from '@/data/history'
+import { fetchIssueEvents } from './history'
 import { browserCopy, lastCopyMiss } from './keep'
+import { pictures, usePictures } from './pictures'
 import { Channels, type ChannelStatus, type Topic } from './live'
 import { Loader } from './load'
 import type { MyProfile } from './profiles'
 import { registry } from './registry'
 import { useSaveStatus } from './status'
 import { DELAYS, Lifecycle, LiveWorkspace, type BackendState, type WritesHooks } from './workspace'
+import { leaveWorkspace } from './workspaces'
 import { attach, debugWrites, detach, flush, pending, startWrites, started, stopWrites, writesStatus } from './writes'
 import { postgrest } from './writes/send'
 
@@ -74,7 +78,7 @@ const life: Lifecycle = new Lifecycle(
   },
   useBackend,
   registry,
-  writes,
+  { writes, closed: () => forget() },
 )
 
 /** whether the open workspace's copy is kept, and if not why (the browser, or this workspace: too big, gone) */
@@ -84,12 +88,30 @@ function copyState(ws: LiveWorkspace | null): { off: boolean; reason?: string } 
   return all.off || !mine ? all : { off: true, reason: mine }
 }
 
+/**
+ * What belongs to one open workspace and is kept in memory beside the store (pictures' signed addresses, which
+ * work for whoever holds them; read history): forgotten when it closes for good (switching workspace, signing out)
+ * or goes away (deleted, or you were removed).
+ */
+const forgetting: (() => void)[] = [() => pictures.clear()]
+export function onForget(fn: () => void): void {
+  forgetting.push(fn)
+}
+function forget() {
+  for (const fn of forgetting) fn()
+}
+useBackend.subscribe((s, was) => {
+  if (s.phase === 'gone' && was.phase !== 'gone') forget()
+})
+
 const CLOSED_CHANNELS: Record<Topic, ChannelStatus> = { ws: 'CLOSED', me: 'CLOSED' }
 
 export const backend = {
   open: (workspaceId: string, me: MyProfile): Promise<void> => life.open(workspaceId, me),
   /** closing: what's waiting gets a moment to be sent first */
   close: (): Promise<void> => life.close(),
+  /** you leave the open workspace, and it closes (no "You're no longer in this workspace" for your own leaving) */
+  leave: (): Promise<void> => life.leave(leaveWorkspace),
   /** read what changed since the last change we know of (scripted checks call it too) */
   catchUp: (): Promise<void> => life.current?.catchUp() ?? Promise.resolve(),
   /** archived issues into the store, once per opening */
@@ -100,6 +122,13 @@ export const backend = {
   pending,
   /** how many archived issues a team has */
   countArchived: (teamKey: string): Promise<number> => life.current?.countArchived(teamKey) ?? Promise.resolve(0),
+  /** an issue's history events after `afterId`, oldest first (src/data/history.ts reads them) */
+  history: (issueId: string, afterId?: number): Promise<EventRow[]> => {
+    const ws = life.current
+    const db = getClient()
+    if (!ws || ws.closed || !db) return Promise.reject(new Error('No workspace is open.'))
+    return fetchIssueEvents(db, ws.workspaceId, issueId, afterId)
+  },
   /** for scripted checks */
   debug: () => {
     const ws = life.current
@@ -111,6 +140,7 @@ export const backend = {
       channels: ws?.channels && !ws.closed ? { ...ws.channels.status } : { ...CLOSED_CHANNELS },
       catchUps: ws?.catchUps ?? 0,
       writes: debugWrites(),
+      pictures: Object.keys(usePictures.getState().entries).length,
       cache: { source: ws?.source ?? null, savedAt: ws?.keeper.keptAt ?? null, miss: lastCopyMiss(), ...copyState(ws) },
     }
   },

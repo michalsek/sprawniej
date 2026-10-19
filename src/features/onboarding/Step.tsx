@@ -6,7 +6,7 @@ import { cn } from '@/lib/utils'
 export function Step({ step, of, title, children, footer, wide }: { step?: number; of?: number; title: ReactNode; children?: ReactNode; footer?: ReactNode; wide?: boolean }) {
   return (
     <div className="flex min-h-full flex-col items-center justify-center bg-sidebar px-4 py-12">
-      <div className={cn('w-full rounded-2xl border bg-background p-8 shadow-xl sm:p-10', wide ? 'max-w-2xl' : 'max-w-lg')}>
+      <div className={cn('w-full min-w-0 rounded-2xl border bg-background p-6 shadow-xl [overflow-wrap:anywhere] sm:p-10', wide ? 'max-w-2xl' : 'max-w-lg')}>
         <div className="mb-8 flex items-center gap-3">
           <Logo className="size-8" />
           <span className="text-xl font-semibold tracking-tight">Sprawniej</span>

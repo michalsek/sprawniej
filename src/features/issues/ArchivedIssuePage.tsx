@@ -90,7 +90,14 @@ export function ArchivedIssuePage({ issue }: { issue: ArchivedIssue }) {
           <div className="mb-6 flex flex-wrap items-center gap-3 rounded-lg border bg-accent/30 px-4 py-3 text-sm" role="status">
             <Archive className="size-4 shrink-0 text-muted-foreground" />
             <span className="min-w-0 flex-1">
-              Archived {shortDate(issue.archivedAt)} by {people[issue.archivedBy]?.name ?? issue.archivedBy}. It’s out of every list, but you can still read it here.
+              {issue.archivedBy ? (
+                <>
+                  Archived {shortDate(issue.archivedAt)} by {people[issue.archivedBy]?.name ?? 'someone'}.
+                </>
+              ) : (
+                <>Archived automatically {shortDate(issue.archivedAt)}.</>
+              )}{' '}
+              It’s out of every list, but you can still read it here.
             </span>
             <Button size="sm" variant="outline" onClick={restore}>
               Restore

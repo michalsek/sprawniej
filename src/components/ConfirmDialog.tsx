@@ -33,7 +33,7 @@ export function ConfirmDialog({ open, onOpenChange, title, children, confirm, on
   }
   return (
     <Dialog open={open} onOpenChange={change}>
-      <DialogContent>
+      <DialogContent className="[overflow-wrap:anywhere]">
         <DialogTitle>{title}</DialogTitle>
         <DialogDescription asChild>
           <div className="flex flex-col gap-2">{children}</div>

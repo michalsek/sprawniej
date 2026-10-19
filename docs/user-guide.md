@@ -5,37 +5,59 @@ No technical knowledge required.
 
 ## Getting in
 
-You need two things, and the join link walks you through both:
+A teammate sends you an **invite link**. Open it: it shows the workspace, who invited you and who's already there.
+Press **Join**, then:
 
-1. **A GitHub account.** GitHub is where Sprawniej keeps the team's work. If you don't have an account, the join
-   link helps you make one (it's free).
-2. **A GitHub key.** It's like a password that lets Sprawniej save your work for you. The join link opens GitHub
-   with everything filled in. You just scroll down, press the green **Generate token** button, and copy the key
-   back into Sprawniej.
+1. **Create your account** with your email and a password (at least 8 characters), or press **Continue with
+   GitHub** if you have a GitHub account. Already have an account? Choose **Sign in** instead.
+2. **Pick your name and handle.** Teammates see your name on issues and comments, and @mention you by your handle.
+   The handle can't be changed later.
 
-You only do this once per browser. The join link also accepts the GitHub invitation for you.
+That's it: the workspace opens. Each invite link works once, for 14 days. If yours was already used or has
+expired, ask whoever invited you for a new one.
 
 The first time you open your team's issues, four short tips show you around. You can see them again from the
 **Help** page (**Show the tour again**).
 
 ### Your name
 
-Teammates see the name from your GitHub profile. To go by another one here, open **Settings and people** and
-type it under **Your account**; it saves by itself. Your GitHub profile stays as it is. **Use your GitHub name**
-puts the GitHub one back.
+To go by another name, open **Settings and people** and type it under **Your account**; it saves by itself. Your
+handle (@you) stays the same.
+
+### Ways to sign in
+
+**Settings › Your account › Ways to sign in** lists how you can sign in:
+
+- **Email and password.** **Change password** picks a new one. Signed up with GitHub? **Set a password** lets you
+  sign in with your email too.
+- **GitHub.** **Add GitHub** takes you to GitHub and back; from then on **Continue with GitHub** signs you in.
+  **Remove** stops it (only while you have another way to sign in).
 
 ### Inviting someone
 
-Open the menu under your name (bottom left) and choose **Settings and people**. Type their GitHub username and press
-**Invite**. A join link made just for them appears below: copy it and send it to them. Their link is also next to
-their name in the list until they join. A long list comes in pages of 10 (**Previous** and **Next** below it), and
-**Search people** finds anyone by name or username, even with a typo or without Polish letters. (Only the
-workspace's admins can invite.) No GitHub account yet? Ask them to
-make one first (it's free), then invite them.
+Only owners and admins can invite. Open the menu under your name (bottom left), choose **Settings and people**, and
+under **Invite links** press **Create an invite link**. Make **one link for each person**: you can add their email
+(so you remember where to send it) and pick whether they join as a member or an admin. Then **Copy message** gives
+you a ready-to-send note with the link, **Copy link** just the link, and **Write an email** opens your own mail app.
 
-If you moved over from Linear and some people there haven't joined yet, Sprawniej asks right after the invite
-whether this is one of them. Pick who they were in Linear and press **Link**: their issues, comments and views
-become theirs at once, even before they join. Not sure? Press **Skip**; you can link them later.
+Each link works once, for 14 days, and stays under **Invite links** until it's used. **Delete link** stops a link
+from working (for example, if you sent it to the wrong person).
+
+### Members and roles
+
+**Settings › Members** lists everyone in the workspace. Everyone can see and change every issue. On top of that:
+
+- **Owners** can do everything, including making or changing other owners.
+- **Admins** invite people, change roles (except owners'), remove people, rename the workspace, delete teams and
+  import from Linear.
+- **Members** work on issues, projects and views.
+
+Owners and admins change someone's role with the menu next to their name, and remove someone with **⋯ › Remove from
+workspace**. Removed people can't open the workspace any more; their issues and comments stay, with their name. To
+bring them back, send them a new invite.
+
+To leave a workspace yourself, use **Leave** under **Workspace** in Settings. A workspace always keeps at least one
+owner: if you're the only one, make someone else an owner first.
 
 ## Your work saves by itself
 
@@ -124,8 +146,10 @@ Big issues can be split into smaller **sub-issues**. The parent shows a counter 
 ### Comments and history
 
 Under each issue, **Activity** shows its comments and everything that happened to it, oldest first: who changed the
-status, who it was given to, when the due date moved, and so on. The history comes from your workspace's saved
-versions, so it goes all the way back (it needs a connection to show).
+status, who it was given to, when the due date moved, and so on. It shows every change made in Sprawniej, and your
+teammates' changes appear as they make them (it needs a connection to show). Changes from before your work was
+brought over aren't shown. Issues that were finished and left alone for a while are archived by themselves at
+night; their history says "Archived automatically".
 
 Talk about an issue in the comments. Type, then press `⌘` `Enter` or **Comment**. Formatting, links,
 `@` mentions and issue IDs work just like in descriptions. A comment you haven't sent yet waits in this browser,
@@ -256,11 +280,16 @@ Linear personal API key (the first step shows where to make one). Pick the teams
 finished long ago go straight to the archive. Views keep the filters that fit, and the import tells you which views
 lost some, so you can check them.
 
-People who aren't in Sprawniej yet come over too, marked "hasn't joined": their issues, comments and views stay
-theirs. To give them their work, link them to their GitHub account: right after you invite them, or later in
-**Settings › People › People from Linear** (**Link to GitHub account**, admins only). Everything that was theirs
-moves to their account. Linking can't be undone, so check the name first. You can run the import again later to
-bring in new changes; nothing is copied twice, and people you linked stay linked.
+People who aren't in Sprawniej yet come over too, listed under **Settings › People from Linear**: their issues,
+comments and views stay theirs. Owners and admins have two ways to hand them their work:
+
+- **Invite**: makes an invite link just for that person (with their email from Linear, if known). When they join
+  with it, they become that person: everything that was theirs in Linear is theirs.
+- **Link**: for someone who already joined under another name. Pick who they are here, and everything moves to them.
+  Linking can't be undone, so check the name first.
+
+You can run the import again later to bring in new changes; nothing is copied twice, and people you linked stay
+linked.
 
 Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish letters: "lukasz" finds Łukasz.
 
@@ -288,8 +317,9 @@ issue to drag it.
 
 ## Pictures
 
-Paste a picture (or drop one) into a description or a comment. It's kept in your workspace with everything else,
-so only your teammates can see it. Pictures can be up to 10 MB.
+Paste a picture (or drop one) into a description or a comment. It's kept with your workspace, so only your
+teammates can see it. PNG, JPEG, GIF and WebP pictures can be added, up to 10 MB each. The same picture pasted
+twice is kept once. A grey space shows where a picture goes until it has loaded.
 
 ## Something went wrong?
 

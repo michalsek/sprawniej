@@ -1114,7 +1114,8 @@ Sprawniej's plain, friendly words (no "token", no "redirect").
 The GitHub collaborator invite and the five-step join wizard go away. An admin creates an invite in Settings (for a
 person, optionally with their email) and gets a link, `#/join/<token>`, with the same ready-to-send message as today.
 The link opens: Welcome (workspace name, who invited you, the team's pictures) → sign in or create an account → you're
-in.
+in. The preview works before you sign in (`invite_info` is open to whoever holds the link; used or expired links show
+no faces, and the workspace id goes only to its members).
 
 People from Linear who haven't joined are listed in Settings with an **Invite** button. Their invite is made for that
 person (`for_profile`, with their Linear email suggested), so whoever accepts it becomes them: their assigned issues,

@@ -97,7 +97,8 @@ export function PickWorkspace() {
             </Button>
           }
         >
-          A workspace holds your teams and their issues, projects and views. Create one to get started.
+          A workspace holds your teams and their issues, projects and views. Create one to get started. Joining your team instead? Open the invite
+          link they sent you.
         </EmptyState>
       )}
       {shown.length > 0 && (

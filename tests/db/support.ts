@@ -4,7 +4,8 @@
  * these files and skips them: nothing here may connect or throw at import time.
  *
  * The project comes from VITE_SUPABASE_URL and VITE_SUPABASE_KEY (the environment, or .env.local).
- * Test accounts are dbtest-<run>-<name>@<domain>; supabase/dev/cleanup-tests.sql removes them afterwards.
+ * Test accounts are dbtest-<run>-<name>@<domain>; supabase/dev/cleanup-tests.sql removes them afterwards. Set
+ * SPRAWNIEJ_TEST_RUN to name the run yourself, so only its own accounts and workspaces can be removed afterwards.
  * Only for a development or throwaway project.
  */
 import { expect } from 'bun:test'
@@ -66,8 +67,11 @@ interface Person {
   login: string
 }
 
-/** a new account with a profile (login dbt-<run>-<name>) */
-async function signUp(name: string): Promise<Person> {
+/** someone who never signed in */
+export const anonClient = client
+
+/** a new account without a profile yet (it still has to pick its name) */
+export async function signUpBare(name: string): Promise<{ db: Db; userId: string }> {
   const db = client()
   const { data, error } = await db.auth.signUp({
     email: `dbtest-${RUN}-${name}@${DOMAIN}`,
@@ -87,9 +91,15 @@ async function signUp(name: string): Promise<Person> {
   }
   // join channels as this person, not as someone signed out
   await db.realtime.setAuth(data.session.access_token)
+  return { db, userId: data.user.id }
+}
+
+/** a new account with a profile (login dbt-<run>-<name>) */
+export async function signUp(name: string): Promise<Person> {
+  const { db, userId } = await signUpBare(name)
   const login = `dbt-${RUN}-${name}`
   const profile = await ok(db.rpc('create_profile', { p_login: login, p_name: `Test ${name}` }).single())
-  return { name, db, userId: data.user.id, profileId: profile.id, login }
+  return { name, db, userId, profileId: profile.id, login }
 }
 
 export interface World {

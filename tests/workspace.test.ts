@@ -262,6 +262,48 @@ describe('keeping up', () => {
     expect(s.env.backend.getState()).toMatchObject({ phase: 'gone', gone: 'deleted' })
     expect(s.env.status.getState().state).toBe('closed')
   })
+
+  const removed = (): Message => ({ table: 'workspace_members', op: 'UPDATE', row: { workspace_id: WS, profile_id: ME, role: 'owner', removed_at: T(9), changed_at: T(9) } })
+
+  test('removed by someone else: "You\'re no longer in this workspace"', async () => {
+    const s = await opened()
+    s.channels[0].on.message(removed())
+    await sleep(5)
+    expect(s.env.backend.getState()).toMatchObject({ phase: 'gone', gone: 'removed' })
+  })
+
+  test('leaving yourself: nothing to say, and it closes; a refused leave stays open', async () => {
+    const made: ReturnType<typeof setup>[] = []
+    const backend = createStore<BackendState>()(() => ({ phase: 'closed' }))
+    const life = new Lifecycle(
+      () => {
+        const s = setup()
+        made.push(s)
+        return s.ws
+      },
+      backend,
+      new Registry(),
+    )
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    const s = made[0]
+    const phases: string[] = []
+    s.env.backend.subscribe((b) => phases.push(b.phase))
+
+    await expect(life.leave(async () => Promise.reject(new Error('A workspace needs at least one owner.')))).rejects.toThrow('owner')
+    expect(s.ws.leaving).toBe(false)
+    expect(life.current).toBe(s.ws)
+
+    // the database's message that you left comes before the leave call returns
+    await life.leave(async () => {
+      s.channels[0].on.message(removed())
+      await sleep(5)
+    })
+    expect(phases).not.toContain('gone')
+    expect(life.current).toBeNull()
+    expect(backend.getState().phase).toBe('closed')
+    expect(s.ws.closed).toBe(true)
+  })
 })
 
 describe('one workspace at a time', () => {
@@ -330,7 +372,7 @@ describe('the writer and the open workspace', () => {
       },
       createStore<BackendState>()(() => ({ phase: 'closed' })),
       new Registry(),
-      r.hooks,
+      { writes: r.hooks },
     )
     await life.open(WS, { id: ME, person: ANA })
     await sleep(5)
@@ -435,7 +477,7 @@ describe('reading the workspace again', () => {
       },
       backend,
       new Registry(),
-      hooks,
+      { writes: hooks },
     )
     await life.open(WS, { id: ME, person: ANA })
     await sleep(5)

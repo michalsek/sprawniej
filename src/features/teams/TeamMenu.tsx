@@ -11,6 +11,8 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { InlineText } from '@/components/InlineText'
 import { deleteTeam, leaveTeam, teamContents, updateTeam } from '@/data/actions'
+import { MESSAGES } from '@/backend/writes/problems'
+import { isAdmin } from '@/data/select'
 import { useData } from '@/data/store'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
@@ -20,6 +22,7 @@ const count = (n: number, one: string, many: string) => `${n.toLocaleString()} $
 
 export function TeamMenu({ teamKey, className }: { teamKey: string; className?: string }) {
   const team = useData((s) => s.teams[teamKey])
+  const admin = useData(isAdmin)
   const [, navigate] = useLocation()
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -68,9 +71,19 @@ export function TeamMenu({ teamKey, className }: { teamKey: string; className?: 
             <LogOut /> Leave team
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(true)}>
-            <Trash2 /> Delete team
-          </DropdownMenuItem>
+          {admin ? (
+            <DropdownMenuItem variant="destructive" onSelect={() => setDeleting(true)}>
+              <Trash2 /> Delete team
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem disabled className="items-start">
+              <Trash2 className="mt-0.5" />
+              <span>
+                Delete team
+                <span className="block text-xs text-muted-foreground">{MESSAGES.deleteTeam}</span>
+              </span>
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -87,17 +100,21 @@ export function TeamMenu({ teamKey, className }: { teamKey: string; className?: 
           <p className="text-sm text-muted-foreground">
             Issues are numbered {team.key}-1, {team.key}-2… The key stays the same, so links to issues keep working.
           </p>
-          <DialogFooter className="sm:justify-between">
-            <Button
-              variant="ghost"
-              className="text-red-300"
-              onClick={() => {
-                setEditing(false)
-                setDeleting(true)
-              }}
-            >
-              <Trash2 /> Delete team
-            </Button>
+          <DialogFooter className="sm:items-center sm:justify-between">
+            {admin ? (
+              <Button
+                variant="ghost"
+                className="text-red-300"
+                onClick={() => {
+                  setEditing(false)
+                  setDeleting(true)
+                }}
+              >
+                <Trash2 /> Delete team
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">{MESSAGES.deleteTeam}</p>
+            )}
             <Button
               variant="outline"
               onClick={() => {

@@ -140,6 +140,8 @@ export function idbKV(o: { factory?: IDBFactory; wait?: number; deleted?: () => 
         s.put(meta[1], meta[0])
         s.put(body[1], body[0])
         void done(tx)
+        // asked to finish now, not once this task ends: the page may be gone by then
+        tx.commit?.()
         return true
       } catch {
         return false

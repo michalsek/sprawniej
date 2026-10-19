@@ -1,6 +1,6 @@
 /** Shows Markdown as formatted text. The formatter loads the first time it's needed; until then the text shows as-is. */
 import { lazy, Suspense, type ComponentProps } from 'react'
-import { assetUrl } from '@/data/assets'
+import { usePictureUrl } from '@/data/assets'
 import { linkReferences } from '@/data/mentions'
 import { findArchivedByRef, findByRef, useData } from '@/data/store'
 
@@ -13,9 +13,14 @@ function A({ href = '', children, node: _node, ...rest }: ComponentProps<'a'> & 
   return <a href={href} target="_blank" rel="noreferrer" {...rest}>{children}</a>
 }
 
-/** workspace pictures show from the app's own copy */
+/** workspace pictures show once their address is here, with a grey space until then */
 function Img({ src, alt }: ComponentProps<'img'> & { node?: unknown }) {
-  return <img src={assetUrl(typeof src === 'string' ? src : undefined)} alt={alt ?? ''} loading="lazy" />
+  const { url, missing } = usePictureUrl(typeof src === 'string' ? src : undefined)
+  if (url) return <img src={url} alt={alt ?? ''} loading="lazy" />
+  if (missing) return <span className="text-xs text-muted-foreground">This picture can’t be shown.</span>
+  // a grey space until it arrives; named like the picture, or left out for screen readers when it has no name
+  const named = alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': true }
+  return <span className="inline-block h-24 w-40 rounded-md bg-muted" {...named} />
 }
 
 /** `references`: highlight @people and issue references (comments, descriptions) */

@@ -7,6 +7,7 @@ import { watchForUpdates } from '@/app/updates'
 import { backend } from '@/backend'
 import { startAuth, takeReturnedUrl } from '@/backend/auth'
 import { isSetUp } from '@/backend/client'
+import { usePictures } from '@/backend/pictures'
 import { useSaveStatus } from '@/backend/status'
 import { debugWrites } from '@/backend/writes'
 import * as actions from '@/data/actions'
@@ -16,7 +17,17 @@ import './index.css'
 window.sprawniej = {
   ...window.sprawniej,
   actions: { ...actions },
-  backend: { status: useSaveStatus, catchUp: backend.catchUp, debug: backend.debug, pending: backend.pending, flush: backend.flush, writes: debugWrites, saveCache: backend.saveCache },
+  backend: {
+    status: useSaveStatus,
+    catchUp: backend.catchUp,
+    debug: backend.debug,
+    pending: backend.pending,
+    flush: backend.flush,
+    writes: debugWrites,
+    history: backend.history,
+    pictures: usePictures,
+    saveCache: backend.saveCache,
+  },
 }
 
 // a page that loaded fine clears the "reloaded once for a new version" mark, so the next update can do it again

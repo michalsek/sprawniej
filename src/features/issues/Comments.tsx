@@ -131,7 +131,7 @@ export function Comments({ issue, archived }: { issue: Issue; archived?: Archive
   }, [issue.id])
   const items = [
     ...(comments ?? []).map((c) => ({ at: c.createdAt, key: c.id, node: <CommentItem key={c.id} comment={c} mine={!archived && c.author === me} /> })),
-    ...(history.events ?? []).map((e, n) => ({ at: e.at, key: `h${n}`, node: <HistoryLine key={`h${n}`} event={e} /> })),
+    ...(history.events ?? []).map((e) => ({ at: e.at, key: `h${e.id}-${e.change.kind}`, node: <HistoryLine key={`h${e.id}-${e.change.kind}`} event={e} /> })),
   ].sort((a, b) => a.at.localeCompare(b.at))
   return (
     <section className="mt-10">
@@ -140,7 +140,7 @@ export function Comments({ issue, archived }: { issue: Issue; archived?: Archive
         <CreatedLine by={issue.createdBy} at={issue.createdAt} />
         {items.map((i) => i.node)}
       </ol>
-      {history.failed && <p className="mt-3 px-1 text-xs text-muted-foreground">Earlier changes show here when you’re online.</p>}
+      {history.failed && <p className="mt-3 px-1 text-xs text-muted-foreground">Changes to this issue show here when you’re online.</p>}
       {!archived && <NewComment key={issue.id} issue={issue.id} />}
     </section>
   )

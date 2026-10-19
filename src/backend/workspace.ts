@@ -127,6 +127,8 @@ export class LiveWorkspace implements WriteTarget {
   readonly workspaceId: string
   readonly me: MyProfile
   closed = false
+  /** you are leaving it yourself (backend.leave) */
+  leaving = false
   catchUps = 0
   live: LiveState = emptyLive()
   channels: ChannelsLike | null = null
@@ -675,7 +677,8 @@ export class LiveWorkspace implements WriteTarget {
 
   /** deleted or left while open: say so, and keep what's on screen until they choose another workspace */
   private goneAway(gone: 'deleted' | 'removed' | 'missing') {
-    if (this.closed) return
+    // leaving on purpose: no "You're no longer in this workspace" for it (it closes next)
+    if (this.closed || this.leaving) return
     this.keeper.drop()
     // nothing of yours can be saved there any more, and saying so for each change helps nobody
     this.env.writes.stop()
@@ -696,14 +699,20 @@ export class Lifecycle {
   private backend: Store<BackendState>
   private registry: Registry
   private writes: WritesHooks
+  private onClosed: () => void
   /** the workspace whose unsaved changes the writer still holds, detached (it opens again next, or it failed to open) */
   private kept: string | null = null
 
-  constructor(make: Lifecycle['make'], backend: Store<BackendState>, registry: Registry, writes: WritesHooks = NO_WRITES) {
+  /**
+   * `writes`: the writer (none in some tests); `closed`: a workspace closed for good (not when it's read again from
+   * the start), so what belonged to it is forgotten
+   */
+  constructor(make: Lifecycle['make'], backend: Store<BackendState>, registry: Registry, more: { writes?: WritesHooks; closed?: () => void } = {}) {
     this.make = make
     this.backend = backend
     this.registry = registry
-    this.writes = writes
+    this.writes = more.writes ?? NO_WRITES
+    this.onClosed = more.closed ?? (() => {})
   }
 
   private queue(job: () => Promise<void>): Promise<void> {
@@ -713,6 +722,25 @@ export class Lifecycle {
 
   open(workspaceId: string, me: MyProfile): Promise<void> {
     return this.queue(() => this.start(workspaceId, me, false))
+  }
+
+  /**
+   * You leave the open workspace (`call` tells the database), and it closes. Your own leaving gets no "You're no
+   * longer in this workspace": the message saying you left may come before it closes.
+   */
+  async leave(call: (workspaceId: string) => Promise<void>): Promise<void> {
+    const ws = this.current
+    if (!ws) return
+    ws.leaving = true
+    try {
+      await call(ws.workspaceId)
+    } catch (e) {
+      ws.leaving = false
+      throw e
+    }
+    // you're no longer in it: its copy goes from this browser
+    ws.keeper.drop()
+    await this.close()
   }
 
   /** a workspace that failed to open keeps what's waiting: "Try again" opens it once more */
@@ -755,5 +783,7 @@ export class Lifecycle {
     // the same workspace read again keeps the ids it knows (changes made meanwhile name them)
     if (!keep) this.registry.clear()
     this.backend.setState({ phase: 'closed', workspaceId: undefined, failure: undefined, gone: undefined })
+    // once nothing shows it as open any more, so nothing asks for its pictures again
+    if (!keep) this.onClosed()
   }
 }

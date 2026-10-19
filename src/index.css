@@ -97,7 +97,10 @@
     @apply text-[15px] leading-relaxed text-foreground/90;
     & h1 { @apply mb-4 text-3xl font-semibold text-foreground; }
     & img { @apply my-3 max-h-[32rem] max-w-full rounded-lg border; }
-    & img.ProseMirror-selectednode { outline: 2px solid var(--ring); }
+    & img.ProseMirror-selectednode, & .ProseMirror-selectednode > img { outline: 2px solid var(--ring); }
+    /* a picture whose address hasn't arrived yet: a grey space where it will be */
+    & img:not([src]) { @apply inline-block h-24 w-40 bg-muted; }
+    & img[hidden] { @apply hidden; }
     & h2 { @apply mt-10 mb-3 text-xl font-semibold text-foreground; }
     & h3 { @apply mt-6 mb-2 text-base font-semibold text-foreground; }
     & p { @apply my-3; }
