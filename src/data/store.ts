@@ -10,12 +10,12 @@ export interface DataState {
   /** the signed-in person */
   me: Person | null
   people: Record<string, Person>
-  /** by login; filled only by the database backend (src/backend), empty for a workspace repo */
+  /** by login: everyone's role in the workspace, and who left */
   members: Record<string, Member>
   labels: Record<string, Label>
   teams: Record<string, Team>
   issues: Record<string, Issue>
-  /** archived issues by id; empty until something needs them (loadArchive in project.ts) */
+  /** archived issues by id; empty until something needs them (loadArchive in src/backend) */
   archive: Record<string, ArchivedIssue>
   archiveLoaded: boolean
   projects: Record<string, Project>
@@ -41,7 +41,7 @@ export const EMPTY: DataState = {
   views: {},
   comments: {},
   inbox: [],
-  readState: { readUntil: null, read: [] },
+  readState: { readUntil: null },
 }
 
 export const useData = create<DataState>()(() => ({ ...EMPTY }))
@@ -49,14 +49,29 @@ export const useData = create<DataState>()(() => ({ ...EMPTY }))
 /** "ENG-12" */
 export const issueRef = (issue: Pick<Issue, 'team' | 'number'>) => `${issue.team}-${issue.number}`
 
-/** find an issue by its "ENG-12" reference */
-export function findByRef(issues: Record<string, Issue>, ref: string): Issue | undefined {
-  const m = /^([A-Z][A-Z0-9]*)-(\d+)$/.exec(ref.toUpperCase())
-  if (!m) return undefined
-  const n = Number(m[2])
+/** "ENG-12" → issue, built once per version of the issues (the store replaces the object on every change) */
+const refIndex = new WeakMap<Record<string, Issue>, Map<string, Issue>>()
+
+function refsOf(issues: Record<string, Issue>): Map<string, Issue> {
+  let index = refIndex.get(issues)
+  if (index) return index
+  index = new Map()
   const all = Object.values(issues)
-  // an issue that moved to another team answers to its old number too (numbers are never given out twice)
-  return all.find((i) => i.team === m[1] && i.number === n) ?? all.find((i) => i.formerRefs?.includes(`${m[1]}-${n}`))
+  for (const i of all) {
+    const ref = issueRef(i)
+    if (!index.has(ref)) index.set(ref, i)
+  }
+  // an issue that moved to another team answers to its old number too (numbers are never given out twice), unless
+  // an issue has that number now
+  for (const i of all) for (const ref of i.formerRefs ?? []) if (!index.has(ref)) index.set(ref, i)
+  refIndex.set(issues, index)
+  return index
+}
+
+/** find an issue by its "ENG-12" reference (the team key rule: TEAM_KEY_PATTERN) */
+export function findByRef(issues: Record<string, Issue>, ref: string): Issue | undefined {
+  const m = /^([A-Z][A-Z0-9]{0,6})-(\d+)$/.exec(ref.toUpperCase())
+  return m ? refsOf(issues).get(`${m[1]}-${Number(m[2])}`) : undefined
 }
 
 /** an archived issue by its "ENG-12" reference (only once the archive is loaded); an active one with the same id wins */

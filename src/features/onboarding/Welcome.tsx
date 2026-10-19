@@ -1,7 +1,7 @@
 /** The first screen: sign in (with GitHub, or an email and a password), or create an account. */
-import { useState, type SubmitEvent } from 'react'
+import { useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
-import { friendlyAuthError, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
+import { friendlyAuthError, githubAvailable, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Separator } from '@/ui/separator'
@@ -20,7 +20,8 @@ export type Mode = 'sign-in' | 'sign-up'
 
 /**
  * The sign-in form, also used when a sign-in ran out (SignInAgain). Without `onMode` there's no "Create an account".
- * `onCheckEmail`: a new account has to open an emailed link first.
+ * `onCheckEmail`: a new account has to open an emailed link first. "Continue with GitHub" shows once we know GitHub
+ * sign-in is switched on, or when Sprawniej can't be reached to ask (the button then says so).
  */
 export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: Mode; onMode?: (m: Mode) => void; onCheckEmail?: (email: string) => void }) {
   const urlProblem = useAuth((s) => s.urlProblem)
@@ -30,8 +31,17 @@ export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: 
   const [problem, setProblem] = useState<string>()
   const [githubProblem, setGithubProblem] = useState<string>()
   const signUp = mode === 'sign-up'
+  const [github, setGithub] = useState<'on' | 'off' | 'unknown' | null>(null)
 
-  async function github() {
+  useEffect(() => {
+    let here = true
+    void githubAvailable().then((a) => here && setGithub(a))
+    return () => {
+      here = false
+    }
+  }, [])
+
+  async function continueWithGitHub() {
     setBusy('github')
     setGithubProblem(undefined)
     try {
@@ -59,13 +69,23 @@ export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: 
 
   return (
     <div>
-      <Button variant="outline" size="lg" className="w-full" disabled={!!busy} onClick={() => void github()}>
-        {busy === 'github' ? <Loader2 className="animate-spin" /> : <GitHubMark />} Continue with GitHub
-      </Button>
-      <Problem>{githubProblem ?? urlProblem}</Problem>
-      <div className="my-5 flex items-center gap-3 text-sm text-muted-foreground">
-        <Separator className="flex-1" /> or <Separator className="flex-1" />
-      </div>
+      {github && github !== 'off' && (
+        <>
+          <Button variant="outline" size="lg" className="w-full" disabled={!!busy} onClick={() => void continueWithGitHub()}>
+            {busy === 'github' ? <Loader2 className="animate-spin" /> : <GitHubMark />} Continue with GitHub
+          </Button>
+          <Problem>{githubProblem ?? urlProblem}</Problem>
+          <div className="my-5 flex items-center gap-3 text-sm text-muted-foreground">
+            <Separator className="flex-1" /> or <Separator className="flex-1" />
+          </div>
+        </>
+      )}
+      {/* coming back from a sign-in that didn't work, with GitHub's button hidden */}
+      {(!github || github === 'off') && urlProblem && (
+        <div className="-mt-3 mb-5">
+          <Problem>{urlProblem}</Problem>
+        </div>
+      )}
       <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
         <div>
           <label htmlFor="email" className="mb-1.5 block text-sm font-medium">

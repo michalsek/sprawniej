@@ -5,8 +5,9 @@ import { CHANGELOG } from '../src/version'
 const md = [
   '# Changelog',
   '',
-  'Versions are `MAJOR.MINOR.PATCH`: major = the repo format or the way you work changes, minor = a new feature,',
-  'patch = fixes and polish. Written from `src/version.ts` by `bun scripts/changelog.ts`.',
+  'Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older versions can’t live with, or the way',
+  'you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by',
+  '`bun scripts/changelog.ts`.',
   '',
   ...CHANGELOG.flatMap((r) => [`## ${r.version}: ${r.title}`, `*${r.date}*`, '', ...r.notes.map((n) => `- ${n}`), '']),
 ].join('\n')

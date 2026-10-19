@@ -2,7 +2,7 @@
  * A Linear workflow state → a status here. On its own, so linearMap.ts and linearFilters.ts can both use it without
  * importing each other.
  */
-import { plainName as plain } from '@/data/relink'
+import { plainName as plain } from '@/lib/plain'
 import { STATUSES, type StatusId } from '@/model/status'
 
 const STATE_TYPES: Record<string, StatusId> = {

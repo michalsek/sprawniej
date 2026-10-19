@@ -78,7 +78,7 @@ function TeamGroup({ teamKey }: { teamKey: string }) {
 }
 
 function Me() {
-  // your people/ file: it has the name you go by here (it may differ from GitHub's)
+  // your profile in this workspace: it has the name you go by here (it may differ from GitHub's)
   const me = useData((s) => (s.me ? (s.people[s.me.login] ?? s.me) : null))
   const workspace = useData((s) => s.workspace)
   const { switchWorkspace, dialog } = useSwitchWorkspace()

@@ -2,20 +2,34 @@ import { backend } from '@/backend'
 import { ADDING_KEY, signOutLocally } from '@/backend/auth'
 import { wipeCaches } from '@/backend/cacheStore'
 import { JOINING_KEY } from '@/features/onboarding/invite'
-import { resetProjection } from '@/data/project'
 import { useData, EMPTY } from '@/data/store'
 import { useSession } from '@/session'
-import { wipeAllCopies } from '@/sync/local'
 
-/** what the GitHub version kept in this browser: its session (with a GitHub key) and its copies of workspaces */
+/** what the earlier version kept in this browser: its session (with a GitHub key) and its copies of workspaces */
 const OLD_SESSION = 'sprawniej-session'
 const OLD_GONE = 'sprawniej:old-copies-gone'
 
-/** once per browser, at start: the GitHub version's key and copies go */
+/** the earlier version's copies: one IndexedDB database per workspace, `sprawniej:<owner>/<name>` (today's is `sprawniej-cache`) */
+async function deleteOldCopies(): Promise<void> {
+  const dbs = (await indexedDB.databases?.()) ?? []
+  await Promise.all(
+    dbs
+      .filter((d) => d.name?.startsWith('sprawniej:'))
+      .map(
+        (d) =>
+          new Promise<void>((resolve) => {
+            const req = indexedDB.deleteDatabase(d.name!)
+            req.onsuccess = req.onerror = req.onblocked = () => resolve()
+          }),
+      ),
+  )
+}
+
+/** once per browser, at start: the earlier version's key and copies go */
 export function forgetOldVersion() {
   if (localStorage.getItem(OLD_GONE)) return
   localStorage.removeItem(OLD_SESSION)
-  wipeAllCopies().then(
+  deleteOldCopies().then(
     () => localStorage.setItem(OLD_GONE, '1'),
     // tried again next start
     (e: unknown) => console.warn('Sprawniej couldn’t remove old copies of workspaces', e),
@@ -42,7 +56,6 @@ export async function signOutOfThisBrowser(then = '#/') {
   // the copies of your workspaces kept in this browser
   await wipeCaches()
   useSession.getState().signOut()
-  resetProjection()
   useData.setState({ ...EMPTY })
   forgetMine()
   // a Join pressed or a way to sign in being added belong to whoever was signed in

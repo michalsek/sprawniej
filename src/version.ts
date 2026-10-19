@@ -2,7 +2,7 @@
  * The app's version and its changelog: one list, which `scripts/changelog.ts` turns into CHANGELOG.md.
  * Newest release first. The app shows it on the What's new page (#/whats-new).
  *
- * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the repo format or the way you work changes,
+ * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
 export const APP_VERSION = '1.8.5'
@@ -86,7 +86,7 @@ export const CHANGELOG: Release[] = [
     notes: [
       'A teammate’s change to a title or description is no longer undone when you leave the page, and their edits join the text you’re typing',
       'Saving keeps going after a bad connection or a slow answer from GitHub, and teammates’ changes keep arriving',
-      'Two issues made at the same moment no longer push your other new issues to different numbers, and an open issue follows its new number',
+      'Two issues made at the same moment no longer move your other new issues to different numbers, and an open issue follows its new number',
       'An issue that moved to another team still opens from links to its old number',
       'When one person edits an issue another deletes, its comments come back with it',
       'Every Sign out checks for unsaved changes first, in all your workspaces',
@@ -295,7 +295,7 @@ export const CHANGELOG: Release[] = [
     date: '2026-10-06',
     title: 'Workspaces are easy to spot',
     notes: [
-      'New workspaces are stored in a repository named workspace-sprawniej-…',
+      'New workspaces are stored on GitHub, named workspace-sprawniej-…',
       'Those workspaces come first when you choose one',
     ],
   },

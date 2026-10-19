@@ -1,6 +1,6 @@
 /**
  * Where a dragged issue lands. Order is a `sortOrder` string per issue (fractional-indexing), so a drop changes only
- * the moved issue's file: it gets a key between its new neighbours. Dropping into another group also changes the
+ * the moved issue: it gets a key between its new neighbours. Dropping into another group also changes the
  * property that group stands for.
  */
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing'

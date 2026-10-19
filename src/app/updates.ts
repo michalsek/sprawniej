@@ -1,5 +1,5 @@
 /**
- * New versions of Sprawniej. GitHub Pages ships a new one on every release; the browser downloads it in the
+ * New versions of Sprawniej. A new one is published with every release; the browser downloads it in the
  * background (the service worker), and it would only take over once every Sprawniej tab is closed. We look for one
  * every minute and whenever you come back to the tab, then tell you: a small toast once, and an "Update available"
  * button in the top bar until you update. Nothing switches by itself: you choose when, and whatever is still waiting
@@ -23,6 +23,12 @@ export const useUpdate = create<UpdateState>(() => ({ ready: false, applying: fa
 
 let registration: ServiceWorkerRegistration | undefined
 let switchOver: ((reload?: boolean) => Promise<void>) | undefined
+/** the regular check and its listeners are set up once, however often the service worker reports in */
+let checking = false
+
+function check() {
+  if (registration && document.visibilityState === 'visible' && navigator.onLine) registration.update().catch(() => {})
+}
 
 /** save what's waiting, then load the new version */
 export async function applyUpdate() {
@@ -44,9 +50,8 @@ export function watchForUpdates() {
     onRegisteredSW(_url, r) {
       if (!r) return
       registration = r
-      const check = () => {
-        if (document.visibilityState === 'visible' && navigator.onLine) r.update().catch(() => {})
-      }
+      if (checking) return
+      checking = true
       setInterval(check, CHECK_EVERY)
       document.addEventListener('visibilitychange', check)
       window.addEventListener('focus', check)

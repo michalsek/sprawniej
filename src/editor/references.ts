@@ -1,6 +1,5 @@
 /**
- * @people and ENG-12 references. They stay plain text in the Markdown (readable on GitHub, where @login even links to
- * the profile); in the editor we only highlight the ones that point at a real person or issue, and clicking an issue
+ * @people and ENG-12 references. They stay plain text in the Markdown, so they read well anywhere; in the editor we only highlight the ones that point at a real person or issue, and clicking an issue
  * reference opens it.
  */
 import { Extension } from '@tiptap/core'

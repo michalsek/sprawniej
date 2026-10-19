@@ -1,4 +1,4 @@
-/** A person's GitHub picture, or their initials on a stable colour when there is none (or we're offline). */
+/** A person's picture, or their initials on a stable colour when there is none (or it can't be loaded). */
 import { useState } from 'react'
 import type { Person } from '@/model/schema'
 import { cn } from '@/lib/utils'

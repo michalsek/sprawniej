@@ -6,23 +6,32 @@ No technical knowledge required.
 ## Getting in
 
 A teammate sends you an **invite link**. Open it: it shows the workspace, who invited you and who's already there.
-Press **Join**, then:
+Press **Join workspace**, then:
 
 1. **Create your account** with your email and a password (at least 8 characters), or press **Continue with
-   GitHub** if you have a GitHub account. Already have an account? Choose **Sign in** instead.
-2. **Pick your name and handle.** Teammates see your name on issues and comments, and @mention you by your handle.
-   The handle can't be changed later.
+   GitHub** if you see it and have a GitHub account. Already have an account? Choose **Sign in** instead.
+2. **Pick your name and handle** ("What should we call you?"). Teammates see your name on issues and comments, and
+   @mention you by your handle. The handle can't be changed later.
 
 That's it: the workspace opens. Each invite link works once, for 14 days. If yours was already used or has
 expired, ask whoever invited you for a new one.
 
+No invite link, and you want a workspace of your own? Open Sprawniej, choose **Create an account**, pick your name,
+then **Create a workspace**: give it a name and a first team. You're its owner.
+
 The first time you open your team's issues, four short tips show you around. You can see them again from the
 **Help** page (**Show the tour again**).
 
+### More than one workspace
+
+If you're in several workspaces, Sprawniej asks which one to open (the ones you opened lately come first). To go to
+another one later, open the menu under your name (bottom left) and choose **Switch workspace**. The same list has
+**Create a new workspace**.
+
 ### Your name
 
-To go by another name, open **Settings and people** and type it under **Your account**; it saves by itself. Your
-handle (@you) stays the same.
+To go by another name, open **Settings and people** (in the menu under your name) and type it under **Your
+account**; it saves by itself. Your handle (@you) stays the same.
 
 ### Ways to sign in
 
@@ -31,33 +40,43 @@ handle (@you) stays the same.
 - **Email and password.** **Change password** picks a new one. Signed up with GitHub? **Set a password** lets you
   sign in with your email too.
 - **GitHub.** **Add GitHub** takes you to GitHub and back; from then on **Continue with GitHub** signs you in.
-  **Remove** stops it (only while you have another way to sign in).
+  **Remove** stops it (only while you have another way to sign in). If it says signing in with GitHub isn't switched
+  on yet, use your email and password.
+
+**Forgot your password?** Sprawniej can't email you a new one yet. If you also added GitHub, sign in with GitHub and
+choose **Change password**. Otherwise, ask whoever looks after Sprawniej for help.
 
 ### Inviting someone
 
 Only owners and admins can invite. Open the menu under your name (bottom left), choose **Settings and people**, and
 under **Invite links** press **Create an invite link**. Make **one link for each person**: you can add their email
-(so you remember where to send it) and pick whether they join as a member or an admin. Then **Copy message** gives
-you a ready-to-send note with the link, **Copy link** just the link, and **Write an email** opens your own mail app.
+(so you remember where to send it) and pick whether they join as a **Member** or an **Admin**. Press **Create
+link**, then **Copy message** gives you a ready-to-send note with the link, **Copy link** just the link, and **Write
+an email** (when you added their email) opens your own mail app. Sprawniej doesn't send anything itself: you send the
+link.
 
 Each link works once, for 14 days, and stays under **Invite links** until it's used. **Delete link** stops a link
 from working (for example, if you sent it to the wrong person).
 
 ### Members and roles
 
-**Settings › Members** lists everyone in the workspace. Everyone can see and change every issue. On top of that:
+**Settings › Members** lists everyone in the workspace. Everyone can see and change every issue, project, view and
+label, and make teams. On top of that:
 
 - **Owners** can do everything, including making or changing other owners.
-- **Admins** invite people, change roles (except owners'), remove people, rename the workspace, delete teams and
-  import from Linear.
+- **Admins** invite people, change roles (except owners'), remove people (except owners), rename the workspace,
+  delete teams and import from Linear.
 - **Members** work on issues, projects and views.
 
 Owners and admins change someone's role with the menu next to their name, and remove someone with **⋯ › Remove from
 workspace**. Removed people can't open the workspace any more; their issues and comments stay, with their name. To
 bring them back, send them a new invite.
 
-To leave a workspace yourself, use **Leave** under **Workspace** in Settings. A workspace always keeps at least one
-owner: if you're the only one, make someone else an owner first.
+### Leaving a workspace
+
+To leave a workspace yourself, press **Leave workspace** under **Workspace** in Settings. Your issues and comments
+stay, with your name; to come back, ask for a new invite. A workspace always keeps at least one owner: if you're the
+only one, make someone else an owner first.
 
 ## Your work saves by itself
 
@@ -65,14 +84,20 @@ There is no Save button. Whatever you type or change is kept right away. In the 
 
 - **Saved**: everything is safe and your teammates can see it.
 - **Saving…**: it's on its way, give it a second.
-- **Offline**: no internet right now. Keep working and keep the tab open; everything goes out when you're back
+- **Offline**: no internet right now. Keep working and keep the tab open; your changes are saved when you're back
   online. If you try to close the tab before that, Sprawniej asks first.
 - **Not saved yet**: Sprawniej can't be reached for a moment. It keeps trying; wait until it says Saved before you
   close the tab.
-- If someone else's change and yours can't both be kept (say, they deleted an issue you were editing), a short
-  message says what wasn't saved.
+- **Reconnecting…**: your work is saved, and your teammates' changes will show up again in a moment.
+- **Signed out**: sign in again to keep working. Everything on screen stays as it is.
 
-Your teammates' changes show up on their own, too.
+Sprawniej needs the internet to save. If you sign out or switch workspace while something isn't saved yet, it asks
+first.
+
+If someone else's change and yours can't both be kept (say, they deleted an issue you were editing), a short message
+says what wasn't saved.
+
+Your teammates' changes show up on their own, as soon as they're saved.
 
 ### New versions
 
@@ -89,8 +114,8 @@ An **issue** is one piece of work: a task, a bug, an idea. Each has a short ID l
 - **Create one:** press **C** anywhere, the pencil next to "Sprawniej" at the top left, or the **+** next to a group.
   Give it a title; status, priority, assignee, labels, project, parent, due date and estimate are optional buttons
   below.
-  Press `⌘` `Enter` (or `Ctrl` `Enter`) to create it. Tick **Create more** to add several in a row. Closed it by
-  accident? What you typed comes back the next time you start a new issue.
+  Press `⌘` `Enter` (or `Ctrl` `Enter`) to create it. Tick **Create more** to add several, one after another. Closed
+  it by accident? What you typed comes back the next time you start a new issue.
 - **Open one:** click it. Change the title, description or any property on the right. It saves by itself.
 - **Labels:** in the labels menu, type a name that doesn't exist yet and choose **Create label**.
 - **Move to another team:** change **Team** on the right. The issue gets that team's next number; links and mentions
@@ -105,20 +130,19 @@ An **issue** is one piece of work: a task, a bug, an idea. Each has a short ID l
 ### Working at the same time as others
 
 You never have to choose between your changes and a teammate's. If you both change different things, both stay. If
-you both change the same thing (say, the status, or the same sentence of a description), the one saved last stays, as
-in any app. Nothing is ever really lost: every earlier version stays in the workspace history on GitHub.
+you both change the same thing (say, the status), the one saved last stays. If you both type in the same description
+at once, their words come into yours as you type; if you both finish at the very same moment, the text saved last
+stays. Two people adding issues at once always get different numbers.
 
 ### Statuses
 
-| Status | Means |
-| --- | --- |
-| Backlog | We might do it some day. |
-| Todo | We plan to do it soon. |
-| In Progress | Someone is working on it. |
-| In Review | It's done and waiting for someone to check it. |
-| Done | Finished. |
-| Canceled | We decided not to do it. |
-| Duplicate | Someone already reported the same thing. |
+- **Backlog**: we might do it some day.
+- **Todo**: we plan to do it soon.
+- **In Progress**: someone is working on it.
+- **In Review**: it's done and waiting for someone to check it.
+- **Done**: finished.
+- **Canceled**: we decided not to do it.
+- **Duplicate**: someone already reported the same thing.
 
 ### Priority
 
@@ -156,7 +180,7 @@ Talk about an issue in the comments. Type, then press `⌘` `Enter` or **Comment
 so you can leave and come back.
 
 To change or remove one of your own comments, use the `⋯` on it: **Edit** (it saves as you type; **Done** when
-you're finished) or **Delete**.
+you're finished) or **Delete**. Only the person who wrote a comment can change or delete it.
 
 ### Subscribing
 
@@ -169,7 +193,7 @@ follows it, and you can add or remove teammates there too.
 
 Every list of issues can be shown two ways. Switch with **List / Board** at the top right.
 
-- **List:** rows grouped by status. Sub-issues sit just under their parent.
+- **List:** issues grouped by status. Sub-issues sit just under their parent.
 - **Board:** a column per status, with cards. Empty columns wait under **Hidden columns** on the right, together
   with statuses the tab leaves out (like **Done** on the Active tab). Drop a card on one to move the issue there; the
   column then shows up with that card in it.
@@ -220,16 +244,16 @@ Point at a team in the sidebar and press **⋯** to:
 
 - **Edit team:** change its emoji and name. It saves as you go. The short key (`ENG`) stays, so issue links keep working.
 - **Leave team:** it leaves your sidebar; the team and its issues stay for everyone else. Join again with **+**.
-- **Delete team:** removes the team for everyone, with its issues, comments, archive and its own views. Projects
-  stay, without that team. You'll be asked to type the team's name first, because this can't be undone.
+- **Delete team** (admins and owners only): removes the team for everyone, with its issues, comments, archive and its
+  own views. Projects stay, without that team. You'll be asked to type the team's name first, because this can't be
+  undone.
 
 ## Filters
 
 **Filter** (above every list) narrows it down: by status, assignee, subscribers, priority, labels, project or team.
 **Subscribers** finds the issues someone follows: ones they made, are assigned to, commented on, were mentioned in or
-subscribed to. Each filter
-shows as a chip. Click a chip to change it, or its **×** to remove it. Inside one filter, any of the chosen values
-counts ("Todo or In Progress"); several filters must all match ("Todo, and assigned to Ana").
+subscribed to. Each filter shows as a chip. Click a chip to change it, or its **×** to remove it. Inside one filter,
+any of the chosen values counts ("Todo or In Progress"); several filters must all match ("Todo, and assigned to Ana").
 
 Filters you set on a team's page or on My issues are just for you, and go away when you leave the page. To keep
 them, press **Save as view**.
@@ -290,26 +314,24 @@ comments and views stay theirs. Owners and admins have two ways to hand them the
   Linking can't be undone, so check the name first.
 
 You can run the import again later to bring in new changes; nothing is copied twice, and people you linked stay
-linked. Picking someone who has joined for a person from Linear on the import's **Who's who** step links them too.
+linked. Picking someone who has joined for a person from Linear on the import's **Who's who?** step links them too.
 
 Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish letters: "lukasz" finds Łukasz.
 
 ## Handy keys
 
-| Key | Does |
-| --- | --- |
-| `⌘` `K` (or `Ctrl` `K`), or `/` | Search issues and jump anywhere |
-| `C` | New issue |
-| `S` | Change status of the issue under the mouse (or the open one) |
-| `P` | Change priority |
-| `A` | Change who it's assigned to |
-| `L` | Change labels |
-| `E` | Change the estimate |
-| `J` / `K` or `↓` / `↑` | Move to the next or previous issue in a list or board |
-| `X` | Pick the issue (to change or move several at once) |
-| `Enter` | Open it |
-| `Space` | Pick it up to move it with the arrows; `Space` again puts it down |
-| `Esc` | Let go of picked issues, or go back from an issue |
+- `⌘` `K` (or `Ctrl` `K`), or `/`: search issues and jump anywhere.
+- `C`: new issue.
+- `S`: change the status of the issue under the mouse (or the open one).
+- `P`: change the priority.
+- `A`: change who it's assigned to.
+- `L`: change the labels.
+- `E`: change the estimate.
+- `J` / `K`, or `↓` / `↑`: move to the next or previous issue in a list or board.
+- `X`: pick the issue (to change or move several at once).
+- `Enter`: open it.
+- `Space`: pick it up to move it with the arrows; `Space` again puts it down.
+- `Esc`: let go of picked issues, or go back from an issue.
 
 ## On a phone
 
@@ -324,9 +346,17 @@ twice is kept once. A grey space shows where a picture goes until it has loaded.
 
 ## Something went wrong?
 
-- **"Your GitHub key stopped working"**: keys can expire. Make a new one (the app shows a button that opens the
-  right GitHub page) and paste it in.
-- **"You don't have access to this workspace"**: ask the person who invited you to invite you again, then accept the
-  invitation on GitHub.
-- **Using a shared computer?** Open the menu under your name at the bottom left, choose **Sign out**, and confirm on
-  the page that opens. It signs you out in that browser and removes the copy of your workspaces it kept there.
+- **"This invite link doesn't work"**, **"This invite was already used"** or **"This invite has expired"**: each link
+  works once, for 14 days. Ask whoever invited you for a new one. **"This invite link is from an older Sprawniej"**
+  means the same: ask for a new link.
+- **"You're no longer in this workspace"** or **"This workspace isn't here any more"**: someone removed you, or the
+  workspace was deleted. If that's a mistake, ask an owner or an admin for a new invite.
+- **"Not saved yet" for a long time**: check your internet connection and keep the tab open. Sprawniej keeps trying
+  and says **Saved** once it's done.
+- **"Please sign in again"** or **Signed out** in the top bar: you were signed out, maybe because it's been a while.
+  Sign in, and you carry on where you were.
+- **"We couldn't open this workspace"**: check your connection and press **Try again**.
+- **"Sprawniej isn't set up yet"**: this copy of Sprawniej isn't ready. Tell whoever looks after Sprawniej.
+- **Using a shared computer?** Open the menu under your name at the bottom left, choose **Sign out…**, and press
+  **Sign out** on the page that opens. It signs you out in that browser (in every tab) and removes the copy of your
+  workspaces it kept there.

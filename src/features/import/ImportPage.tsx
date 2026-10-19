@@ -24,7 +24,7 @@ import { leaveImport, startImport, useImportRun } from './importRun'
 import { LinearError, readBasics, readTeams, type LinearData } from './linearApi'
 import { emojiFor, guessPerson, guestLogins, involvedUsers, linearName, type ImportChoices, type ImportResult } from './linearMap'
 import { prepareImport, type Prepared } from './prepareImport'
-import { isGuest, type Member, type Person } from '@/model/schema'
+import { isGuest, TEAM_KEY_PATTERN, type Member, type Person } from '@/model/schema'
 
 type Stage =
   | { at: 'key' }
@@ -38,7 +38,6 @@ const hereNow = (people: Record<string, Person>, members: Record<string, Member>
 
 const STEPS = ['Key', 'Teams', 'People', 'Import']
 const NOBODY = '__nobody'
-const KEY_RE = /^[A-Z][A-Z0-9]{0,6}$/
 const WENT_WRONG = 'Something went wrong. Try again in a moment.'
 
 function Steps({ now }: { now: number }) {
@@ -231,7 +230,7 @@ export function ImportPage() {
   if (stage.at === 'teams') {
     const { basics } = stage
     const keys = Object.values(picked)
-    const bad = keys.find((k) => !KEY_RE.test(k)) ?? keys.find((k, i) => keys.indexOf(k) !== i)
+    const bad = keys.find((k) => !TEAM_KEY_PATTERN.test(k)) ?? keys.find((k, i) => keys.indexOf(k) !== i)
     return (
       <Panel
         step={1}

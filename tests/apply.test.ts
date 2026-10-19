@@ -181,7 +181,7 @@ describe('first load', () => {
     expect(data.comments[I1].map((c) => c.id)).toEqual(['c-1', 'c-2'])
     expect(data.comments[I1][0].author).toBe('bob')
     expect(data.views['v-1']).toMatchObject({ owner: 'ana', team: null })
-    expect(data.readState).toEqual({ readUntil: Z(5), read: [] })
+    expect(data.readState).toEqual({ readUntil: Z(5) })
     expect(first.state.mark).toBe(T(20, '999999'))
     expect(first.fetch).toEqual([])
   })

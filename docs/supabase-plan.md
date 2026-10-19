@@ -1,6 +1,7 @@
 # Moving Sprawniej to Supabase: design and plan
 
-Status: **draft for review**. Nothing here has been applied to the database yet.
+Status: **built and released as 2.0.0**. This is the design as planned; the migrations, docs/architecture.md and
+docs/data-format.md describe what shipped, and docs/supabase-work.md lists the decisions taken while building.
 
 Today a workspace is a GitHub repo of small files, the browser keeps a copy, saves by committing, checks for news every
 30 seconds and merges other people's changes itself (docs/architecture.md). This plan replaces that with a Supabase
@@ -897,7 +898,8 @@ Two **private broadcast channels** per open workspace:
 
 We use **Broadcast from the database** (`realtime.send` in a trigger) rather than Postgres Changes: it is what Supabase
 recommends for scale, it checks access once when you join a channel rather than for every change and every listener,
-and it lets the trigger send a small message.
+and it lets the trigger send a small message (the shipped version:
+`supabase/migrations/20261019000004_realtime.sql`).
 
 ```sql
 create function private.broadcast() returns trigger

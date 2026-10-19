@@ -7,7 +7,7 @@
  * rows with `archivedAt`. People who have joined since an earlier import come back as `links` (guest → account).
  */
 import { generateNKeysBetween } from 'fractional-indexing'
-import { plainName as plain } from '@/data/relink'
+import { plainName as plain } from '@/lib/plain'
 import { dueForArchive } from '@/data/select'
 import type { DataState } from '@/data/store'
 import type { Priority } from '@/model/status'

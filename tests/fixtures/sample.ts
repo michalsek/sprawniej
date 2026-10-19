@@ -1,11 +1,8 @@
-/**
- * A made-up workspace so the screens have something to show before sign-in and syncing exist (milestone 0).
- * Also handy in tests. Not used once a real workspace is open.
- */
+/** A made-up workspace for tests: four people, two teams, a few issues, projects and views. */
 import { generateNKeysBetween } from 'fractional-indexing'
 import type { Issue, Label, Person, Project, Team, View } from '@/model/schema'
 import type { Priority, StatusId } from '@/model/status'
-import type { DataState } from './store'
+import type { DataState } from '@/data/store'
 
 const at = (daysAgo: number) => new Date(Date.UTC(2026, 9, 6) - daysAgo * 86_400_000).toISOString()
 
@@ -153,7 +150,7 @@ const byKey = <T,>(xs: T[], key: (x: T) => string) => Object.fromEntries(xs.map(
 export function sampleData(): DataState {
   const issues = buildIssues()
   return {
-    workspace: { name: 'Software Mansion', format: 1, createdAt: at(90) },
+    workspace: { name: 'Software Mansion', createdAt: at(90) },
     me: people[0],
     people: byKey(people, (p) => p.login),
     members: {},
@@ -174,6 +171,6 @@ export function sampleData(): DataState {
       { id: 'n1', type: 'assigned', issue: issues[6].id, actor: 'ania-k', at: at(1) },
       { id: 'n2', type: 'mentioned', issue: issues[0].id, actor: 'zosia', at: at(3), comment: 'c1' },
     ],
-    readState: { readUntil: null, read: [] },
+    readState: { readUntil: null },
   }
 }

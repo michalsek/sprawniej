@@ -569,6 +569,7 @@ describe('the workspace as the import sees it', () => {
       // 7 was deleted; 5, 6, 8 and 9 never used, whatever the team's last number says
       usedNumbers: { ENG: [1, 2, 4, 7] },
       guests: [{ login: '~cat-wong', githubId: 0, name: 'Cat W.', avatarUrl: '', linearId: 'u-cat' } as never],
+      guestEmails: {},
     }
     const e = existingFrom(ws, extras, 'mikolaj')
     expect(e.me).toBe('mikolaj')

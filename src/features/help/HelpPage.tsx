@@ -1,4 +1,4 @@
-/** The user guide (docs/user-guide.md), shown inside the app for teammates who never open GitHub. */
+/** The user guide (docs/user-guide.md), shown inside the app so teammates find it where they work. */
 import { Markdown } from '@/components/Markdown'
 import guide from '../../../docs/user-guide.md?raw'
 import { useLocation } from 'wouter'

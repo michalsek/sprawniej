@@ -9,7 +9,7 @@ import { friendlyDbError } from './problem'
 import { rowToPerson } from './rows'
 
 /** the same rule as private.valid_login (supabase/migrations/20261019000001_tables.sql) */
-export const LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/
+export { LOGIN_PATTERN } from '@/model/schema'
 
 export interface MyProfile {
   id: string

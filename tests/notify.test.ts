@@ -154,7 +154,7 @@ describe('inbox', () => {
     expect(unread()).toEqual([])
     await w.settle()
     expect(w.db.get('read_state', { profile_id: profileIdOf('ana'), workspace_id: WS })?.read_until).toBe('2026-10-02T00:00:00.000Z')
-    expect(useData.getState().readState.read).toEqual([])
+    expect(useData.getState().readState.readUntil).toBe('2026-10-02T00:00:00.000Z')
   })
 })
 

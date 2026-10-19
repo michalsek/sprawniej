@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
-import { sampleData } from '@/data/sample'
-import { childIndex, dueForArchive, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
+import { sampleData } from './fixtures/sample'
+import { childIndex, compareIssues, dueForArchive, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
 import { findByRef, issueRef } from '@/data/store'
 import { DEFAULT_DISPLAY } from '@/data/displays'
 import type { Issue } from '@/model/schema'
@@ -12,7 +12,7 @@ const issues = Object.values(data.issues)
 const ctx = { people: data.people, projects: data.projects }
 
 describe('sample data', () => {
-  test('every issue fits the file schema', () => {
+  test('every issue fits the issue schema', () => {
     for (const i of issues) expect(issueFieldsSchema.safeParse(i).success).toBe(true)
   })
   test('numbers count up per team', () => {
@@ -27,7 +27,28 @@ describe('refs', () => {
     expect(findByRef(data.issues, 'eng-1')?.id).toBe(first.id)
     expect(findByRef(data.issues, 'ENG-999')).toBeUndefined()
     expect(findByRef(data.issues, 'nonsense')).toBeUndefined()
+    expect(findByRef(data.issues, 'ENGINEERS-1')).toBeUndefined()
+    expect(findByRef(data.issues, 'ENG-01')?.id).toBe(first.id)
   })
+  test('an old number finds the issue that moved, unless an issue has that number now', () => {
+    const [a, b] = issues.filter((i) => i.team === 'ENG')
+    const moved = { ...a, team: 'DES', number: 99, formerRefs: [issueRef(a), issueRef(b)] }
+    const now = { ...data.issues, [a.id]: moved }
+    expect(findByRef(now, issueRef(a))?.id).toBe(a.id)
+    expect(findByRef(now, issueRef(b))?.id).toBe(b.id)
+    expect(findByRef(now, 'DES-99')?.id).toBe(a.id)
+    // the next version of the issues gets its own lookup
+    const gone = { ...now }
+    delete gone[b.id]
+    expect(findByRef(gone, issueRef(b))?.id).toBe(a.id)
+  })
+})
+
+test('a priority this version doesn’t know sorts last', () => {
+  const [a, b] = issues
+  const odd = { ...a, priority: 7 as Issue['priority'] }
+  const sorted = [odd, { ...b, priority: 4 as Issue['priority'] }].sort(compareIssues('priority'))
+  expect(sorted.map((i) => i.id)).toEqual([b.id, a.id])
 })
 
 describe('filters and tabs', () => {
@@ -160,7 +181,7 @@ describe('archiving finished issues', () => {
 describe('inbox', () => {
   test('a note read one by one stays read, even when it is newer than "read until"', () => {
     const n = { id: 'n1', at: '2026-10-19T12:00:00.000Z' }
-    const r = { readUntil: '2026-10-01T00:00:00.000Z', read: [] }
+    const r = { readUntil: '2026-10-01T00:00:00.000Z' }
     expect(isUnread(n, r)).toBe(true)
     expect(isUnread({ ...n, readAt: '2026-10-19T12:05:00.000Z' }, r)).toBe(false)
     expect(isUnread({ ...n, readAt: null }, r)).toBe(true)

@@ -43,7 +43,7 @@ Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
 ## Pieces
 
 - **Sidebar**: logo and "Sprawniej" at the top; Inbox, My issues; small grey section labels in sentence case
-  (*Workspace*, *Your teams*); your picture, name and @login at the bottom with a menu.
+  (*Workspace*, *Your teams*); your picture, name and @handle at the bottom with a menu.
 - **Top bar**: sidebar toggle, a thin divider, breadcrumbs (`Sprawniej / 🛠️ Engineering / Issues`), the save chip,
   and the search box with `⌘K`.
 - **Buttons**: outlined by default (like Punchcard's `Today`). One white filled button per screen at most, for the
@@ -58,11 +58,13 @@ Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
 
 ## Behaviour
 
-- Everything saves by itself. Never add a Save button or a "you have unsaved changes" prompt.
+- Everything saves by itself. Never add a Save button. The only "not saved yet" questions are about changes still on
+  their way when you close the tab, sign out or switch workspace.
 - Every control works with the keyboard and shows a focus ring.
 - Hover shows a soft `accent` background; the selected item keeps it.
-- Show the save state quietly in the top bar ("Saved", "Saving…", "Offline: your changes are safe on this device").
-  Don't interrupt people with dialogs for normal syncing.
+- Show the save state quietly in the top bar (Saved, Saving…, Offline, Not saved yet), with a tooltip that says what
+  it means. Don't interrupt people with dialogs for normal saving; the only questions are about changes still on
+  their way when you close the tab, sign out or switch workspace.
 - Works on a phone: the sidebar becomes a sheet, boards scroll sideways.
 
 ## Do and don't
@@ -70,4 +72,4 @@ Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
 - Do reuse `src/ui` (shadcn) and `src/components` before making something new.
 - Do write labels people understand without training ("No one" rather than "Unassigned user").
 - Don't use colour for decoration.
-- Don't show git words to teammates (see CLAUDE.md, writing).
+- Don't show technical words to teammates (see CLAUDE.md, writing).

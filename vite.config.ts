@@ -16,7 +16,7 @@ export default defineConfig({
       manifest: {
         name: 'Sprawniej',
         short_name: 'Sprawniej',
-        description: 'Issues, projects and views for your team, kept in a GitHub repo.',
+        description: 'Plan and track your team’s work: issues, projects and views, on a list or a board.',
         theme_color: '#18181b',
         background_color: '#18181b',
         display: 'standalone',

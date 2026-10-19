@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
 import { changedOnly, groupPatch, keyBetween, neighbours } from '@/data/ordering'
-import { sampleData } from '@/data/sample'
+import { sampleData } from './fixtures/sample'
 
 const issue = Object.values(sampleData().issues)[0]
 

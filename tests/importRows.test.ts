@@ -355,7 +355,7 @@ describe('sending an import', () => {
     const waits: number[] = []
     await runImport(flaky.db, WS, p, () => {}, async (ms) => void waits.push(ms))
     expect(waits).toEqual([1_000, 3_000])
-    const down = fakeDb((fn, _a, n) => (n > 2 ? { error: { message: 'TypeError: Failed to fetch' }, status: 0 } : { data: 1 }))
+    const down = fakeDb((_fn, _a, n) => (n > 2 ? { error: { message: 'TypeError: Failed to fetch' }, status: 0 } : { data: 1 }))
     const saved: number[] = []
     const stopped = runImport(down.db, WS, p, (s) => saved.push(s), noSleep)
     await expect(stopped).rejects.toThrow("We couldn't reach Sprawniej, so the import stopped partway. Check your internet connection.")

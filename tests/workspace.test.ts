@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, spyOn, test } from 'bun:test'
-import { createStore } from 'zustand/vanilla'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 import type { Incoming } from '@/backend/apply'
 import type { ConnectionEvents } from '@/backend/connection'
 import type { ChannelEvents, ChannelsLike, ChannelStatus, Topic } from '@/backend/live'
@@ -353,7 +353,9 @@ describe('keeping up', () => {
     await sleep(5)
     const s = made[0]
     const phases: string[] = []
-    s.env.backend.subscribe((b) => phases.push(b.phase))
+    // setup() makes it a whole store; the workspace only needs getState and setState
+    const phase = s.env.backend as StoreApi<BackendState>
+    phase.subscribe((b) => phases.push(b.phase))
 
     await expect(life.leave(async () => Promise.reject(new Error('A workspace needs at least one owner.')))).rejects.toThrow('owner')
     expect(s.ws.leaving).toBe(false)

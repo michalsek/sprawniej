@@ -96,12 +96,12 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | P22 | roadmap planner | Per-table policies and triggers the plan shows once: generate them in one loop, with a test that every table has them (except `issue_events`, `issue_numbers`) | fixed | 95beeff: helpers.sql `private.wiring` loops; tests/db/wiring.test.ts |
 | P23 | roadmap planner | Realtime checks access at join: a removed member keeps receiving until they rejoin; acceptable for 8 people, document it | fixed | 95beeff: realtime.sql comment, supabase-setup.md |
 | P24 | roadmap planner | The plan text still mentions pgTAP, `seed.sql`, the local stack and `importRepo.ts`; update it for the no-Docker decision | fixed | 95beeff: docs/supabase-plan.md updated |
-| E1 | roadmap planner | `tsconfig.app.json:28` only includes `src`, so `tests/` are never type-checked by `tsc -b` | open | |
-| E2 | roadmap planner | `package.json`: the `cn` package is unused (`src/lib/utils.ts` defines its own `cn`) | open | |
+| E1 | roadmap planner | `tsconfig.app.json:28` only includes `src`, so `tests/` are never type-checked by `tsc -b` | fixed | phase 10 (tsconfig.test.json; tests type-checked) |
+| E2 | roadmap planner | `package.json`: the `cn` package is unused (`src/lib/utils.ts` defines its own `cn`) | fixed | phase 10 |
 | E3 | roadmap planner | `ImportPage.tsx:78` subscribes to the whole store (`useData((s) => s)`), redrawing the wizard on every change | fixed | phase 6 (merged in 38797db) |
 | E4 | roadmap planner | `ImportPage.tsx:304-306` a failed import still shows "done" with only a console warning | fixed | phase 6 (merged in 38797db) |
 | E5 | roadmap planner | `actions.ts` `createLabel` accepts a duplicate name while `updateLabel` refuses it | fixed | phase 5: returns the existing same-name label |
-| E6 | roadmap planner | `Markdown.tsx:24` runs `linkReferences`/`findByRef` (a scan of all issues per reference) in a store selector on every change | open | |
+| E6 | roadmap planner | `Markdown.tsx:24` runs `linkReferences`/`findByRef` (a scan of all issues per reference) in a store selector on every change | fixed | phase 10 (ref index) |
 | E7 | roadmap planner | `linearMap.ts:74` the accent-stripping regex uses invisible literal combining characters instead of `\u0300-\u036f` | fixed | 70b978b (amendment A4) |
 | E8 | roadmap planner | `joinLink.ts:17` + `config.ts:14`: no join link at all on localhost, so stage A can't make invite links | fixed | phase 8 (merged) |
 | E9 | phase 2 planner | `linearMap.ts:141-146,326` links are rewritten against Linear refs: after renumbering (ENG-2 to ENG-4) or a changed key, a link points at the wrong issue or isn't rewritten | fixed | phase 6 (merged in 38797db) |
@@ -116,11 +116,11 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E18 | phase 2 planner | `src/lib/plain.ts:8` same invisible combining-character regex as E7 | fixed | 70b978b (amendment A4) |
 | E19 | phase 2 planner | `tests/fixtures/linear.ts:1` mentions a browser test's pretend Linear that doesn't exist | fixed | phase 6 (merged in 38797db) |
 | E20 | phase 2 planner | `tests/linearImport.test.ts:123,274,283,295,302` invalid `now` values silently switch the archive rule off | fixed | 70b978b (amendment A5) |
-| E21 | phase 1 planner | `vite.config.ts:20` the app's install description still says the workspace is kept in a GitHub repo | open | phase 10 |
+| E21 | phase 1 planner | `vite.config.ts:20` the app's install description still says the workspace is kept in a GitHub repo | fixed | phase 10 (manifest) |
 | E22 | phase 1 planner | `src/data/select.ts:192` `isUnread` compares ISO strings, so database times must come in `toISOString` form (P19) | fixed | 2b367bd: `iso()` on every model time |
 | E23 | phase 1 planner | `actions.ts` `createIssue`: an issue created as Done gets `completedAt: null`; the new trigger sets it (small behaviour change) | fixed | phase 5 |
 | E24 | phase 1 planner | `actions.ts` `toldRecently` moves to the database (`check_note` trigger); delete it | fixed | phase 5 (the `check_note` trigger) |
-| E25 | phase 1 planner | `.github/workflows/pages.yml` runs `bun test`; safe only while `tests/db` stays gated on `SPRAWNIEJ_DB_TESTS` | open | document in supabase-setup.md |
+| E25 | phase 1 planner | `.github/workflows/pages.yml` runs `bun test`; safe only while `tests/db` stays gated on `SPRAWNIEJ_DB_TESTS` | fixed | phase 10 (documented in supabase-setup.md) |
 | E26 | phase 1 planner | Labels added right after an issue is created will write history rows (today none); history folding or one-call create should hide them | fixed | phase 7 (merged in cca59f9) |
 | E27 | phase 1 planner | Someone with a fresh profile who later links GitHub should have their old imported profile merged into theirs (needs a cross-workspace move) | won't do | no import from a GitHub workspace in this run, so no such profiles exist |
 | E28 | phase 2 implementer | `linearMap.ts` `orderKeys`: when two Linear teams join one team here, their issues can get the same `sortOrder` | fixed | phase 2 fix round (F4) |
@@ -134,8 +134,8 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E36 | phase 2 code review | `docs/linear-import.md` still describes files, parts of 300 files and archive files | fixed | phase 2 fix round (F11) |
 | E37 | phase 2 code review | `ImportPage.tsx` builds the plan (with fresh ids) inside `useMemo` during render | fixed | phase 2 fix round (F9) |
 | E38 | phase 2 code review | `importFiles` (`actions.ts`) and `relinkArchived` (`relink.ts`) have no callers | fixed | phase 2 fix round (F10) |
-| E39 | phase 2 code review | `src/model/schema.ts` uses `.passthrough()`, deprecated in Zod 4 (`.loose()`) | open | phase 10 |
-| E40 | phase 2 code review | `src/data/relink.ts:97` compares with key-order-sensitive `JSON.stringify` while `linearMap` has its own `same` | open | phase 10 (relink.ts mostly goes) |
+| E39 | phase 2 code review | `src/model/schema.ts` uses `.passthrough()`, deprecated in Zod 4 (`.loose()`) | fixed | phase 10 (`.loose()`) |
+| E40 | phase 2 code review | `src/data/relink.ts:97` compares with key-order-sensitive `JSON.stringify` while `linearMap` has its own `same` | fixed | phase 10 (relink.ts deleted) |
 | E41 | phase 2 QA | A new Linear issue sorting first makes every issue of its team come back as changed (sort keys rebuilt per run) | fixed | phase 2 fix round (F4) |
 | E42 | phase 2 QA | Guest rows carry `githubId: 0` but `profiles.github_id` is unique; the client mapping must send null | fixed | 2b367bd: `rows.ts` maps githubId 0 to null |
 | E43 | phase 2 QA | A team row can take a Linear id another team still holds (unique per workspace) | fixed | phase 2 fix round (F1) |
@@ -150,14 +150,14 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E52 | phase 2 QA re-check | Two teams here swapping their Linear teams emitted two non-null links, colliding on the unique Linear id | fixed | phase 2 last fix (release first) |
 | E53 | phase 2 QA re-check | An invalid sort key in a team made the import wizard's Continue button silently do nothing | fixed | phase 2 last fix (error shown on the people step) |
 | E54 | phase 1 implementer | Inbox notes must be inserted without asking for the rows back (`.select()` fails: the sender can't read others' notes) | fixed | phase 5 (notes sent without `.select()`) |
-| E55 | phase 1 implementer | The realtime sign-in token must be set before joining a private channel, or the join is refused | open | phase 4 |
-| E56 | phase 1 implementer | `db reset --linked` also deletes sign-in accounts: fine in development, a hazard anywhere else | open | phase 11 runbook |
+| E55 | phase 1 implementer | The realtime sign-in token must be set before joining a private channel, or the join is refused | fixed | phase 4 (`setAuth()` before joining) |
+| E56 | phase 1 implementer | `db reset --linked` also deletes sign-in accounts: fine in development, a hazard anywhere else | fixed | phase 10 (runbook warning and project check) |
 | E57 | phase 1 implementer | Deletion notes of a deleted workspace stay until the 45-day job | won't do | harmless, nobody can read them, the job removes them |
-| E58 | phase 3 planner | `project.ts:127` sorts comments by `createdAt` with no tiebreak | open | phase 3 reducer tiebreaks by id; project.ts goes in phase 10 |
-| E59 | phase 3 planner | `select.ts` `isUnread` does `read.includes` per note (quadratic for unread counts) | open |  |
-| E60 | phase 3 planner | `schema.ts:14` `iso = z.string()` checks nothing, so a `+00:00` time passes silently | open |  |
+| E58 | phase 3 planner | `project.ts:127` sorts comments by `createdAt` with no tiebreak | fixed | phase 10 (project.ts deleted) |
+| E59 | phase 3 planner | `select.ts` `isUnread` does `read.includes` per note (quadratic for unread counts) | fixed | phase 10 |
+| E60 | phase 3 planner | `schema.ts:14` `iso = z.string()` checks nothing, so a `+00:00` time passes silently | won't do | rows are no longer parsed by the schemas; `rows.ts` normalises every time with `iso()` |
 | E61 | phase 3 planner | `actions.ts` `markAllRead` takes the newest `at` by string compare; right only while all times are in Z form | fixed | 2b367bd: all times in Z form |
-| E62 | phase 3 planner | `docs/supabase-plan.md` `broadcast()` text differs from the shipped one (keys in updates, `last_number` skipped, profiles loop) | open | phase 10 docs |
+| E62 | phase 3 planner | `docs/supabase-plan.md` `broadcast()` text differs from the shipped one (keys in updates, `last_number` skipped, profiles loop) | fixed | phase 10 (plan status and pointer) |
 | E63 | phase 1 QA | CRITICAL: `import_rows` let an admin of their own workspace overwrite rows of any other workspace (issues, comments, teams, labels, projects, views, followers) | fixed | phase 1 fix round, commit after 62a9e22 (S1) |
 | E64 | phase 1 QA | `import_rows` let an admin rewrite a member's comment, bypassing the author-only rule | fixed | phase 1 fix round, commit after 62a9e22 (S2) |
 | E65 | phase 1 QA | People outside a workspace can be attached as assignee, team member, follower or project lead | fixed | phase 1 fix round, commit after 62a9e22 (S3) |
@@ -178,14 +178,14 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E80 | phase 1 review | Redundant indexes already covered by primary keys | won't do | the foreign-key advisor wants indexes that start with the foreign-key columns |
 | E81 | phase 1 QA | Re-imports never update `archived_at` or `sort_order` | won't do | by design: archive state and order here are kept |
 | E82 | phase 1 QA | Deleting a workspace also sends one message per guest profile | won't do | harmless |
-| E83 | phase 1 review | The team key pattern is copied three times and the login pattern four times in the app | open | phase 10 |
-| E84 | phase 1 review | `src/data/store.ts:61` issue references match `[A-Z][A-Z0-9]*`, looser than team keys | open |  |
+| E83 | phase 1 review | The team key pattern is copied three times and the login pattern four times in the app | fixed | phase 10 |
+| E84 | phase 1 review | `src/data/store.ts:61` issue references match `[A-Z][A-Z0-9]*`, looser than team keys | fixed | phase 10 |
 | E85 | phase 4 planner | Sign-out leaves other `sprawniej:` keys and comment drafts on a shared computer | fixed | phase 4 fix round |
 | E86 | phase 4 planner | `session.toured` is never read (the tour uses its own key) | fixed | phase 4 fix round |
 | E87 | phase 4 planner | `Crash.tsx:37` and docs/design.md promise changes are kept on this device | fixed | phase 5 (Crash, chip tips, user guide) |
-| E88 | phase 4 planner | `Step.tsx:33` `Problem` uses a raw red instead of a theme colour | open |  |
-| E89 | phase 4 planner | `Tour.tsx:28-33` queries the page on every animation frame while a tip is open | open |  |
-| E90 | phase 4 planner | `updates.ts:50-52` adds an interval and listeners on every registration and never removes them | open |  |
+| E88 | phase 4 planner | `Step.tsx:33` `Problem` uses a raw red instead of a theme colour | fixed | phase 10 |
+| E89 | phase 4 planner | `Tour.tsx:28-33` queries the page on every animation frame while a tip is open | won't do | the loop runs only while one of 4 first-visit tips is open |
+| E90 | phase 4 planner | `updates.ts:50-52` adds an interval and listeners on every registration and never removes them | fixed | phase 10 |
 | E91 | phase 3 QA | A big description can stay stale or empty for good (a small update clears the partial flag) | fixed | phase 3 fix round, commit after 62a9e22 (B1) |
 | E92 | phase 3 QA + review | An unsaved edit of yours keeps a row on screen after a teammate deletes it, and asks to fetch an empty key; a failed insert leaves a ghost | fixed | phase 3 fix round, commit after 62a9e22 (B2) |
 | E93 | phase 3 QA | Unsaved edits are matched by value, so A, B, A edits flicker | fixed | phase 3 fix round, commit after 62a9e22 (B3) |
@@ -196,7 +196,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E98 | phase 3 review | Typed mirror thrown away (`as unknown as`), non-null assertions, untyped KNOWN sets | fixed | phase 3 fix round, commit after 62a9e22 (C3, C5) |
 | E99 | phase 3 review | Write helpers send columns signed-in people can't write; `Change.fields` isn't limited to writable columns | fixed | phase 3 fix round, commit after 62a9e22 (C4) |
 | E100 | phase 3 review | `src/config.ts:5` env reads have no types | fixed | phase 3 fix round, commit after 62a9e22 (C6) |
-| E101 | phase 3 review | `select.ts:65` `PRIORITY_RANK.get(...)!` gives NaN for an unknown priority | open |  |
+| E101 | phase 3 review | `select.ts:65` `PRIORITY_RANK.get(...)!` gives NaN for an unknown priority | fixed | phase 10 |
 | E102 | phase 4 review | A failure while opening (channel join or a bad row) leaves the spinner up for good | fixed | phase 4 fix round |
 | E103 | phase 4 review | Offline, the GitHub button says GitHub isn't switched on | fixed | phase 4 fix round |
 | E104 | phase 4 review | Sign-out tells other tabs before the sign-in is gone (double reloads, timing-dependent) | fixed | phase 4 fix round |
@@ -214,17 +214,17 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E116 | phase 5 planner | `Editor.tsx:26` imports `mergeText` from `src/sync/merge.ts` (deleted in phase 10) | fixed | phase 5 (`src/editor/mergeText.ts`) |
 | E117 | phase 5 planner | `last_number` is never broadcast, so `team.lastNumber` goes stale (number guesses corrected by the saved row) | won't do | the saved row corrects the number; broadcasting every counter change is noise |
 | E118 | phase 5 planner | Switching workspace has no "not saved yet" warning like signing out | fixed | phase 5 (`useSwitchWorkspace` asks) |
-| E119 | phase 5 planner | docs/architecture.md and docs/design.md still describe file merging and changes kept on the device | open | phase 10 |
+| E119 | phase 5 planner | docs/architecture.md and docs/design.md still describe file merging and changes kept on the device | fixed | phase 10 (docs rewritten) |
 | E120 | phase 6 planner | Views can't change `team_id` through `import_rows` | won't do | a Linear view moving teams is rare; recreate it by hand |
 | E121 | phase 6 planner | `loadTable` reloads only active issues, so a big catch-up misses archived rows | fixed | phase 9 (merged in 80b8021) |
 | E122 | phase 6 planner | Existing teams never get newly matched people as members on re-import | fixed | phase 6 (merged in 38797db) |
 | E123 | phase 7 planner | `statusOf` uses a non-null assertion: an unknown status crashes a screen | fixed | phase 7 (merged in cca59f9) |
 | E124 | phase 7 planner | Every description save writes its own history row | won't do | folded on screen; about 100 bytes a row is fine for 8 people |
 | E125 | phase 7 planner | The nightly archive doesn't take sub-issues along, while archiving by hand does | won't do | each finished issue goes on its own, as the old tidy-up did |
-| E126 | phase 7 planner | Pictures nobody uses any more are never removed, and pictures aren't in any backup | open | phase 10 (backup workflow notes) |
+| E126 | phase 7 planner | Pictures nobody uses any more are never removed, and pictures aren't in any backup | won't do | unused pictures are tiny for 8 people (1 GB limit); pictures aren't in the dump, noted in backup.yml and architecture.md |
 | E127 | phase 8 planner | Admins can set any invite expiry (years) | fixed | phase 8 (merged) |
-| E128 | phase 8 planner | In stage B the email confirm link drops `#/join/<token>` | open | stage B (later) |
-| E129 | phase 8 planner | `invites.for_login` is no longer written | open | phase 10 |
+| E128 | phase 8 planner | In stage B the email confirm link drops `#/join/<token>` | won't do | confirmations are off in stage A; written into the stage B checklist in supabase-setup.md |
+| E129 | phase 8 planner | `invites.for_login` is no longer written | won't do | a harmless nullable column; dropping it needs a migration for no gain |
 | E130 | phase 8 planner | GitHub added later never fills `github_id` or an empty avatar | won't do | no import from a GitHub workspace in this run, nothing to claim |
 | E131 | phase 8 planner | There is no way in the app to delete a workspace | won't do | not needed for the first team; owners can ask |
 | E132 | phase 9 planner | Catch-up reads changed profiles across all your workspaces and filters in the browser | fixed | phase 9 (merged in 80b8021) |
@@ -238,8 +238,8 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E140 | phase 4 QA | `cleanup-tests.sql` wipes every dbtest workspace, also another run's in progress | won't do | test runs happen one at a time; documented in the briefs |
 | E141 | phase 5 implementer | supabase-js writes had no timeout: a dead connection hung saving for good | fixed | phase 5 (`send.ts`, 30 s) |
 | E142 | phase 5 implementer | PostgREST answers P0002 with HTTP 500, so retrying by status alone would retry a missing row forever | fixed | phase 5 (`problems.ts` reads the code first) |
-| E143 | phase 5 implementer | `SetupWorkspace.tsx:29` dead GitHub-era screen ignores `startWorkspace`'s promise | open | phase 10 |
-| E144 | phase 5 implementer | `select.ts:214` `isUnread` still checks `read.includes` though `read` is always empty | open | phase 10 |
+| E143 | phase 5 implementer | `SetupWorkspace.tsx:29` dead GitHub-era screen ignores `startWorkspace`'s promise | fixed | phase 10 (deleted) |
+| E144 | phase 5 implementer | `select.ts:214` `isUnread` still checks `read.includes` though `read` is always empty | fixed | phase 10 |
 | E145 | phase 5 QA + review | A retried insert batched with fresh inserts makes the fresh ones undone (and fresh inbox notes silently dropped) | fixed | phase 5 fix round (W1) |
 | E146 | phase 5 QA | Changes made while the workspace re-opens are lost (also typed text handed over on unmount) | fixed | phase 5 fix round (W2) |
 | E147 | phase 5 QA | "Too far back" uses the newest row's time, so a quiet workspace re-opens on every catch-up | fixed | phase 5 fix round (W3) |
@@ -257,11 +257,11 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E159 | phase 7 review | The history signature claims reordering doesn't reload history, but `updatedAt` makes it | fixed | phase 7 (merged in cca59f9) |
 | E160 | phase 7 QA | Clicking into a description and out saves a tidied version and writes a history line | fixed | phase 7 (merged in cca59f9) |
 | E161 | phase 7 QA | After removal, signed picture addresses stay in memory for up to a day | fixed | phase 7 (merged in cca59f9) |
-| E162 | phase 7 review | Every history line subscribes to the whole people/projects/labels/issues maps | open |  |
+| E162 | phase 7 review | Every history line subscribes to the whole people/projects/labels/issues maps | won't do | one issue page at a time; the maps change rarely |
 | E163 | phase 6 review | Database and network error text can reach the import screen | fixed | phase 6 (merged in 38797db) |
 | E164 | phase 6 review | `carry` for Try again has two sources of truth and is lost on reload; a simpler rule exists | fixed | phase 6 (merged in 38797db) |
 | E165 | phase 6 review | `buildImport` is ~360 lines; the kept-order rule is written twice | fixed | phase 6 (merged in 38797db) |
-| E166 | phase 6 review | `paged` runs an exact count query on every page | open |  |
+| E166 | phase 6 review | `paged` runs an exact count query on every page | won't do | the count saves a last empty request and is cheap at this size; noted for a bigger team |
 | E167 | phase 5 fix round | `bunx supabase db query` sometimes fails to log in to the pooler under load (parallel runs); retrying works | won't do | a CLI hiccup, not app code; scripts retry |
 | E168 | phase 5 fix round | Cleanup must delete workspaces before profiles (the last-owner rule refuses the other order) | fixed | briefs updated |
 | E169 | phase 8 QA | Two owners stepping down or leaving at the same moment can leave a workspace with no owner | fixed | phase 8 (merged) |
@@ -281,9 +281,14 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E183 | phase 9 review | A copy that reads back but crashes blocks the workspace for good | fixed | phase 9 (merged in 80b8021) |
 | E184 | phase 9 review | A tab that hasn't heard about the sign-out can write the copy back after it was deleted | fixed | phase 9 (merged in 80b8021) |
 | E185 | phase 9 review | A copy that's too big is encoded again on every change | fixed | phase 9 (merged in 80b8021) |
-| E186 | phase 6 fix round | `tests/actions.test.ts` "archiving takes sub-issues along" failed about 1 in 4 full runs before the merge | open | phase 10 (check for flakiness) |
+| E186 | phase 6 fix round | `tests/actions.test.ts` "archiving takes sub-issues along" failed about 1 in 4 full runs before the merge | fixed | phase 10 (20 full runs pass; the old sync code it touched is gone) |
 | E187 | phase 6 fix round | Leaving the import's done screen through Settings forgets the finished import | won't do | harmless: the import is saved; the done screen is only a summary |
-| E188 | phase 9 fix round | `tests/workspace.test.ts:356` calls `.subscribe` on a store type without it (hidden because tests aren't type-checked) | open | phase 10 (E1) |
+| E188 | phase 9 fix round | `tests/workspace.test.ts:356` calls `.subscribe` on a store type without it (hidden because tests aren't type-checked) | fixed | phase 10 |
+| E189 | phase 10 planner | Local main was far ahead of the fork's main on GitHub, so the Pages build would publish the old code | open | phase 11 (push main first) |
+| E190 | phase 10 planner | The repo is public, so backup artifacts must be encrypted | fixed | phase 10 (backup.yml encrypts with a passphrase) |
+| E191 | phase 10 planner | `pages.yml` builds without the repository variables (the site would say it isn't set up) | open | phase 11 |
+| E192 | phase 10 planner | No password reset without an email sender | won't do | stage B; the guide says what to do meanwhile |
+| E193 | phase 10 code | 31 picture folders belong to workspaces that no longer exist | open | phase 11 (wipe and pictures cleanup) |
 
 ## Waiting on the user
 

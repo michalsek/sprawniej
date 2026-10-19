@@ -94,7 +94,7 @@ const names = <T>(...keys: (keyof Known<T> & string)[]): ReadonlySet<string> => 
 
 /** the fields each kind has (or makes up from other tables), so none of them is kept in `extra` as well */
 const KNOWN = {
-  workspace: names<Workspace>('id', 'name', 'format', 'createdAt'),
+  workspace: names<Workspace>('id', 'name', 'createdAt'),
   person: names<Person & Linked & { id: string; linearIds: string[] }>('id', 'login', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'linearId', 'linearIds'),
   team: names<Team & Linked & { id: string }>('id', 'key', 'name', 'emoji', 'members', 'createdAt', 'lastNumber', 'autoArchive', 'linearId'),
   label: names<Label & Linked>('id', 'name', 'color', 'linearId'),
@@ -107,7 +107,7 @@ const KNOWN = {
   comment: names<Comment & Linked>('id', 'issue', 'author', 'createdAt', 'editedAt', 'body', 'linearId'),
   view: names<View & Linked>('id', 'name', 'emoji', 'description', 'owner', 'team', 'filters', 'display', 'createdAt', 'linearId'),
   inbox: names<InboxItem>('id', 'type', 'issue', 'actor', 'at', 'comment', 'status', 'readAt'),
-  readState: names<ReadState>('readUntil', 'read'),
+  readState: names<ReadState>('readUntil'),
 }
 
 /** a JSON column that holds an object (extra, filters, display); anything else reads as {} */
@@ -324,9 +324,8 @@ export function rowToInbox(row: Row<'inbox'>, r: Resolve): InboxItem {
   }
 }
 
-/** notes read one by one carry their own read_at, so `read` stays empty */
 export function rowToReadState(row: Row<'read_state'>): ReadState {
-  return { ...fromExtra(row.extra, KNOWN.readState), readUntil: isoOrNull(row.read_until), read: [] }
+  return { ...fromExtra(row.extra, KNOWN.readState), readUntil: isoOrNull(row.read_until) }
 }
 
 // ---------- the app to rows ----------

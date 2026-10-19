@@ -159,7 +159,7 @@ export function derive(src: Source, data: StoreSlice, dirty: Dirty, ctx: ApplyCo
 
   if (dirty.readState && meId) {
     const row = src.shown('read_state', { profile_id: meId, workspace_id: workspaceId })
-    const next = row ? rows.rowToReadState(row) : { readUntil: null, read: [] }
+    const next = row ? rows.rowToReadState(row) : { readUntil: null }
     if (!equal(data.readState, next)) p.out.readState = next
   }
 

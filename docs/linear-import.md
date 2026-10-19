@@ -1,25 +1,28 @@
 # Importing from Linear
 
-Settings → Import from Linear brings a Linear workspace over in one go. It talks to Linear's GraphQL API straight
-from the browser (Linear allows that), so nothing passes through a server of ours.
+Settings › Import from Linear brings a Linear workspace over in one go. It talks to Linear's GraphQL API straight
+from the browser (Linear allows that): Linear's data comes straight to your browser and goes from there into the
+workspace.
 
 ## Steps
 
-1. **Key**: paste a Linear personal API key (Linear → Settings → Security & access → Personal API keys). It is
+The wizard has four steps (Key, Teams, People, Import):
+
+1. **Key**: paste a Linear personal API key (Linear › Settings › Security & access › Personal API keys). It is
    used for this import only and not stored.
 2. **Teams**: pick which Linear teams to bring. Each becomes a Sprawniej team with the same key (`ENG`), so
    `ENG-123` stays `ENG-123`. If a team here already uses that key, the issues join that team (handy for the
    first team made during setup); type another key to make a new team instead. If that team already has (or once
    had) an issue with the same number, the imported one gets the next free number, and the check step lists these.
-3. **People**: Linear people are matched to the people in the workspace by name (only people who are in it now; someone
+3. **People** ("Who's who?"): Linear people are matched to the people in the workspace by name (only people who are in it now; someone
    who left can't be picked). You can fix any match. Someone
    with no match comes as a person who **hasn't joined** (`~jan-kowalski`): their issues stay assigned to
    them, their comments are theirs and views about them work. They get no inbox notes and can't be @mentioned. You
    can also pick **No one**: their issues come in unassigned, and their comments say who wrote them. Someone linked
    to someone here before (by an earlier import) is matched to them by their Linear id, whatever their names.
-4. **Check**: how many teams, issues, comments, projects, labels and views will come over, and which views can't
-   keep all their filters. When nothing changed in Linear since the last import, it says everything is already here.
-5. **Import**: admins and owners only. A progress bar shows how much is saved; keep the page open until it's done.
+4. **Import**: first a check ("Ready to import"): how many teams, issues, comments, projects, labels and views will
+   come over, and which views can't keep all their filters. When nothing changed in Linear since the last import, it
+   says everything is already here. Then **Import**, for admins and owners only. A progress bar shows how much is saved; keep the page open until it's done.
    If it stops partway (the connection dropped, or a teammate added an issue that took a number the import needed),
    it says why. Everything saved until then stays, and **Try again** works out the rest from what's here now and
    brings it over: nothing comes over twice. That also works after reloading the page: a team the import brings
@@ -45,7 +48,7 @@ database.
 | Linear | Sprawniej |
 | --- | --- |
 | Team (key, name, icon emoji) | Team |
-| Workflow state | Status: by name first (`In Review`), then by Linear's state type (`started` → In Progress, `unstarted` → Todo, `backlog` → Backlog, `completed` → Done, `canceled` → Canceled). `Triage` becomes Backlog. |
+| Workflow state | Status: by name first (`In Review`), then by Linear's state type (`started` is In Progress, `unstarted` Todo, `backlog` Backlog, `completed` Done, `canceled` Canceled). `Triage` becomes Backlog. |
 | Priority 0 to 4 | Same numbers |
 | Issue number, title, description (Markdown) | Same |
 | Assignee, creator | The matched person, the person who hasn't joined, or no one |

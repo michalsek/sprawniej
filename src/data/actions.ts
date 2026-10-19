@@ -507,8 +507,8 @@ export function deleteInboxItems(ids?: string[], { readOnly = false } = {}) {
 }
 
 const DAY = 86_400_000
-/** how long inbox notes are kept: read ones, unread ones, and anyone's (the database's nightly job keeps to it) */
-export const INBOX_KEEP = { read: 30 * DAY, unread: 90 * DAY, anyone: 180 * DAY }
+/** how long inbox notes are kept: read ones and unread ones (the database's nightly job removes older ones) */
+export const INBOX_KEEP = { read: 30 * DAY, unread: 90 * DAY }
 
 // ---------- labels ----------
 

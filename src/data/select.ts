@@ -62,7 +62,8 @@ const PRIORITY_RANK = new Map(PRIORITY_ORDER.map((p, i) => [p, i]))
 export function compareIssues(ordering: Ordering): (a: Issue, b: Issue) => number {
   switch (ordering) {
     case 'priority':
-      return (a, b) => PRIORITY_RANK.get(a.priority)! - PRIORITY_RANK.get(b.priority)! || byOrder(a, b)
+      // a priority this version doesn't know (from a newer one) sorts last instead of breaking the order
+      return (a, b) => (PRIORITY_RANK.get(a.priority) ?? PRIORITY_RANK.size) - (PRIORITY_RANK.get(b.priority) ?? PRIORITY_RANK.size) || byOrder(a, b)
     case 'due':
       // soonest first; no due date last
       return (a, b) => (a.dueDate ?? '9999').localeCompare(b.dueDate ?? '9999') || byOrder(a, b)
@@ -167,7 +168,7 @@ export function nestChildren(issues: Issue[]): { issue: Issue; depth: number }[]
   const out: { issue: Issue; depth: number }[] = []
   const seen = new Set<string>()
   const visit = (i: Issue, depth: number) => {
-    if (seen.has(i.id)) return // a parent loop in hand-edited files must not hang the app
+    if (seen.has(i.id)) return // a parent loop (say, from an import) must not hang the app
     seen.add(i.id)
     out.push({ issue: i, depth })
     for (const k of kids.get(i.id) ?? []) visit(k, depth + 1)
@@ -209,9 +210,8 @@ export function projectProgress(projectId: string, issues: Issue[]): { done: num
   return { done: mine.filter((i) => statusOf(i.status).group === 'completed').length, total: mine.length }
 }
 
-/** not marked as read yet (state/<login>.json, or read_at in the database) */
-export const isUnread = (n: Pick<InboxItem, 'id' | 'at' | 'readAt'>, r: ReadState) =>
-  !n.readAt && !r.read.includes(n.id) && (!r.readUntil || n.at > r.readUntil)
+/** not marked as read yet: not read on its own (`readAt`) and newer than everything marked read at once */
+export const isUnread = (n: Pick<InboxItem, 'at' | 'readAt'>, r: ReadState) => !n.readAt && (!r.readUntil || n.at > r.readUntil)
 
 type WithMembers = { members: Record<string, Member>; me: Person | null }
 

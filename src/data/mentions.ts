@@ -1,6 +1,6 @@
 /**
- * @people in Markdown. They stay plain "@login" text in the files (readable on GitHub, where @login even links to
- * the profile). Only logins of people in the workspace count.
+ * @people in Markdown. They stay plain "@handle" text in descriptions and comments, so they read well anywhere.
+ * Only handles of people in the workspace count.
  */
 import type { Person } from '@/model/schema'
 

@@ -1,6 +1,6 @@
 /**
  * How each page shows its issues (list or board, grouping, ordering…), remembered in this browser only.
- * Saved views carry their own display in the repo; this is for built-in pages and personal overrides.
+ * Saved views carry their own display; this is for built-in pages and personal overrides.
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'

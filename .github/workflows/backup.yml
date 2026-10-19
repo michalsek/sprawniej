@@ -1,0 +1,72 @@
+name: Back up the database
+
+# Not switched on yet: it runs only when started by hand (Actions, Back up the database, Run workflow, or
+# `gh workflow run backup.yml`). To run it every night, remove the # in front of the two schedule lines below.
+# It needs two repository secrets first (Settings, Secrets and variables, Actions):
+#   SUPABASE_DB_URL     the session pooler connection string with the database password (Project Settings,
+#                       Database, Connect, Session pooler):
+#                       postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
+#   BACKUP_PASSPHRASE   a long random passphrase. The dump is encrypted with it, because anyone signed in to GitHub
+#                       can download the artifacts of a public repository. Keep it in a password manager.
+# Pictures are not in the dump: they stay in the "pictures" bucket and are not backed up yet.
+# Restoring is described in docs/supabase-setup.md (Backups); try it once on a throwaway project before relying on it.
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: '17 3 * * *'   # every night at 03:17 UTC, after the nightly jobs (02:17 to 02:37)
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    container: postgres:17   # pg_dump must be at least the server's version (Postgres 17)
+    timeout-minutes: 20
+    steps:
+      - name: Check the secrets
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DATABASE_URL" ] || [ -z "$PASSPHRASE" ]; then
+            echo "::error::Add the repository secrets SUPABASE_DB_URL and BACKUP_PASSPHRASE first (see the top of this file)."
+            exit 1
+          fi
+      - name: Dump
+        env:
+          DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          pg_dump "$DATABASE_URL" --no-owner --no-privileges \
+            --schema=public --schema=private --schema=auth --schema=storage \
+            --format=custom --file=sprawniej.dump
+      - name: Encrypt
+        env:
+          PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          apt-get update -qq && apt-get install -y -qq --no-install-recommends gnupg > /dev/null
+          printf '%s' "$PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
+            --symmetric --cipher-algo AES256 --output "sprawniej-$(date -u +%F).dump.gpg" sprawniej.dump
+          rm sprawniej.dump
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sprawniej-db-${{ github.run_id }}
+          path: sprawniej-*.dump.gpg
+          retention-days: 30
+          if-no-files-found: error
+
+  # One request to the project's API, so a scheduled run also counts as activity
+  # (free projects pause after a week without any).
+  hello:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Say hello to the project
+        run: |
+          curl -fsS "$URL/auth/v1/settings" -H "apikey: $KEY" -o /dev/null
+        env:
+          URL: ${{ vars.VITE_SUPABASE_URL }}
+          KEY: ${{ vars.VITE_SUPABASE_KEY }}

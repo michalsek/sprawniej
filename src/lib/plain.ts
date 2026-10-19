@@ -8,3 +8,6 @@ export const plain = (s: string) =>
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .replace(/ł/g, 'l')
+
+/** a name made comparable: no accents, no case, letters and digits only ("Łukasz B." → "lukaszb") */
+export const plainName = (s: string) => plain(s).replace(/[^a-z0-9]/g, '')

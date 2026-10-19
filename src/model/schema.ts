@@ -1,38 +1,33 @@
 /**
- * The shape of every file in a workspace repo. docs/data-format.md describes the same thing in plain words,
- * with examples; keep the two in step. Files are checked with these schemas when they are read, and a file that
- * doesn't fit is skipped with a warning instead of breaking the app.
+ * The shapes the app works with: a workspace, people, teams, issues, comments, projects, views and inbox notes.
+ * src/backend/rows.ts turns the database's rows into these and back; docs/data-format.md describes the tables.
  *
- * `.passthrough()` keeps fields we don't know yet, so an older app never deletes what a newer one wrote.
+ * `.loose()` keeps fields we don't know yet (rows.ts keeps them in each row's `extra`), so an older app never
+ * deletes what a newer one wrote.
  */
 import { z } from 'zod'
 import { PRIORITY_IDS, STATUS_IDS } from './status'
 
-/** Bump only together with a MAJOR release and a migration (see CLAUDE.md). */
-export const FORMAT_VERSION = 1
-
 const iso = z.string() // ISO 8601 date-time
-const login = z.string() // GitHub login
+const login = z.string() // @handle
 
-/** a shape's own fields, without the "anything else" `.passthrough()` allows, so a misspelled field doesn't compile */
+/** a shape's own fields, without the "anything else" `.loose()` allows, so a misspelled field doesn't compile */
 export type Known<T> = { [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K] }
 
-/** sprawniej.json at the repo root */
+/** a workspace (the workspaces table) */
 export const workspaceSchema = z
   .object({
     name: z.string(),
-    /** the file format (sprawniej.json only; the database has none) */
-    format: z.number().int().optional(),
-    /** the workspace's id in the database (none in a workspace repo) */
+    /** the workspace's id */
     id: z.string().optional(),
     createdAt: iso,
   })
-  .passthrough()
+  .loose()
 export type Workspace = z.infer<typeof workspaceSchema>
 
 /**
- * people/<login>.json, written by that person when they first open the workspace (or before that, when someone from
- * Linear is linked to their account; `linearIds` remembers who they were in Linear, see src/data/relink.ts)
+ * Someone with a profile: a name and an @handle (the profiles table). `linearIds` remembers who they were in Linear
+ * once someone from Linear is linked to their account (Settings › People from Linear).
  */
 export const personSchema = z
   .object({
@@ -43,13 +38,13 @@ export const personSchema = z
     /** they typed their name in Sprawniej (Settings › Your account): their GitHub name doesn't replace it */
     nameSetHere: z.boolean().optional(),
   })
-  .passthrough()
+  .loose()
 export type Person = z.infer<typeof personSchema>
 
 /**
- * Someone the Linear import brought who isn't in the workspace yet: `people/~jan-kowalski.json`, written by whoever
- * imported. Their issues, comments and views keep pointing at them; linking them to a GitHub account (Settings, or a
- * later import that matches them) moves all of that over. A `~` can't start a GitHub login, so they never clash, and they get no inbox notes.
+ * Someone the Linear import brought who isn't in the workspace yet (`~jan-kowalski`). Their issues, comments and
+ * views keep pointing at them; inviting them or linking them to someone's account (Settings › People from Linear)
+ * moves all of that over. A `~` can't start a handle, so they never clash, and they get no inbox notes.
  */
 export const isGuest = (login: string | null | undefined): boolean => !!login && login.startsWith('~')
 
@@ -66,21 +61,21 @@ export const ROLES = ['owner', 'admin', 'member'] as const
 export type Role = (typeof ROLES)[number]
 export const isRole = (v: unknown): v is Role => (ROLES as readonly unknown[]).includes(v)
 
-/** someone's place in a workspace (only the database keeps this; a workspace repo has none) */
+/** someone's place in a workspace (the workspace_members table) */
 export interface Member {
   role: Role
   /** when they left or were removed; their name still shows on old work */
   removedAt: string | null
 }
 
-/** labels/<id>.json */
+/** a label (the labels table) */
 export const labelSchema = z
   .object({
     id: z.string(),
     name: z.string(),
     color: z.string(),
   })
-  .passthrough()
+  .loose()
 export type Label = z.infer<typeof labelSchema>
 
 /** months after which finished issues are archived, unless a team says otherwise (team.autoArchive) */
@@ -89,7 +84,10 @@ export const AUTO_ARCHIVE_MONTHS = 6
 /** a team key (ENG): a capital letter, then up to six capitals or digits; the database checks the same */
 export const TEAM_KEY_PATTERN = /^[A-Z][A-Z0-9]{0,6}$/
 
-/** teams/<KEY>/team.json */
+/** an @handle: letters, digits and dashes, not starting with a dash, at most 39; the same rule as private.valid_login */
+export const LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/
+
+/** a team (the teams table; `members` from team_members) */
 export const teamSchema = z
   .object({
     key: z.string().regex(TEAM_KEY_PATTERN),
@@ -102,10 +100,10 @@ export const teamSchema = z
     /** finished issues are archived this many months after they were finished; 0 = never; missing = 6 */
     autoArchive: z.number().int().nonnegative().optional(),
   })
-  .passthrough()
+  .loose()
 export type Team = z.infer<typeof teamSchema>
 
-/** The front matter of teams/<KEY>/issues/<id>.md. The Markdown body after it is the description. */
+/** an issue's fields (the issues table; labels and followers come from their own tables) */
 export const issueFieldsSchema = z
   .object({
     id: z.string(),
@@ -135,17 +133,17 @@ export const issueFieldsSchema = z
     /** the numbers it had before it moved to another team ("WEB-2"), so old links and mentions still find it */
     formerRefs: z.array(z.string()).optional(),
   })
-  .passthrough()
+  .loose()
 export type IssueFields = z.infer<typeof issueFieldsSchema>
 
 export interface Issue extends IssueFields {
-  /** which team folder the file lives in */
+  /** the team's key */
   team: string
   /** Markdown */
   description: string
 }
 
-/** teams/<KEY>/comments/<issueId>/<id>.md: front matter + Markdown body, written only by its author */
+/** a comment on an issue (the comments table), changed only by its author */
 export const commentFieldsSchema = z
   .object({
     id: z.string(),
@@ -154,23 +152,12 @@ export const commentFieldsSchema = z
     createdAt: iso,
     editedAt: iso.nullable().optional(),
   })
-  .passthrough()
+  .loose()
 export interface Comment extends z.infer<typeof commentFieldsSchema> {
   body: string
 }
 
-/**
- * One line of teams/<KEY>/archive/<YYYY-MM>.jsonl: an archived issue with its description and comments, packed
- * together so old issues cost one small part of one file instead of a file each.
- */
-export const archivedIssueSchema = issueFieldsSchema
-  .extend({
-    description: z.string(),
-    archivedAt: iso,
-    archivedBy: login,
-    comments: z.array(commentFieldsSchema.extend({ body: z.string() }).passthrough()),
-  })
-  .passthrough()
+/** an archived issue with its comments, read only when something needs it (an old link, search, the Archived tab) */
 export interface ArchivedIssue extends Issue {
   archivedAt: string
   archivedBy: string
@@ -179,7 +166,7 @@ export interface ArchivedIssue extends Issue {
 
 export const PROJECT_STATUSES = ['backlog', 'planned', 'in_progress', 'paused', 'completed', 'canceled'] as const
 
-/** projects/<id>.json */
+/** a project (the projects table; `teams` from project_teams) */
 export const projectSchema = z
   .object({
     id: z.string(),
@@ -192,7 +179,7 @@ export const projectSchema = z
     targetDate: z.string().nullable(),
     createdAt: iso,
   })
-  .passthrough()
+  .loose()
 export type Project = z.infer<typeof projectSchema>
 
 export const GROUPINGS = ['status', 'assignee', 'priority', 'project', 'none'] as const
@@ -211,7 +198,7 @@ export const filtersSchema = z
     labels: z.array(z.string()).optional(),
     projects: z.array(z.string().nullable()).optional(),
   })
-  .passthrough()
+  .loose()
 export type Filters = z.infer<typeof filtersSchema>
 
 export const displaySchema = z
@@ -222,10 +209,10 @@ export const displaySchema = z
     showCompleted: z.boolean(),
     showSubIssues: z.boolean(),
   })
-  .passthrough()
+  .loose()
 export type Display = z.infer<typeof displaySchema>
 
-/** views/<id>.json: a saved filter with an emoji */
+/** a view: a saved filter with an emoji (the views table) */
 export const viewSchema = z
   .object({
     id: z.string(),
@@ -239,10 +226,10 @@ export const viewSchema = z
     display: displaySchema,
     createdAt: iso,
   })
-  .passthrough()
+  .loose()
 export type View = z.infer<typeof viewSchema>
 
-/** inbox/<recipient>/<id>.json, written by whoever caused it */
+/** an inbox note (the inbox table), made by whoever caused it */
 export const inboxItemSchema = z
   .object({
     id: z.string(),
@@ -254,19 +241,17 @@ export const inboxItemSchema = z
     comment: z.string().optional(),
     /** the new status (status) */
     status: z.enum(STATUS_IDS).optional(),
-    /** when it was read one by one (the database; a workspace repo keeps these in ReadState.read) */
+    /** when it was read one by one */
     readAt: iso.nullable().optional(),
   })
-  .passthrough()
+  .loose()
 export type InboxItem = z.infer<typeof inboxItemSchema>
 
-/** state/<login>.json: personal marks, written only by that person */
+/** how far you've read your inbox (the read_state table), changed only by you */
 export const readStateSchema = z
   .object({
     /** everything at or before this moment counts as read */
     readUntil: iso.nullable(),
-    /** single items read after that */
-    read: z.array(z.string()),
   })
-  .passthrough()
+  .loose()
 export type ReadState = z.infer<typeof readStateSchema>

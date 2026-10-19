@@ -54,7 +54,8 @@ describe('the ready-to-send message', () => {
     expect(m.startsWith('Hi Jan! ')).toBe(true)
     expect(m).toContain(url)
     expect(m).toContain('join Acme')
-    expect(m).not.toContain('—')
+    // no em dash (CLAUDE.md, writing)
+    expect(m).not.toContain('\u2014')
   })
   test('or anyone', () => {
     expect(inviteMessage(url, 'Acme').startsWith('Hi! We plan')).toBe(true)

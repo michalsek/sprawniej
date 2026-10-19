@@ -1,36 +1,62 @@
 # Setting up a Supabase project for Sprawniej
 
 Everything Sprawniej needs from Supabase is in this repo: `supabase/migrations` (tables, rules, functions, the
-pictures bucket, realtime, nightly jobs) and `supabase/config.toml` (sign-in settings). These steps set up any project,
-in any account. No Docker is needed. Commands run from the repo folder.
+pictures bucket, realtime, nightly jobs; docs/data-format.md describes them) and `supabase/config.toml` (sign-in
+settings). These steps set up any project, in any account, and publish the app. Commands run from the repo folder.
+
+## What you need
+
+- The Supabase CLI, which comes with the repo (`bunx supabase`, a dev dependency). **No Docker** and no local
+  Supabase: development, tests and the team all use hosted projects.
+- A Supabase account, and the GitHub CLI (`gh`) for publishing.
 
 ## A new project
 
 1. **Create a project** in the Supabase dashboard (any organization, any region). Write down its ref, the part before
-   `.supabase.co` in its address.
+   `.supabase.co` in its address, and the database password you pick.
 2. **Connect the CLI** to it:
    ```sh
    bunx supabase login
    bunx supabase link --project-ref <ref>
+   cat supabase/.temp/project-ref      # the project the CLI now works on
    ```
-3. **Make the database**: `bunx supabase db push`. It asks for the database password you picked in step 1.
+3. **Make the database**:
+   ```sh
+   bunx supabase db push
+   bunx supabase migration list --linked   # every local file has the same version on the remote side
+   ```
+   If it asks for the database password, give the one from step 1.
 4. **Sign-in settings**:
    ```sh
    cp supabase/.env.example supabase/.env
-   bunx supabase config push --project-ref <ref>
+   bunx supabase config diff --project-ref <ref>
    ```
    In `supabase/.env`, `SPRAWNIEJ_SITE_URL` is where the app runs: `http://localhost:5173` for a development project,
-   the real address (`https://michalsek.github.io/sprawniej/`) for the one a team uses. Sign-in sends people back
-   there. Read the changes `config push` shows before you say yes (`bunx supabase config diff` shows them without
-   pushing).
+   the published address (`https://michalsek.github.io/sprawniej/`) for the one a team uses. Sign-in sends people back
+   there; `additional_redirect_urls` in `config.toml` lists the other addresses it may send them to (the local ports
+   used for development and checks). For the published project, add the published address there too:
+   `"https://michalsek.github.io/sprawniej/"` and `"https://michalsek.github.io/sprawniej/**"`.
 
-   **GitHub sign-in**: make a GitHub OAuth app for this project (its callback is
-   `https://<ref>.supabase.co/auth/v1/callback`; GitHub allows one callback per app, so each project needs its own),
-   set `enabled = true` under `[auth.external.github]` in `config.toml`, and give the app's id and secret for that one
-   command only, never in a file:
+   **Always read `config diff` before `config push`.** `config push` sends more than sign-in settings and asks about
+   each part; say yes only to the changes you expect.
+
+   **GitHub sign-in** is switched on in `config.toml` (`[auth.external.github] enabled = true`), with its id and
+   secret read from the environment. Make a GitHub OAuth app for this project: homepage the site address, callback
+   `https://<ref>.supabase.co/auth/v1/callback` (GitHub allows one callback per app, so each project needs its own).
+   Then push with the app's id and secret for that one command only, never in a file:
    ```sh
    SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID=... SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET=... bunx supabase config push --project-ref <ref>
    ```
+   **No OAuth app yet?** Push everything else from a copy where GitHub is off, so the project doesn't get GitHub
+   switched on without an id. Never commit that copy:
+   ```sh
+   W=$(mktemp -d); mkdir -p "$W/supabase"; cp supabase/config.toml supabase/.env "$W/supabase/"
+   # in "$W/supabase/config.toml", under [auth.external.github]: enabled = false, client_id = "", secret = ""
+   bunx supabase config diff --workdir "$W" --project-ref <ref>
+   bunx supabase config push --workdir "$W" --project-ref <ref>
+   ```
+   Afterwards `config diff` from the repo shows only the GitHub part. The app hides **Continue with GitHub** while
+   GitHub is off.
 5. **Realtime: private channels only.** In the dashboard, Realtime, Settings, switch off "Allow public access".
    `config.toml` can't hold this setting (it is only in the dashboard and the Management API: `private_only` on
    `PATCH /v1/projects/<ref>/config/realtime`). Sprawniej only uses private channels, so this keeps anyone from
@@ -42,52 +68,129 @@ in any account. No Docker is needed. Commands run from the repo folder.
    VITE_SUPABASE_URL=https://<ref>.supabase.co
    VITE_SUPABASE_KEY=sb_publishable_...
    ```
+   Without them the app says "Sprawniej isn't set up yet".
 7. **Check it**, on a development or throwaway project only: `bun run test:db`, then the cleanup (below).
+
+## Publishing
+
+The app is published to GitHub Pages by hand; nothing is published on a push.
+
+1. In the GitHub repository: Settings, Pages, Source: **GitHub Actions**.
+2. Settings, Secrets and variables, Actions, **Variables**: `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (the publishable
+   key) and `VITE_PUBLIC_URL` (the published address, which invite links use). They are public values; never put a
+   secret key there.
+3. Push `main`, then run the workflow and watch it:
+   ```sh
+   git push origin main
+   gh workflow run pages.yml -R <owner>/<repo> --ref main
+   gh run list -R <owner>/<repo> -w pages.yml -L 1      # its headSha must be main's
+   gh run watch <run id> -R <owner>/<repo> --exit-status
+   ```
+4. The published address goes into `SPRAWNIEJ_SITE_URL` and `additional_redirect_urls` (step 4 above), pushed with
+   `config push`, or sign-in can't send people back to it.
+
+Migrations reach the project before the app that needs them is published.
 
 ## Database tests
 
-For a development or throwaway project only. `bun run test:db` runs `tests/db` against the project in `.env.local`.
-They sign up throwaway accounts (`dbtest-<run>-<name>@mailinator.com`), make their own workspaces (`dbtest <run> ...`)
-and check the rules, numbers, history, deletions, realtime and pictures through the same API the app uses.
+For a development or throwaway project only. Once a team works in a project, the tests need a separate development
+project. `bun run test:db` runs `tests/db` against the project in `.env.local`. The tests sign up throwaway accounts
+(`dbtest-<run>-<name>@mailinator.com`), make their own workspaces (`dbtest <run> ...`) and check the rules, numbers,
+history, deletions, invites, imports, realtime and pictures through the same API the app uses.
 
 - They need **email confirmations off** (`enable_confirmations = false` in `config.toml`, pushed with step 4, or
   Dashboard, Authentication, Email, "Confirm email"). With confirmations on, a sign-up gets no session and the tests
   stop with a message saying so.
 - Supabase refuses example and test email domains. If it also refuses the default one, pick another real domain:
   `SPRAWNIEJ_TEST_EMAIL_DOMAIN=<domain> bun run test:db`.
-- A run signs up four accounts. Sign-ups are limited per 5 minutes; `config.toml` raises the limit so a few runs in a row
-  work.
+- A run signs up a few accounts. Sign-ups are limited per 5 minutes; `config.toml` raises the limit so a few runs in a
+  row work.
+- `SPRAWNIEJ_TEST_RUN=<name>` names the run (it is in every account, handle and workspace name it makes).
+- Run one at a time: the cleanup removes every test run's leftovers, also a run still going.
 - Plain `bun test` (and the GitHub Pages workflow, which runs it) skips `tests/db`: those tests only run when
   `SPRAWNIEJ_DB_TESTS` is set, which `test:db` does. Keep it that way, so building never touches a database.
-- **Clean up** afterwards: `bunx supabase db query --linked -f supabase/dev/cleanup-tests.sql` (or paste the file into
-  the SQL editor). It removes the test workspaces, profiles and accounts. Test pictures stay in the `pictures` bucket;
-  they are tiny, delete them in Storage if you like.
 
-Never run the database tests against a project where a team works.
+**Clean up** afterwards, first the database, then the test pictures:
+
+```sh
+bunx supabase db query --linked -f supabase/dev/cleanup-tests.sql
+# the picture folders of workspaces that are gone
+bunx supabase db query --linked "select distinct (storage.foldername(name))[1] as dir from storage.objects where bucket_id = 'pictures' and (storage.foldername(name))[1] not in (select id::text from public.workspaces)"
+bunx supabase storage rm -r ss:///pictures/<dir> --linked --experimental   # for each dir listed; never the bucket root
+```
+
+The SQL removes the test workspaces (with everything in them), the test profiles and accounts, and deletion notes of
+workspaces that are gone. Pictures need the Storage API; the database can't delete them.
 
 ## Checking the advisors
 
 After a change to the migrations, look at Dashboard, Advisors (security and performance), or ask the Supabase MCP
 server for `get_advisors`. Fix every error. The warnings we accept, with the reason, are listed in
-`docs/supabase-work.md`.
+`docs/supabase-work.md`. On an empty project, "unused index" notices are expected.
 
-## Starting a development project over
+## Starting a project over
 
-Only for a project with no real data (the development project only holds a copy of Linear tasks that can be imported
-again).
+**This deletes everything in the database, sign-in accounts included.** Only for a development project with no real
+data, never for a project a team works in. Check which project the CLI is linked to first:
 
 ```sh
-bunx supabase db reset --linked
+cat supabase/.temp/project-ref
+bunx supabase db reset --linked --yes
 ```
 
-It removes everything in the database, sign-in accounts included, and applies every file in `supabase/migrations`
-again, in order. The `pictures` bucket and its files stay (Supabase doesn't let the database delete them); empty and
-delete the bucket in Storage if you want them gone. Applying the migrations again works either way.
+It applies every file in `supabase/migrations` again, in order (there is no seed). Afterwards:
+
+- `bunx supabase migration list --linked`: every version matches;
+- the types: `bunx supabase gen types typescript --linked --schema public` gives the same as
+  `src/backend/database.types.ts` below its header;
+- the advisors, and `bun run test:db` with its cleanup;
+- the pictures: the bucket and its files stay (the database can't delete them), and every folder now belongs to a
+  workspace that is gone. Remove them with the recipe above.
 
 Apply migrations only with the CLI (`db push`, `db reset`), so the list of applied migrations matches the file names.
 The Supabase MCP server's `apply_migration` records the time it ran instead; if a project was changed that way, reset
 it or run `bunx supabase migration repair --status applied <version>` for each file (the version is the number at the
 start of the file name).
+
+## Backups
+
+`.github/workflows/backup.yml` ("Back up the database") dumps the `public`, `private`, `auth` and `storage` schemas
+with `pg_dump`, encrypts the dump with a passphrase (anyone signed in to GitHub can download the artifacts of a public
+repository) and keeps it as an Actions artifact for 30 days. It also makes one request to the project's API, so a
+scheduled run counts as activity (free projects pause after a week without any). **It is not switched on.**
+
+To switch it on:
+
+1. Repository secrets (Settings, Secrets and variables, Actions, Secrets):
+   - `SUPABASE_DB_URL`: the session pooler connection string with the database password (Project Settings, Database,
+     Connect, Session pooler), `postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres`;
+   - `BACKUP_PASSPHRASE`: a long random passphrase. Keep it in a password manager: without it a dump can't be read.
+2. Run it once by hand (`gh workflow run backup.yml -R <owner>/<repo>`, or Actions, Back up the database, Run
+   workflow) and check that the artifact is there.
+3. To run it every night (03:17 UTC, after the nightly jobs), remove the `#` in front of the two `schedule` lines.
+
+Pictures are not in the dump: they stay in the `pictures` bucket and are not backed up yet.
+
+**Restoring has not been tried yet.** Try it once on a throwaway project before relying on it, and write the exact
+commands down here. The outline:
+
+1. Download the artifact (`gh run download <run id> -R <owner>/<repo>`) and decrypt it:
+   `gpg --decrypt sprawniej-<date>.dump.gpg > sprawniej.dump`.
+2. A new project, set up with steps 1, 2 and 5 above (not `db push`: the dump brings the tables, functions and rules).
+3. `pg_restore --no-owner --no-privileges --dbname "<the new project's session pooler connection string>" sprawniej.dump`.
+   The `auth` and `storage` schemas already exist in a new project, so expect to restore their rows only.
+4. `bunx supabase migration list --linked`, the advisors, sign-in settings (step 4), and the pictures by hand.
+
+## Before the team joins
+
+Stage A (now) keeps sign-up simple: no email is sent, so confirmations are off and there is no password reset. Before
+the whole team joins:
+
+- An email sender (SMTP) in the project, then **email confirmations on**. The confirm link must bring people back to
+  their invite (`#/join/<token>`); today it would lose it (work log E128).
+- Password reset by email, and a "Forgot your password?" in the app.
+- Google sign-in, if wanted (the app is ready for it).
+- Backups switched on, and a restore tried once.
 
 ## Good to know
 
