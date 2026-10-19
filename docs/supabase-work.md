@@ -45,7 +45,7 @@ Status: `todo`, `doing`, `done`.
 | 8 | Team features: invites, members and roles, people from Linear, ways to sign in | done | 632eef6 + fix round, merged; 82/82 DB tests, browser cases pass |
 | 9 | Read cache and catch-up from IndexedDB | done | 5770657 + fix round, merged in 80b8021; a reload reads 0 issue rows |
 | 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | done | 035d3db + fix round; final full-app QA passed (26 scenarios) |
-| 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | doing | |
+| 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | done | 48a4db6 published to https://michalsek.github.io/sprawniej/ (Pages run 39316971275) |
 
 ## Two people at once (checked in phase 5, browser)
 
@@ -66,6 +66,24 @@ Status: `todo`, `doing`, `done`.
 | One archives an issue, the other edits it | The edit lands; the issue stays archived |
 | Delete, archive or move issues away from one team | Numbers are never given out twice |
 | Drag issues around | Only the moved issue changes; the same issue: later drop wins |
+
+## Released, and what's left for you
+
+2.0.0 is published at https://michalsek.github.io/sprawniej/ (commit 48a4db6). Checked on the published site without
+signing in: the page loads, it knows where workspaces live (not "isn't set up"), the GitHub button is hidden while
+GitHub sign-in is off, no console errors. The same build passed the two-person smoke test on localhost (sign up,
+workspace, issue, reload, invite and join, live changes, sign out and in). The project `sprawniejapp` is empty.
+
+1. **First sign-in on the published site** (not done by the agents: it means making an account on a real address).
+   Open the site, create your account, pick your handle, create the workspace.
+2. **Linear import:** Settings › Import from Linear, with your own Linear key.
+3. **GitHub sign-in (optional):** from this repo's folder, with your OAuth app's values:
+   `SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID=… SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET=… bunx supabase config push --project-ref wkqofiacqfuxowavuqxj`
+   (`supabase/.env` needs `SPRAWNIEJ_SITE_URL=https://michalsek.github.io/sprawniej/`; run `bunx supabase config diff` first.)
+4. **Backups (when you want them):** add the repository secrets `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE`, run
+   *Back up the database* once by hand, then remove the `#` in front of its schedule. A restore hasn't been tried yet
+   (docs/supabase-setup.md, Backups).
+5. **Once teammates work in `sprawniejapp`:** database tests need a separate development project from then on.
 
 ## Findings
 
@@ -295,9 +313,10 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 
 | What | Status |
 | --- | --- |
-| GitHub OAuth app for sign-in (homepage `https://michalsek.github.io/sprawniej/`, callback `https://wkqofiacqfuxowavuqxj.supabase.co/auth/v1/callback`); id and secret stay in the user's shell | asked 2026-10-19 |
+| GitHub OAuth app for sign-in (homepage `https://michalsek.github.io/sprawniej/`, callback `https://wkqofiacqfuxowavuqxj.supabase.co/auth/v1/callback`); id and secret stay in the user's shell | when you like: one command above |
 | `bunx supabase login` once, so the CLI can push the schema and auth settings | done 2026-10-19 |
 | Realtime "Allow public access" off (dashboard, Realtime, Settings) | done 2026-10-19 |
-| Run the Linear import with your own Linear key (phase 6) | ready: Settings, Import from Linear |
+| Run the Linear import with your own Linear key (phase 6) | ready: Settings › Import from Linear |
+| First sign-in on the published site | yours |
 | Database password for `db push`, approve the final wipe (phase 11) | not needed (the CLI login is enough); wipe approved and done 2026-10-19 |
 | Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | done 2026-10-19 |
