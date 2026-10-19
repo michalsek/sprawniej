@@ -21,6 +21,8 @@ goes away.
 - **No email sender and no domain for now.** The first days run from localhost, by one person, to check that
   everything behaves. Sign-in starts with GitHub and email and password; Google, our own email sender and a public
   address come before teammates join (section 6, section 11).
+- **The tasks come from Linear.** The existing Linear import moves onto rows first (section 8); importing an old
+  Sprawniej workspace from GitHub isn't needed for this run and comes later, only if someone needs it.
 
 ## Contents
 
@@ -31,7 +33,7 @@ goes away.
 5. [Realtime](#5-realtime)
 6. [Signing in](#6-signing-in)
 7. [The code: what goes, what changes, src/backend](#7-the-code)
-8. [Importing a GitHub workspace](#8-importing-a-github-workspace)
+8. [Imports: Linear first](#8-imports-linear-first)
 9. [Staying on the free tier](#9-staying-on-the-free-tier)
 10. [CLAUDE.md changes and why this is 2.0.0](#10-claudemd-changes-and-why-this-is-200)
 11. [Step-by-step plan](#11-step-by-step-plan)
@@ -188,6 +190,7 @@ create table public.invites (
   token         text not null unique default encode(extensions.gen_random_bytes(18), 'hex'),
   for_login     text,                           -- who it's meant for, shown in the wizard (optional)
   for_email     text,
+  for_profile   uuid references public.profiles (id) on delete cascade,  -- a person from Linear: accepting makes them you
   role          text not null default 'member' check (role in ('admin', 'member')),
   invited_by    uuid references public.profiles (id) on delete set null,
   created_at    timestamptz not null default now(),
@@ -406,6 +409,22 @@ create table public.issue_events (
 );
 create index on public.issue_events (issue_id, id);
 
+-- every number a team ever gave out, so none is given out twice (filled by the number trigger, never emptied;
+-- deleting or moving an issue leaves its number here). The Linear import reads it to keep Linear's numbers where free.
+create table public.issue_numbers (
+  workspace_id  uuid not null,
+  team_id       uuid not null,
+  number        integer not null,
+  primary key (team_id, number),
+  foreign key (workspace_id, team_id) references public.teams (workspace_id, id) on delete cascade
+);
+
+-- the email a person from Linear had there, so an invite can find them; never sent to browsers
+create table private.guest_emails (
+  profile_id  uuid primary key references public.profiles (id) on delete cascade,
+  email       text not null
+);
+
 -- what was deleted, so a browser that reconnects can drop it too (kept 45 days, see section 9)
 create table public.deletions (
   id            bigint generated always as identity primary key,
@@ -496,7 +515,7 @@ declare t text;
 begin
   foreach t in array array['workspaces', 'profiles', 'workspace_members', 'invites', 'teams', 'team_members', 'labels',
     'projects', 'project_teams', 'issues', 'issue_labels', 'issue_followers', 'comments', 'views', 'inbox',
-    'read_state', 'issue_events', 'deletions']
+    'read_state', 'issue_events', 'issue_numbers', 'deletions']
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('revoke all on public.%I from anon', t);
@@ -579,12 +598,14 @@ create policy "your read marks" on public.read_state for all to authenticated
   with check (profile_id = (select private.my_profile_id()) and workspace_id in (select private.my_workspaces()));
 ```
 
-**History and deletions:** members read; only triggers write (no insert, update or delete policies).
+**History, used numbers and deletions:** members read; only triggers write (no insert, update or delete policies).
 
 ```sql
 create policy "members read history"   on public.issue_events for select to authenticated
   using (workspace_id in (select private.my_workspaces()));
 create policy "members read deletions" on public.deletions for select to authenticated
+  using (workspace_id in (select private.my_workspaces()));
+create policy "members read used numbers" on public.issue_numbers for select to authenticated
   using (workspace_id in (select private.my_workspaces()));
 ```
 
@@ -652,8 +673,9 @@ ordering, descriptions of changes) stays in TypeScript, where it is tested and w
 ### Issue numbers
 
 `teams.last_number` is a counter. A `before insert` trigger takes the next number while holding the team's row lock,
-so two people creating issues in the same instant get different numbers, and a number is never given out twice
-(deleted, archived and moved issues included, which is what `lastNumber` and `highestArchived` do today).
+so two people creating issues in the same instant get different numbers. Every number given out is also written to
+`issue_numbers`, whose primary key makes it impossible to give one out twice, even to an import that keeps Linear's
+numbers (deleted, archived and moved issues included, which is what `lastNumber` and `highestArchived` do today).
 
 ```sql
 create function private.next_issue_number() returns trigger
@@ -668,6 +690,8 @@ begin
     returning last_number into new.number;
   end if;
   if new.number is null then raise exception 'There is no such team.'; end if;
+  -- fails (and so does the insert) if the number was ever used in this team
+  insert into public.issue_numbers (workspace_id, team_id, number) values (new.workspace_id, new.team_id, new.number);
   return new;
 end $$;
 
@@ -695,6 +719,7 @@ begin
   update public.teams set last_number = last_number + 1
   where id = p_team and workspace_id = i.workspace_id returning last_number into n;
   if n is null then raise exception 'There is no such team.'; end if;
+  insert into public.issue_numbers (workspace_id, team_id, number) values (i.workspace_id, p_team, n);
   update public.issues set team_id = p_team, number = n, former_refs = former_refs || old_ref
   where id = p_issue returning * into i;
   return i;
@@ -832,11 +857,12 @@ for notes. (If it turns out not to be, an `update_issue(id, patch, notes)` funct
 | `create_profile(login, name)` | Picks your login (Google and email sign-ups, or a taken GitHub login) | anyone signed in without a profile |
 | `create_workspace(name, team_key, team_name, team_emoji)` | The workspace, you as owner, a first team with you in it | anyone with a profile |
 | `invite_info(token)` | Workspace name, who invited, who it's for: what the join wizard shows before you join | anyone signed in |
-| `accept_invite(token)` | Makes you a member (or back from `removed_at`), marks the invite used | the invited person |
+| `accept_invite(token)` | Makes you a member (or back from `removed_at`), marks the invite used. An invite made for a person from Linear (`for_profile`) turns that person into you, with the same work as `link_person` (their issues, comments, follows and team places move to your profile, and view filters that name them are rewritten). | the invited person |
 | `leave_workspace(workspace)` | Sets your own `removed_at` (not for the last owner) | members |
 | `move_issue_to_team(issue, team)` | See above | members |
 | `link_person(workspace, guest, to)` | Someone from Linear who hadn't joined is this person: every reference moves over (issues, comments, projects, views' filters, followers, team members, inbox), `linear_ids` merge, the guest profile goes. One transaction, replacing `src/data/relink.ts`'s file rewriting. | admins |
-| `import_rows(workspace, table, rows jsonb)` | Upsert for the importer with `sprawniej.importing` on (keeps numbers, no history or realtime noise) | admins |
+| `import_rows(workspace, table, rows jsonb)` | Upsert for the imports (Linear first) with `sprawniej.importing` on: keeps numbers, no history or realtime noise. Re-imports match on `(workspace_id, linear_id)`. | admins |
+| `set_guest_email(profile, email)` | The Linear import keeps a person's Linear email in `private.guest_emails`, so Settings can suggest inviting them at that address | admins |
 
 `auth.users` gets **no trigger**: a failing trigger there breaks sign-up for everyone, so profiles are made by
 `ensure_profile`/`create_profile`, called by the app after sign-in.
@@ -1078,7 +1104,12 @@ Sprawniej's plain, friendly words (no "token", no "redirect").
 The GitHub collaborator invite and the five-step join wizard go away. An admin creates an invite in Settings (for a
 person, optionally with their email) and gets a link, `#/join/<token>`, with the same ready-to-send message as today.
 The link opens: Welcome (workspace name, who invited you, the team's pictures) → sign in or create an account → you're
-in. Invites last 14 days and work once. Sending the email for you can come later (it needs the SMTP above and an Edge
+in.
+
+People from Linear who haven't joined are listed in Settings with an **Invite** button. Their invite is made for that
+person (`for_profile`, with their Linear email suggested), so whoever accepts it becomes them: their assigned issues,
+comments and follows move to that account in the same step. This replaces most uses of "Link person"; linking by hand stays for
+someone who already joined with another account (`link_person`). Invites last 14 days and work once. Sending the email for you can come later (it needs the SMTP above and an Edge
 Function).
 
 ## 7. The code
@@ -1142,7 +1173,7 @@ export interface Backend {
 | `src/app/Gate.tsx`, `signOut.ts`, `SaveStatus.tsx`, `updates.ts`, `JoinTeams.tsx`, `components/SignOut.tsx` | **changed** | Use the backend; signing out wipes the read caches. |
 | `src/features/onboarding/*` | **rewritten** | Sign-in screen (three ways), pick a login, choose or create a workspace, the invite wizard. `KeyStep.tsx`, `repoNames.ts`, `setupDraft.ts` and the GitHub parts of `joinLink.ts` go. |
 | `src/features/settings/SettingsPage.tsx` | **changed** | Members and roles, invite links, "Ways to sign in". `LinkPersonDialog.tsx` calls `link_person`. "Where your workspace is stored" goes. |
-| `src/features/import/*` (Linear) | **changed** | `linearMap.ts` builds rows instead of files (the mapping and its tests mostly stay); the page calls `importRows`. |
+| `src/features/import/*` (Linear) | **changed first** | `linearMap.ts` builds rows instead of files (the mapping and its tests mostly stay; the archive-file code goes); the page calls `importRows` (section 8). |
 | `src/features/issues/useHistory.ts`, `HistoryLine.tsx` | **changed** | New source; `archived`/`restored` lines. |
 | `src/editor/*`, `src/features/issues/composer.ts` | **small changes** | Picture upload and URLs through the backend. |
 | `src/features/help`, `docs/user-guide.md` | **changed** | Signing in, inviting, no GitHub key. |
@@ -1150,10 +1181,47 @@ export interface Backend {
 | `tests/` | `merge`, `pace`, `archive` (packing), `relink` (file rewriting), `repoNames` tests go; `files` tests move with the importer; new tests for `rows.ts` (including times), `applyRows` (newer only, in-flight fields, per field), `history` from events, the status lists matching the SQL checks. SQL rules and triggers get pgTAP tests run against `supabase start`. |
 | `supabase/` | **new** | `config.toml`, `migrations/`, `tests/` (pgTAP), email templates, later `functions/github-webhook/`. |
 
-## 8. Importing a GitHub workspace
+## 8. Imports: Linear first
 
-A one-time move, done by the workspace's owner from the app: **Settings › Bring over your old workspace**. It lives
-only for a release or two, so it can reuse today's code instead of a new tool.
+### From Linear (step 7 of the plan)
+
+This run starts from a copy of a real project's tasks in Linear, so the existing **Settings › Import from Linear**
+moves onto rows first. The wizard stays as it is for people (key, teams, people, check, import, progress); what changes
+is what `buildImport` returns and how it is saved.
+
+- **`linearMap.ts` returns rows, not files.** `buildImport(data, choices, existing, newId, now)` keeps its name, its
+  inputs and most of its rules, and returns `{ profiles, teams, teamMembers, labels, projects, projectTeams, issues,
+  issueLabels, issueFollowers, comments, views, counts, renumbered, inexactViews, skippedViews }` in the model's own
+  shapes (logins, team keys). `src/backend/rows.ts` turns logins into profile ids and team keys into team ids when
+  sending. `tests/linearImport.test.ts` keeps its fixture and checks rows instead of files.
+- **What gets simpler.** No archive month files: issues finished longer ago than their team keeps finished issues
+  arrive with `archived_at` set, and comments on archived issues are ordinary comments. The `relinkedArchive`,
+  `archivedWithNew` and month-file merging code goes. A person from Linear who joined since an earlier import is moved
+  over by `link_person` in the database instead of rewriting files.
+- **People.** The people step is the same: each Linear user is matched to someone in the workspace (by name or email,
+  as `guessPerson` does today, plus "That's you" for the person importing), comes as a person who hasn't joined (a
+  guest profile, with a fresh `uuid` made in the browser so the rows can point at it before it's saved), or is left
+  out. A guest's Linear email goes to `private.guest_emails` through `set_guest_email`, so Settings can offer to invite
+  them at that address (section 6, Invites). In stage A, with only you signed in, everyone else arrives as a guest.
+- **Numbers.** Issues keep their Linear numbers (`ENG-123` stays `ENG-123`). The wizard loads the team's used numbers
+  (`issue_numbers`, numbers only) instead of every issue file, and anything already used gets the next free number, as
+  today ("ENG-12 came in as ENG-40" in the check step). The database refuses a used number anyway.
+- **Saving.** Rows go through `import_rows` in dependency order (guest profiles, teams and team members, labels,
+  projects and project teams, issues without parent or duplicate, then those two fields, issue labels and followers,
+  comments, views), in batches of 500, with the same progress bar. `import_rows` upserts on `(workspace_id,
+  linear_id)`, so running the import again updates what came over and adds what's new, as it does now; issues archived
+  here since stay archived.
+- **Pictures** pasted in Linear stay links to Linear, as today.
+- **Archived issues for matching.** A second import needs to know archived issues too; it asks the database for
+  `id, linear_id` of the workspace's issues with a `linear_id` (a small query) instead of loading the archive.
+
+`docs/linear-import.md` is updated to say "rows" where it says "files" and to drop the part-of-300-files saving.
+
+### From a GitHub workspace (later, only if someone needs it)
+
+Not needed for this run. If a team using today's GitHub version wants to move, this is the one-time move, done by the
+workspace's owner from the app: **Settings › Bring over your old workspace**. It would live only for a release or two,
+so it can reuse today's code instead of a new tool.
 
 1. The owner signs in (with GitHub, so their old profile is claimed) and creates the new workspace, or picks an empty
    one.
@@ -1319,15 +1387,17 @@ the switch.
 5. **Signing in, stage A.** Sign-in screen (GitHub, email and password), pick a login, choose or create a workspace,
    Settings › ways to sign in, sign out. Done = sign in both ways on the local stack and reach the workspace.
 6. **History.** `issue_events` on the issue page. Done = the history test cases pass with event rows.
-7. **The importer** (and the Linear import on rows). Done = a throwaway copy of a workspace imports into the local stack
-   with matching counts of issues, comments, archived issues, labels, views and pictures; a second run changes nothing.
+7. **The Linear import on rows** (section 8). Done = `tests/linearImport.test.ts` passes on rows; the real Linear
+   project imports into the local stack with the same counts the check step promised (teams, issues, archived issues,
+   comments, labels, projects, views); a second run changes nothing; a change made in Linear in between comes over on
+   a third run.
 
 **Stage A: solo on localhost, on the real project**
 
 8. **Set up `sprawniejapp` with the runbook only**: `supabase link`, `db push`, a GitHub OAuth app, `config push`,
    `.env.local`. Anything the runbook missed gets added to it, not done by hand. Done = the app on localhost signs in
    against `sprawniejapp`.
-9. **Import the copy of the real project's tasks and use it for a few days**, alone, from localhost. Keep a list of
+9. **Import the real project's tasks from Linear and use them for a few days**, alone, from localhost. Keep a list of
    anything that behaves differently from today's app. Done = the list is empty or turned into fixes.
 10. **Prove it repeats:** run the runbook on a second, throwaway free project (or a fresh account), import, sign in,
     then delete that project. Done = it works with no steps beyond the runbook.
@@ -1337,7 +1407,7 @@ the switch.
 11. **What a team needs:** invites and Settings › members and roles, the read cache (section 9), Google sign-in, our own
     email sender and templates with confirmations on, the backup workflow and picture backup, and a restore tried once
     into the local stack.
-12. **Where the team opens it:** the public address in `config.toml` and `VITE_PUBLIC_URL` (see open question 3).
+12. **Where the team opens it:** the public address in `config.toml` and `VITE_PUBLIC_URL` (see open question 2).
 13. **Remove the old code** (`src/sync`, most of `src/github`, `src/data/project.ts`, old tests) and update
     docs/architecture.md, docs/data-format.md (becomes "the database"), docs/user-guide.md, Help, README, CLAUDE.md.
 14. **Switch.** Release 2.0.0 (version, changelog, `package.json`, `bun scripts/changelog.ts`), a final re-import, the
@@ -1345,7 +1415,9 @@ the switch.
 
 **Later**
 
-15. The GitHub App and an Edge Function (`supabase/functions/github-webhook`) that moves issues when linked pull
+- The GitHub workspace import (section 8), only if a team on today's GitHub version wants to move.
+
+- The GitHub App and an Edge Function (`supabase/functions/github-webhook`) that moves issues when linked pull
     requests open or merge, writing as the person who opened the PR (`sprawniej.actor`) and reusing `notify.ts`. Its
     secrets go in through `supabase secrets set`, so it repeats with the runbook too.
 
@@ -1356,31 +1428,31 @@ the switch.
 - *Is `sprawniej-test` the real home?* Yes, for this run: a copy of a real project's tasks, to prove everything works.
   The setup must repeat easily in other accounts (section 1).
 - *How many people?* 6 to 8 for triage first: the free tier is plenty (section 9).
+- *Where do the tasks come from?* Linear. The Linear import moves onto rows first; the GitHub workspace import waits
+  until someone needs it (section 8).
 - *Email sender and our own address?* Not now. Stage A runs from localhost with no email (section 6); both come back
   before the team joins.
 
 **Still open:**
 
-1. **Where does the copy of your real project's tasks come from?** A Sprawniej workspace repo on GitHub (section 8's
-   importer) or Linear (the existing Linear import, moved onto rows)? That decides which importer step 7 builds first.
-2. **Who opens it in stage B?** Today `main` deploys to GitHub Pages for the people using the GitHub version. Should
+1. **Who opens it in stage B?** Today `main` deploys to GitHub Pages for the people using the GitHub version. Should
    2.0.0 replace that for everyone, or should the Supabase version live at a second address (another Pages site or a
    preview) while today's version keeps running for its users?
-3. **Which public address** for stage B: GitHub Pages as now, or a custom domain? (Redirect URLs, email links and
+2. **Which public address** for stage B: GitHub Pages as now, or a custom domain? (Redirect URLs, email links and
    `VITE_PUBLIC_URL` follow from it.)
-4. **Who may delete teams, labels and projects?** Today anyone can. Keep that, or only admins?
-5. **Invites by email** (sent by Sprawniej), or links only, as today?
-6. **Google sign-in in stage B:** for everyone with a Google account, or only company Google accounts (an "Internal"
+3. **Who may delete teams, labels and projects?** Today anyone can. Keep that, or only admins?
+4. **Invites by email** (sent by Sprawniej), or links only, as today?
+5. **Google sign-in in stage B:** for everyone with a Google account, or only company Google accounts (an "Internal"
    consent screen and a domain check)?
-7. **History from before the move:** leave it where it was (proposed), or bring it over at about one GitHub request per
-   issue during the import?
-8. **Simultaneous description edits:** is "the later save wins for the whole description" acceptable, or should the
+6. **History from Linear:** an issue's history before the import stays in Linear (proposed, as the import does today),
+   or should it come over? Linear's API has it, at about one request per issue.
+7. **Simultaneous description edits:** is "the later save wins for the whole description" acceptable, or should the
    line merge come back in the editor right away?
-9. **Where do backups go?** GitHub Actions artifacts in this repo (30 days, visible to everyone with access to the
+8. **Where do backups go?** GitHub Actions artifacts in this repo (30 days, visible to everyone with access to the
    repo), or a separate private repo, possibly encrypted?
-10. **Login handles for Google and email sign-ups:** chosen by the person (proposed), or made from their email
+9. **Login handles for Google and email sign-ups:** chosen by the person (proposed), or made from their email
     automatically?
-11. **One workspace or several?** The design allows several per person, as today. Is there a reason to limit it to one
+10. **One workspace or several?** The design allows several per person, as today. Is there a reason to limit it to one
     (which would simplify sign-up to "anyone with a company address joins")?
-12. **Inbox notes:** written by the app with the existing rules (proposed), or moved into the database as triggers (more
+11. **Inbox notes:** written by the app with the existing rules (proposed), or moved into the database as triggers (more
     robust, but the rules would live in SQL)?
