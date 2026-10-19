@@ -328,7 +328,7 @@ export function ImportPage() {
       >
         <p className="text-muted-foreground">
           We matched people by name. Fix anyone we got wrong. Someone who isn't here yet still comes over with their name, so their issues, comments
-          and views stay theirs. Once they've joined, run the import again and pick their name here: everything that was theirs moves to them.
+          and views stay theirs. Invite them or link them later in Settings › People from Linear, and everything that was theirs moves to them.
         </p>
         <Problem>{problem}</Problem>
         <ul className="mt-5 flex flex-col divide-y rounded-lg border">

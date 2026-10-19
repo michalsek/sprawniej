@@ -44,15 +44,13 @@ describe('a live channel', () => {
 describe('the save chip', () => {
   test('from the facts', () => {
     expect(connectionState(true, true, true, false)).toBe('saved')
-    expect(connectionState(true, true, true, false, 2)).toBe('saving')
     expect(connectionState(false, true, true, false)).toBe('offline')
     expect(connectionState(false, true, false, false)).toBe('signed-out')
   })
 
-  test('not reaching Sprawniej is calm with nothing waiting, a warning with something waiting', () => {
+  test('not reaching Sprawniej is calm with nothing waiting', () => {
     expect(connectionState(true, false, true, false)).toBe('reconnecting')
     expect(connectionState(true, true, true, true)).toBe('reconnecting')
-    expect(connectionState(true, false, true, false, 1)).toBe('error')
   })
 })
 

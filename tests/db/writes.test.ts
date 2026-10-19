@@ -71,7 +71,7 @@ describe.skipIf(!enabled)('saving changes', () => {
     expect(outcome(await ana.run({ kind: 'delete', table: 'teams', keys: [{ id: team }] }, { retry: false }), team)).toMatchObject({ ok: true })
     expect(outcome(await ana.run({ kind: 'delete', table: 'teams', keys: [{ id: team }] }, { retry: true }), team)).toEqual({ ok: true })
     const edit = await ana.run({ kind: 'update', table: 'teams', fields: { name: 'Gone' }, keys: [{ id: team }] }, { retry: false })
-    expect(outcome(edit, team)).toEqual({ ok: false, why: 'gone', message: MESSAGES.gone })
+    expect(outcome(edit, team)).toEqual({ ok: false, why: 'gone', message: MESSAGES.goneTeam })
   })
 
   test('the same issue twice: refused the first time, found when it was a retry (a lost answer)', async () => {

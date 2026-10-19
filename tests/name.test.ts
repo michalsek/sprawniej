@@ -14,17 +14,19 @@ const mine = () => useData.getState().people.darekk
 
 describe('your name', () => {
   test('a name you type is tidied, shows at once and is saved as set here', async () => {
+    const sent = w.since()
     renameMe('  Dariusz   Smith ')
     expect(mine()).toMatchObject({ name: 'Dariusz Smith', nameSetHere: true })
     await w.settle()
-    expect(w.db.sent()).toEqual([{ kind: 'update', table: 'profiles', fields: { name: 'Dariusz Smith', name_set_here: true }, keys: [{ id: profileIdOf('darekk') }] }])
+    expect(sent()).toEqual([{ kind: 'update', table: 'profiles', fields: { name: 'Dariusz Smith', name_set_here: true }, keys: [{ id: profileIdOf('darekk') }] }])
     expect(w.db.get('profiles', { id: profileIdOf('darekk') })).toMatchObject({ name: 'Dariusz Smith', name_set_here: true })
   })
 
   test('empty, or the name you have, changes nothing', async () => {
+    const sent = w.since()
     renameMe('   ')
     renameMe(mine().name)
     await w.settle()
-    expect(w.db.sent()).toEqual([])
+    expect(sent()).toEqual([])
   })
 })

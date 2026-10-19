@@ -41,6 +41,8 @@ export interface Sendable {
   notes?: NoteRow[]
   /** notes that go on their own (a request with others' notes failed) */
   solo?: boolean
+  /** sent before without an answer: it may have landed, so it never shares a request with new rows */
+  tries: number
 }
 
 /** the rows it points at, as `${table}:${keyString}` (a move waits for the team it moves to) */
@@ -80,14 +82,21 @@ function chunks<T>(list: readonly T[], size = PER_REQUEST): T[][] {
 /**
  * The requests for these changes (each the first of its row, and ready): inserts into one table together, the same
  * update of many rows together (archiving three issues), deletes of one table together, and every move on its own.
- * Oldest first.
+ * Inserts and notes tried before go together only with others tried before: a row that may have landed makes its
+ * request fail as a whole ("already there"), and new rows must not go down with it. Oldest first.
  */
 export function plan<S extends Sendable>(ready: readonly S[]): { req: Request; items: S[] }[] {
   const groups = new Map<string, S[]>()
-  const add = (id: string, s: S) => groups.set(id, [...(groups.get(id) ?? []), s])
+  const add = (id: string, s: S) => {
+    const g = groups.get(id)
+    if (g) g.push(s)
+    else groups.set(id, [s])
+  }
   for (const s of ready) {
-    if (s.op === 'notes') add(s.solo ? `notes:${s.seq}` : 'notes', s)
+    const again = s.tries > 0 ? ':again' : ''
+    if (s.op === 'notes') add(s.solo ? `notes:${s.seq}` : `notes${again}`, s)
     else if (s.op === 'call') add(`call:${s.seq}`, s)
+    else if (s.op === 'insert') add(`insert:${s.table}${again}`, s)
     else if (s.op === 'update') add(KEYS[s.table].length === 1 ? `update:${s.table}:${stable(s.fields)}` : `update:${s.table}:${s.seq}`, s)
     else add(`${s.op}:${s.table}`, s)
   }

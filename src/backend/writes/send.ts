@@ -83,30 +83,43 @@ interface Built extends PromiseLike<Result> {
 
 /** a request with no answer by then is given up on and tried again (a connection that died quietly would wait forever) */
 export const TIMEOUT = 30_000
-const timed = (q: unknown): Built => (q as Built).abortSignal(AbortSignal.timeout(TIMEOUT))
+const timed = (q: Built): Built => q.abortSignal(AbortSignal.timeout(TIMEOUT))
+
+/** the same row sent again: it landed the first time, only the answer was lost */
+const landedBefore = (error: ErrorLike, table: string) => error.code === '23505' && constraintOf(error.message) === `${table}_pkey`
 
 export function postgrest(db: Db): Transport {
-  const from = (t: string) => (db as unknown as SupabaseClient).from(t)
+  const from = (t: string) => (db as unknown as SupabaseClient).from(t) as unknown as Built & {
+    insert(rows: Loose[], o: object): Built
+    upsert(rows: Loose[], o: object): Built
+    update(fields: Loose): Built
+    delete(): Built
+  }
 
   /** where every key column matches, for one group of keys */
-  const filtered = (q: unknown, g: ReturnType<typeof byFirst>[number]): Built => {
-    let r = q as Built
+  const filtered = (q: Built, g: ReturnType<typeof byFirst>[number]): Built => {
+    let r = q
     for (const [c, v] of Object.entries(g.eq)) r = r.eq(c, v)
     return r.in(g.col, g.values)
   }
 
+  const isProblem = <T>(x: T | Problem): x is Problem => !(x instanceof Map)
+  const rowsOf = (table: LiveTable, data: unknown, into = new Map<string, Loose>()) => {
+    for (const row of (data ?? []) as Loose[]) into.set(keyString(table, row), row)
+    return into
+  }
+  const keysOf = (table: LiveTable, rows: readonly Loose[]) => rows.map((r) => Object.fromEntries(KEYS[table].map((k) => [k, String(r[k])])))
+
   /** the rows that are there, of these keys (one request per group); a problem if a request failed */
-  async function lookUp(table: LiveTable, keys: readonly Record<string, string>[], cols = '*'): Promise<Map<string, Loose> | Problem> {
+  async function lookUp(table: LiveTable, keys: readonly Record<string, string>[], what: What, cols = '*'): Promise<Map<string, Loose> | Problem> {
     const found = new Map<string, Loose>()
     for (const g of byFirst(table, keys)) {
       const r = await timed(filtered(from(table).select(cols), g))
-      if (r.error) return classify(r.error, r.status, { table, op: 'update' })
-      for (const row of r.data as Loose[]) found.set(keyString(table, row), row)
+      if (r.error) return classify(r.error, r.status, what)
+      rowsOf(table, r.data, found)
     }
     return found
   }
-
-  const isProblem = (x: Map<string, Loose> | Problem): x is Problem => !(x instanceof Map)
 
   /** every key: ok with its row when it came back; `missing` decides the rest */
   function outcomes(table: LiveTable, keys: readonly Record<string, string>[], rows: Map<string, Loose>, missing: (ks: string) => Outcome): Map<string, Outcome> {
@@ -118,9 +131,7 @@ export function postgrest(db: Db): Transport {
     }
     return out
   }
-
-  const rowsOf = (table: LiveTable, data: unknown) => new Map((data as Loose[]).map((row) => [keyString(table, row), row]))
-  const keysOf = (table: LiveTable, rows: readonly Loose[]) => rows.map((r) => Object.fromEntries(KEYS[table].map((k) => [k, String(r[k])])))
+  const fine = (): Outcome => ({ ok: true })
 
   async function insert(table: LiveTable, rows: Loose[], retry: boolean): Promise<Answer> {
     const what: What = { table, op: 'insert' }
@@ -128,45 +139,45 @@ export function postgrest(db: Db): Transport {
     if (table === 'read_state') {
       const r = await timed(from(table).upsert(rows, { onConflict: 'profile_id,workspace_id', defaultToNull: false }).select())
       if (r.error) return { problem: classify(r.error, r.status, what) }
-      return { outcomes: outcomes(table, keys, rowsOf(table, r.data), () => ({ ok: true })) }
+      return { outcomes: outcomes(table, keys, rowsOf(table, r.data), fine) }
     }
     if (ADD_UNLESS_THERE.has(table)) {
       const r = await timed(from(table).upsert(rows, { onConflict: KEYS[table].join(','), ignoreDuplicates: true, defaultToNull: false }).select())
       if (r.error) return { problem: classify(r.error, r.status, what) }
       const got = rowsOf(table, r.data)
       const missing = keys.filter((k) => !got.has(keyString(table, k)))
-      if (!missing.length) return { outcomes: outcomes(table, keys, got, () => ({ ok: true })) }
+      if (!missing.length) return { outcomes: outcomes(table, keys, got, fine) }
       // already there. A follower may be there the other way round (unsubscribed): that one is changed
       if (table === 'issue_followers') {
         for (const key of missing) {
           const following = rows.find((r) => keyString(table, r) === keyString(table, key))?.following
           const u = await timed(from(table).update({ following }).eq('issue_id', key.issue_id).eq('profile_id', key.profile_id).select())
           if (u.error) return { problem: classify(u.error, u.status, what) }
-          for (const row of u.data as Loose[]) got.set(keyString(table, row), row)
+          rowsOf(table, u.data, got)
         }
       } else {
-        const there = await lookUp(table, missing)
+        const there = await lookUp(table, missing, what)
         if (isProblem(there)) return { problem: there }
         for (const [ks, row] of there) got.set(ks, row)
       }
-      return { outcomes: outcomes(table, keys, got, () => ({ ok: true })) }
+      return { outcomes: outcomes(table, keys, got, fine) }
     }
     const r = await timed(from(table).insert(rows, { defaultToNull: false }).select())
-    if (r.error) {
-      // sent before and landed, only the answer was lost: the rows are there
-      if (retry && r.error.code === '23505' && constraintOf(r.error.message) === `${table}_pkey`) {
-        const there = await lookUp(table, keys)
-        if (isProblem(there)) return { problem: there }
-        return { outcomes: outcomes(table, keys, there, () => ({ ok: false, why: 'refused', message: MESSAGES.notSaved })) }
-      }
-      return { problem: classify(r.error, r.status, what) }
-    }
-    return { outcomes: outcomes(table, keys, rowsOf(table, r.data), () => ({ ok: true })) }
+    if (!r.error) return { outcomes: outcomes(table, keys, rowsOf(table, r.data), fine) }
+    if (!retry || !landedBefore(r.error, table)) return { problem: classify(r.error, r.status, what) }
+    // sent before: what landed then is read back, and anything that didn't is sent again
+    const there = await lookUp(table, keys, what)
+    if (isProblem(there)) return { problem: there }
+    const rest = rows.filter((row) => !there.has(keyString(table, row)))
+    if (!rest.length) return { outcomes: outcomes(table, keys, there, fine) }
+    const again = await insert(table, rest, false)
+    if ('problem' in again) return again
+    return { outcomes: new Map([...outcomes(table, keys, there, fine), ...again.outcomes]) }
   }
 
   /** rows that didn't come back from an update or delete: still there means refused, else gone */
   async function probe(table: LiveTable, missing: Record<string, string>[], what: What): Promise<Map<string, Outcome> | Problem> {
-    const there = await lookUp(table, missing, KEYS[table].join(','))
+    const there = await lookUp(table, missing, what, KEYS[table].join(','))
     if (isProblem(there)) return there
     const out = new Map<string, Outcome>()
     for (const key of missing) {
@@ -187,12 +198,27 @@ export function postgrest(db: Db): Transport {
       const q = req.kind === 'update' ? from(table).update(req.fields) : from(table).delete()
       const r = await timed(filtered(q, g).select(back))
       if (r.error) return { problem: classify(r.error, r.status, what) }
-      for (const row of r.data as Loose[]) got.set(keyString(table, row), row)
+      rowsOf(table, r.data, got)
     }
     const missing = keys.filter((k) => !got.has(keyString(table, k)))
     const probed = missing.length ? await probe(table, missing, what) : new Map<string, Outcome>()
-    if (!(probed instanceof Map)) return { problem: probed }
+    if (isProblem(probed)) return { problem: probed }
     return { outcomes: outcomes(table, keys, got, (ks) => probed.get(ks) ?? { ok: true }) }
+  }
+
+  /** inbox notes; tried again after a lost answer, one by one, since the ones that landed can't be read back */
+  async function notes(rows: NoteRow[], retry: boolean): Promise<Answer> {
+    const what: What = { table: 'inbox', op: 'notes' }
+    const r = await timed(from('inbox').insert(rows as unknown as Loose[], { defaultToNull: false }))
+    if (!r.error) return { outcomes: new Map([['notes', fine()]]) }
+    if (!retry || !landedBefore(r.error, 'inbox')) return { problem: classify(r.error, r.status, what) }
+    if (rows.length > 1) {
+      for (const row of rows) {
+        const one = await notes([row], true)
+        if ('problem' in one) return one
+      }
+    }
+    return { outcomes: new Map([['notes', fine()]]) }
   }
 
   async function runOnce(req: Request, retry: boolean): Promise<Answer> {
@@ -203,17 +229,12 @@ export function postgrest(db: Db): Transport {
       case 'delete':
         return change(req)
       case 'call': {
-        const r = await timed(db.rpc(req.fn, req.args))
+        const r = await timed(db.rpc(req.fn, req.args) as unknown as Built)
         if (r.error) return { problem: classify(r.error, r.status, whatOf(req)) }
         return { outcomes: new Map([[req.key.id, { ok: true, row: r.data as Loose }]]) }
       }
-      case 'notes': {
-        const r = await timed(from('inbox').insert(req.rows, { defaultToNull: false }))
-        if (r.error && !(retry && r.error.code === '23505' && constraintOf(r.error.message) === 'inbox_pkey')) {
-          return { problem: classify(r.error, r.status, whatOf(req)) }
-        }
-        return { outcomes: new Map([['notes', { ok: true }]]) }
-      }
+      case 'notes':
+        return notes(req.rows, retry)
     }
   }
 

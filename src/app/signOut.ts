@@ -1,5 +1,6 @@
 import { backend } from '@/backend'
-import { signOutLocally } from '@/backend/auth'
+import { ADDING_KEY, signOutLocally } from '@/backend/auth'
+import { JOINING_KEY } from '@/features/onboarding/invite'
 import { resetProjection } from '@/data/project'
 import { useData, EMPTY } from '@/data/store'
 import { useSession } from '@/session'
@@ -41,6 +42,8 @@ export async function signOutOfThisBrowser(then = '#/') {
   resetProjection()
   useData.setState({ ...EMPTY })
   forgetMine()
+  // a Join pressed or a way to sign in being added belong to whoever was signed in
+  for (const k of [ADDING_KEY, JOINING_KEY]) sessionStorage.removeItem(k)
   location.hash = then
   location.reload()
 }

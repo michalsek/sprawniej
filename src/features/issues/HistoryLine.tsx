@@ -1,8 +1,10 @@
 /** One line of an issue's history ("Ana moved it from Todo to In Progress · 2 h ago"), shown between comments. */
 import type { ReactNode } from 'react'
+import { Archive, User } from 'lucide-react'
 import { PersonAvatar } from '@/components/Avatar'
 import type { Change, HistoryEvent } from '@/data/history'
 import { issueRef, useData } from '@/data/store'
+import type { Person } from '@/model/schema'
 import { PRIORITY_NAMES, statusOf } from '@/model/status'
 import { estimateName, shortDate, timeAgo } from './format'
 import { PriorityIcon, StatusIcon } from './icons'
@@ -13,12 +15,13 @@ function list(names: string[]): string {
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
 }
 
-function useText(change: Change, by: string): ReactNode {
+function useText(change: Change, by: string | null): ReactNode {
   const people = useData((s) => s.people)
   const projects = useData((s) => s.projects)
   const labels = useData((s) => s.labels)
   const issues = useData((s) => s.issues)
-  const person = (l: string | null) => (l ? (people[l]?.name ?? l) : '')
+  // someone this workspace doesn't know (any more) never shows as a code
+  const person = (l: string | null) => (l ? (people[l]?.name ?? 'someone') : '')
   const project = (id: string | null) => (id && projects[id] ? `${projects[id].emoji} ${projects[id].name}` : 'a project')
   const issue = (id: string | null) => (id && issues[id] ? issueRef(issues[id]) : 'another issue')
   switch (change.kind) {
@@ -72,26 +75,66 @@ function useText(change: Change, by: string): ReactNode {
     case 'estimate':
       return change.to !== null ? <>set the estimate to <B>{estimateName(change.to)}</B></> : 'removed the estimate'
     case 'team':
-      return <>moved it from <B>{change.from}</B> to <B>{change.to}</B></>
-    case 'removed':
-      return /^(?:- )?Archive /m.test(change.message) ? 'archived it' : 'removed it'
+      return change.from ? (
+        <>
+          moved it from <B>{change.from}</B> to <B>{change.to}</B>
+        </>
+      ) : (
+        <>
+          moved it to <B>{change.to}</B>
+        </>
+      )
+    case 'archived':
+      return 'archived it'
     case 'restored':
       return 'brought it back'
   }
 }
 
-export function HistoryLine({ event }: { event: HistoryEvent }) {
-  const person = useData((s) => s.people[event.by])
-  const text = useText(event.change, event.by)
+const When = ({ at }: { at: string }) => <span title={new Date(at).toLocaleString()}> · {timeAgo(at)}</span>
+
+/** archived by the nightly tidy-up: nobody did it */
+function AutoLine({ event }: { event: HistoryEvent }) {
   return (
-    <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground">
-      <PersonAvatar person={person} login={event.by} className="mt-px size-5 text-[9px]" />
+    <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground" data-kind={event.change.kind}>
+      <span className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted">
+        <Archive className="size-3" />
+      </span>
       <span className="min-w-0">
-        <B>{person?.name ?? event.by}</B> {text}
-        <span title={new Date(event.at).toLocaleString()}> · {timeAgo(event.at)}</span>
+        Archived automatically, since it was finished and hadn’t changed for a while
+        <When at={event.at} />
       </span>
     </li>
   )
+}
+
+/** whoever did it, or a grey circle when it isn't known who (nobody signed in, or someone no longer known) */
+function Who({ person }: { person?: Person }) {
+  if (person) return <PersonAvatar person={person} className="mt-px size-5 text-[9px]" />
+  return (
+    <span className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted">
+      <User className="size-3" />
+    </span>
+  )
+}
+
+function PersonLine({ event }: { event: HistoryEvent }) {
+  const person = useData((s) => (event.by === null ? undefined : s.people[event.by]))
+  const text = useText(event.change, event.by)
+  return (
+    <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground" data-kind={event.change.kind}>
+      <Who person={person} />
+      <span className="min-w-0">
+        <B>{person?.name ?? 'Someone'}</B> {text}
+        <When at={event.at} />
+      </span>
+    </li>
+  )
+}
+
+export function HistoryLine({ event }: { event: HistoryEvent }) {
+  // only archiving happens with nobody signed in on its own; anything else was changed by hand
+  return event.by === null && event.change.kind === 'archived' ? <AutoLine event={event} /> : <PersonLine event={event} />
 }
 
 /** the first line: who created the issue, from its own fields */
@@ -99,10 +142,10 @@ export function CreatedLine({ by, at }: { by: string; at: string }) {
   const person = useData((s) => s.people[by])
   return (
     <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground">
-      <PersonAvatar person={person} login={by} className="mt-px size-5 text-[9px]" />
+      <Who person={person} />
       <span>
-        <B>{person?.name ?? by}</B> created the issue
-        <span title={new Date(at).toLocaleString()}> · {timeAgo(at)}</span>
+        <B>{person?.name ?? 'Someone'}</B> created the issue
+        <When at={at} />
       </span>
     </li>
   )

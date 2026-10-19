@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { afterKey, planFetch, sinceMark, tooOld } from '@/backend/load'
+import { afterKey, planFetch, sinceMark, tooLongAgo } from '@/backend/load'
 
 describe('asking for rows by key', () => {
   test('single keys: one group per table', () => {
@@ -50,11 +50,10 @@ describe('where catching up starts', () => {
     expect(sinceMark('soon')).toBe('soon')
   })
 
-  test('deletions are kept 45 days, so from further back the workspace is read again', () => {
+  test('deletions are kept 45 days, so last up to date further back, the workspace is read again', () => {
     const now = Date.parse('2026-12-01T00:00:00Z')
-    expect(tooOld('2026-11-30T00:00:00.000000+00:00', now)).toBe(false)
-    expect(tooOld('2026-10-17T23:59:59.999999+00:00', now)).toBe(true)
-    expect(tooOld('2026-10-18T00:00:00.000001+00:00', now)).toBe(false)
-    expect(tooOld('nonsense', now)).toBe(true)
+    expect(tooLongAgo(Date.parse('2026-11-30T00:00:00Z'), now)).toBe(false)
+    expect(tooLongAgo(Date.parse('2026-10-17T23:59:59.999Z'), now)).toBe(true)
+    expect(tooLongAgo(Date.parse('2026-10-18T00:00:00.001Z'), now)).toBe(false)
   })
 })

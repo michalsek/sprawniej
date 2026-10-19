@@ -12,16 +12,24 @@
  *   refused, it is undone and the person reads why, once.
  * - No answer at all (offline, a busy moment): it is tried again after 1, 2, 5, 10, 20 s, then every 30 s, and at once
  *   when the connection comes back. Meanwhile the chip says so, and closing the tab asks first.
- * - Inbox notes for teammates go only once everything they're about is saved.
+ * - Inbox notes for teammates, and changes that only make sense once the rest is saved (a view's filter without a
+ *   deleted team), go only once everything else in their batch is saved.
  *
- * The writer outlives an open workspace being read again from the start (detach, then attach): what it still has to
- * send shows again on the new copy.
+ * The writer outlives an open workspace being read again from the start (detach, then attach): changes made
+ * meanwhile still queue, and everything not saved yet shows again on the new copy.
+ *
+ * The queue keeps to these:
+ * - a row's items are sent one at a time, oldest first; only the first may be on its way or waiting to try again;
+ * - a change joins only an item that was never sent (one that was sent may have landed);
+ * - an item is held while a row it points at has an insert in the queue;
+ * - every change shown with `local` is settled exactly once (saved, undone, or dropped with its insert).
  */
 import type { Incoming } from './apply'
-import type { Mirror } from './apply/mirror'
-import { keyString, type AnyChange, type Call } from './changes'
+import { mirrorRow, type Mirror } from './apply/mirror'
+import { localKey } from './apply/take'
+import type { AnyChange, Call } from './changes'
 import type { Registry } from './registry'
-import { KEYS, type LiveTable } from './tables'
+import type { LiveTable } from './tables'
 import { MESSAGES } from './writes/problems'
 import { answerKey, parentsOf, plan } from './writes/requests'
 import type { NoteRow, Outcome, Request, Transport, Answer } from './writes/send'
@@ -57,6 +65,8 @@ export interface Batch {
   cascade?: AnyChange[]
   /** shown at once, never sent: what the database empties by itself (a deleted parent); settled once the database's copy agrees, or after 10 s */
   untilEcho?: AnyChange[]
+  /** shown at once, sent only once every change above is saved, undone if one isn't (a view's filter without a deleted team) */
+  after?: AnyChange[]
   /** teammates' inbox notes: sent once every change here is saved, never shown, never read back (E54) */
   notes?: NoteRow[]
   /** after the database answered. `rows`: `${table}:${keyString}` → the row as the database has it now */
@@ -83,7 +93,11 @@ export interface Page {
   watch(retry: () => void): () => void
 }
 
-const hold = (e: BeforeUnloadEvent) => e.preventDefault()
+function hold(e: BeforeUnloadEvent) {
+  e.preventDefault()
+  // deprecated, but older Safari asks only when this is set too
+  e.returnValue = ''
+}
 
 const BROWSER: Page = {
   guard(on) {
@@ -116,7 +130,7 @@ export interface WriterOptions {
 }
 
 /** requests on their way at once */
-const IN_FLIGHT = 6
+export const IN_FLIGHT = 6
 /** waits before trying again, then every last one */
 const RETRY = [1_000, 2_000, 5_000, 10_000, 20_000, 30_000]
 /** an emptied column that never echoed is taken as done after this long */
@@ -125,16 +139,19 @@ const ECHO_CHECK = 250
 /** the same message isn't told twice within this */
 const TOLD_WITHIN = 3_000
 
+/** why a batch didn't save: with a message for the person, or quietly (you deleted what it was about) */
+type Failure = { quiet: true } | { quiet: false; message: string }
+
 interface Group {
   /** items still carrying this batch's changes */
   open: Set<Item>
-  /** a message, or '' when it failed quietly */
-  failed?: string
+  failure?: Failure
   /** one of its deletes failed: what the database would have done with it didn't happen */
   deleteFailed?: boolean
   rows: Map<string, Loose>
   cascade: AnyChange[]
   untilEcho: AnyChange[]
+  after: AnyChange[]
   notes?: NoteRow[]
   done?: Batch['done']
 }
@@ -158,14 +175,14 @@ interface Item {
   nextTry: number
 }
 
-const ksOf = (table: LiveTable, key: Loose) => `${table}:${keyString(table, key)}`
-
-/** an issue's archived_at can't be sent with the issue itself (archiving goes through an update) */
-const insertable = (c: AnyChange) => !(c.table === 'issues' && 'archived_at' in (c.fields ?? {}))
+/** an update that can join a waiting insert of its row: an issue's archived_at can only be sent as an update */
+export const insertable = (c: AnyChange) => !(c.table === 'issues' && 'archived_at' in (c.fields ?? {}))
 
 export class Writer {
   private o: Required<WriterOptions>
   private target: WriteTarget | null = null
+  /** what actions use; it stays while the workspace is read again (detached) */
+  private ctx: WriteContext | null = null
   private rows = new Map<string, Item[]>()
   private groups = new Set<Group>()
   private seq = 0
@@ -184,7 +201,7 @@ export class Writer {
   private flushes: { resolve: (left: number) => void; timer: unknown }[] = []
   private told = new Map<string, number>()
   private guarded = false
-  private last = ''
+  private lastStatus = ''
   private unwatch: () => void
 
   constructor(o: WriterOptions) {
@@ -195,26 +212,26 @@ export class Writer {
   // ---------- where changes show ----------
 
   context(): WriteContext | null {
-    const t = this.target
-    return t && !this.stopped ? { workspaceId: t.workspaceId, meId: t.meId, registry: t.registry } : null
+    return this.stopped ? null : this.ctx
   }
 
   /** the open workspace (the first time, or read again from the start): what's still unsaved shows on it */
   attach(target: WriteTarget) {
     if (this.stopped) return
     this.target = target
+    this.ctx = { workspaceId: target.workspaceId, meId: target.meId, registry: target.registry }
     const replay: Incoming[] = this.kept
     this.kept = []
     const items = [...this.rows.values()].flat().sort((a, b) => a.seq - b.seq)
     for (const i of items) for (const change of i.changes) replay.push({ from: 'local', change })
-    for (const g of this.groups) for (const change of [...g.cascade, ...g.untilEcho]) replay.push({ from: 'local', change })
+    for (const g of this.groups) for (const change of [...g.cascade, ...g.untilEcho, ...g.after]) replay.push({ from: 'local', change })
     for (const e of this.echo) replay.push({ from: 'local', change: e.change })
     if (replay.length) target.apply(replay)
     this.watchEcho()
     this.schedule()
   }
 
-  /** the workspace is being read again: keep sending, show nothing until the next attach */
+  /** the workspace is being read again: keep taking changes and sending, show them on the next attach */
   detach() {
     this.target = null
     this.o.clock.clearTimeout(this.echoTimer)
@@ -249,28 +266,33 @@ export class Writer {
 
   write(batch: Batch) {
     if (this.stopped) return
-    const group: Group = { open: new Set(), rows: new Map(), cascade: batch.cascade ?? [], untilEcho: batch.untilEcho ?? [], notes: batch.notes, done: batch.done }
-    this.groups.add(group)
-    const inputs: Incoming[] = [...batch.changes, ...group.cascade, ...group.untilEcho].map((change): Incoming => ({ from: 'local', change }))
+    const shown = [...batch.changes, ...(batch.cascade ?? []), ...(batch.untilEcho ?? []), ...(batch.after ?? [])]
     const settles: Incoming[] = []
+    this.add(batch, settles)
+    const dones = this.complete(settles)
+    this.show([...shown.map((change): Incoming => ({ from: 'local', change })), ...settles])
+    for (const d of dones) d()
+    this.schedule()
+    this.publishStatus()
+  }
+
+  /** a batch onto the queues (its changes are shown by whoever called) */
+  private add(batch: Batch, settles: Incoming[]) {
+    const group: Group = { open: new Set(), rows: new Map(), cascade: batch.cascade ?? [], untilEcho: batch.untilEcho ?? [], after: batch.after ?? [], notes: batch.notes, done: batch.done }
+    this.groups.add(group)
     for (const c of batch.changes) this.enqueue(c, group, settles)
     // what the database deletes along with it: waiting changes to it are pointless now
     for (const c of group.cascade) {
       if (c.op !== 'delete') continue
-      const ks = ksOf(c.table, c.key)
+      const ks = localKey(c.table, c.key)
       this.goneByMe.add(ks)
-      for (const i of [...(this.rows.get(ks) ?? [])]) if (i.state === 'waiting') this.drop(i, '', settles)
+      for (const i of [...(this.rows.get(ks) ?? [])]) if (i.state === 'waiting') this.drop(i, { quiet: true }, settles)
     }
-    const dones = this.complete(settles)
-    this.show([...inputs, ...settles])
-    for (const d of dones) d()
-    this.schedule()
-    this.status()
   }
 
-  /** joins the last waiting change of its row when it can (3.2 in the plan), else waits behind it */
+  /** joins the last waiting change of its row when it can, else waits behind it */
   private enqueue(c: AnyChange, group: Group, settles: Incoming[]) {
-    const ks = ksOf(c.table, c.key)
+    const ks = localKey(c.table, c.key)
     const op = c.call ? 'call' : c.op
     if (op === 'delete') this.goneByMe.add(ks)
     else if (op === 'insert') this.goneByMe.delete(ks)
@@ -285,14 +307,14 @@ export class Writer {
       }
       if (op === 'delete' && last.op === 'insert' && q.length === 1) {
         // made and deleted before it was sent: nothing to send, nothing changes on screen
-        this.drop(last, '', settles)
+        this.drop(last, { quiet: true }, settles)
         settles.push({ from: 'settled', change: c, ok: true })
         return
       }
       if (op === 'delete' && last.op === 'update') {
         // the edits are hidden by the delete already; it goes instead of them
         for (const change of last.changes) settles.push({ from: 'settled', change, ok: false })
-        for (const g of last.groups) this.leave(g, last, '')
+        for (const g of last.groups) this.leave(g, last, { quiet: true })
         Object.assign(last, { op: 'delete', fields: {}, changes: [c], groups: new Set<Group>() })
         this.join(last, group)
         return
@@ -309,11 +331,11 @@ export class Writer {
     group.open.add(item)
   }
 
-  /** a group stops waiting for this item; `message` (or '' for quiet) when it didn't save */
-  private leave(g: Group, item: Item, message?: string) {
+  /** a group stops waiting for this item; with `failure` when it didn't save */
+  private leave(g: Group, item: Item, failure?: Failure) {
     g.open.delete(item)
-    if (message === undefined) return
-    if (g.failed === undefined || (g.failed === '' && message)) g.failed = message
+    if (!failure) return
+    if (!g.failure || (g.failure.quiet && !failure.quiet)) g.failure = failure
     if (item.op === 'delete') g.deleteFailed = true
   }
 
@@ -326,18 +348,18 @@ export class Writer {
   }
 
   /** an unsent item that won't be sent: undone, and so is what waited for it */
-  private drop(item: Item, message: string, settles: Incoming[]) {
+  private drop(item: Item, failure: Failure, settles: Incoming[]) {
     this.remove(item)
     for (const change of item.changes) settles.push({ from: 'settled', change, ok: false })
-    for (const g of item.groups) this.leave(g, item, message)
+    for (const g of item.groups) this.leave(g, item, failure)
     if (item.op === 'insert') this.dropDependents(item.ks, settles)
   }
 
   /** a row that won't be made: whatever still waits for it (its labels, a comment on it, later edits) goes, quietly */
   private dropDependents(ks: string, settles: Incoming[]) {
-    for (const i of [...(this.rows.get(ks) ?? [])]) if (i.state === 'waiting') this.drop(i, '', settles)
+    for (const i of [...(this.rows.get(ks) ?? [])]) if (i.state === 'waiting') this.drop(i, { quiet: true }, settles)
     for (const q of [...this.rows.values()]) {
-      for (const i of [...q]) if (i.state === 'waiting' && parentsOf(i).includes(ks)) this.drop(i, '', settles)
+      for (const i of [...q]) if (i.state === 'waiting' && parentsOf(i).includes(ks)) this.drop(i, { quiet: true }, settles)
     }
   }
 
@@ -370,7 +392,7 @@ export class Writer {
     }
     this.planRetry()
     this.checkFlushes()
-    this.status()
+    this.publishStatus()
   }
 
   private send(req: Request, items: Item[]) {
@@ -404,18 +426,18 @@ export class Writer {
         for (const i of items) Object.assign(i, { state: 'waiting', solo: true })
       } else {
         if (p.kind === 'bug') console.error('Sprawniej couldn’t save a change', req, p)
-        for (const i of items) this.finish(i, { ok: false, why: 'refused', message: p.message }, settles)
+        for (const i of items) this.finish(i, { ok: false, why: p.kind === 'gone' ? 'gone' : 'refused', message: p.message }, settles)
       }
     } else {
       for (const i of items) this.finish(i, answer.outcomes.get(answerKey(i)) ?? { ok: true }, settles)
       // the connection works: what waits to try again goes now
-      for (const q of this.rows.values()) for (const i of q) if (i.state === 'retry') i.nextTry = now
+      this.dueNow()
     }
     const dones = this.complete(settles)
     this.show(settles)
     for (const d of dones) d()
     this.schedule()
-    this.status()
+    this.publishStatus()
   }
 
   private delay(tries: number): number {
@@ -440,33 +462,41 @@ export class Writer {
     }
     // deleted by you (or with something you deleted): no need to say it wasn't saved
     const quiet = outcome.why === 'gone' && [item.ks, ...parentsOf(item)].some((k) => this.goneByMe.has(k))
-    const message = quiet ? '' : outcome.message
+    // your delete was refused: the row is still there, and a later "deleted meanwhile" about it is news
+    if (item.op === 'delete') this.goneByMe.delete(item.ks)
     for (const change of item.changes) settles.push({ from: 'settled', change, ok: false })
-    for (const g of item.groups) this.leave(g, item, message)
+    for (const g of item.groups) this.leave(g, item, quiet ? { quiet: true } : { quiet: false, message: outcome.message })
     if (item.op === 'insert') this.dropDependents(item.ks, settles)
   }
 
-  /** batches with nothing left to wait for: what the database did along with them, their notes, done() */
+  /** batches with nothing left to wait for: what the database did along with them, what comes after, done() */
   private complete(settles: Incoming[]): (() => void)[] {
     const dones: (() => void)[] = []
     const now = this.o.clock.now()
-    for (const g of [...this.groups]) {
-      if (g.open.size) continue
+    for (;;) {
+      const g = [...this.groups].find((x) => !x.open.size)
+      if (!g) break
       this.groups.delete(g)
       const along = !g.deleteFailed
-      for (const change of g.cascade) settles.push(along ? { from: 'settled', change, ok: true } : { from: 'settled', change, ok: false })
+      for (const change of g.cascade) {
+        settles.push(along ? { from: 'settled', change, ok: true } : { from: 'settled', change, ok: false })
+        if (!along && change.op === 'delete') this.goneByMe.delete(localKey(change.table, change.key))
+      }
       for (const change of g.untilEcho) {
         if (along) this.echo.push({ change, until: now + ECHO_WAIT })
         else settles.push({ from: 'settled', change, ok: false })
       }
-      if (g.failed === undefined) {
+      const failure = g.failure
+      if (!failure) {
+        // shown already; sent now, as a batch of their own
+        if (g.after.length) this.add({ changes: g.after }, settles)
         if (g.notes?.length) this.queueNotes(g.notes)
         dones.push(() => g.done?.({ ok: true, rows: g.rows }))
       } else {
-        const message = g.failed
+        for (const change of g.after) settles.push({ from: 'settled', change, ok: false })
         dones.push(() => {
           g.done?.({ ok: false })
-          if (message) this.say(message)
+          if (!failure.quiet) this.say(failure.message)
         })
       }
     }
@@ -492,12 +522,12 @@ export class Writer {
 
   private checkEcho() {
     if (!this.target) return
-    const server = this.target.server() as unknown as Record<string, Record<string, Loose> | undefined>
+    const server = this.target.server()
     const now = this.o.clock.now()
     const settles: Incoming[] = []
     this.echo = this.echo.filter((e) => {
       const c = e.change
-      const row = KEYS[c.table].length === 1 ? server[c.table]?.[keyString(c.table, c.key)] : undefined
+      const row: Loose | undefined = mirrorRow(server, c.table, c.key)
       const agrees = !row || Object.entries({ ...c.fields, ...c.guess }).every(([k, v]) => equal(row[k], v))
       if (!agrees && now < e.until) return true
       settles.push({ from: 'settled', change: c, ok: true })
@@ -508,6 +538,12 @@ export class Writer {
   }
 
   // ---------- trying again ----------
+
+  /** everything waiting to try again may go at the next dispatch */
+  private dueNow() {
+    const now = this.o.clock.now()
+    for (const q of this.rows.values()) for (const i of q) if (i.state === 'retry') i.nextTry = now
+  }
 
   private planRetry() {
     let at = Infinity
@@ -527,8 +563,7 @@ export class Writer {
 
   /** the connection is back (or the tab shown again): everything waiting goes now */
   retryNow() {
-    const now = this.o.clock.now()
-    for (const q of this.rows.values()) for (const i of q) if (i.state === 'retry') i.nextTry = now
+    this.dueNow()
     this.schedule()
   }
 
@@ -545,8 +580,7 @@ export class Writer {
         resolve(this.pending())
       }, ms)
       this.flushes.push(f)
-      const now = this.o.clock.now()
-      for (const q of this.rows.values()) for (const i of q) if (i.state === 'retry') i.nextTry = now
+      this.dueNow()
       this.dispatch()
     })
   }
@@ -563,26 +597,27 @@ export class Writer {
 
   // ---------- what the chip and the page see ----------
 
-  /** rows with changes not saved yet (and inbox notes not sent yet) */
+  /** rows with changes not saved yet (and inbox notes not sent yet, and changes waiting for their batch) */
   pending(): number {
     let n = 0
     for (const q of this.rows.values()) n += q.length
+    for (const g of this.groups) n += g.after.length
     return n
   }
 
-  statusNow(): { pending: number; sending: boolean; waiting: boolean } {
+  status(): { pending: number; sending: boolean; waiting: boolean } {
     let waiting = false
     for (const q of this.rows.values()) if (q.some((i) => i.tries > 0)) waiting = true
     return { pending: this.pending(), sending: this.inFlight > 0, waiting }
   }
 
-  private status() {
+  private publishStatus() {
     if (this.stopped) return
-    const s = this.statusNow()
+    const s = this.status()
     this.guard(s.pending > 0)
     const now = JSON.stringify(s)
-    if (now === this.last) return
-    this.last = now
+    if (now === this.lastStatus) return
+    this.lastStatus = now
     this.o.onStatus()
   }
 
@@ -630,7 +665,7 @@ export const context = (): WriteContext | null => writer?.context() ?? null
 export const write = (batch: Batch): void => writer?.write(batch)
 export const pending = (): number => writer?.pending() ?? 0
 export const flush = (ms?: number): Promise<number> => writer?.flush(ms) ?? Promise.resolve(0)
-export const writesStatus = (): { pending: number; sending: boolean; waiting: boolean } => writer?.statusNow() ?? { pending: 0, sending: false, waiting: false }
+export const writesStatus = (): { pending: number; sending: boolean; waiting: boolean } => writer?.status() ?? { pending: 0, sending: false, waiting: false }
 /** a message for the person (once within a few seconds) */
 export const tell = (message: string): void => writer?.say(message)
 export const debugWrites = (): ReturnType<Writer['debug']> => writer?.debug() ?? []

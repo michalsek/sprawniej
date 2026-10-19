@@ -275,8 +275,7 @@ export function sinceMark(stamp: string, seconds = 10): string {
   return `${new Date(Number(ms)).toISOString().slice(0, 23)}${us}Z`
 }
 
-/** deletions are kept 45 days: from further back, catching up could miss some, so the workspace is read again */
-export function tooOld(stamp: string, now: number, days = 44): boolean {
-  const m = micros(stamp)
-  return m === null || Number(m / 1000n) < now - days * 86_400_000
+/** deletions are kept 45 days: last up to date (`at`, ms on this browser's clock) longer ago, catching up could miss some */
+export function tooLongAgo(at: number, now: number, days = 44): boolean {
+  return now - at > days * 86_400_000
 }

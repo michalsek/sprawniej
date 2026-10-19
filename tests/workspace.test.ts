@@ -345,6 +345,48 @@ describe('keeping up', () => {
     expect(s.env.backend.getState()).toMatchObject({ phase: 'gone', gone: 'deleted' })
     expect(s.env.status.getState().state).toBe('closed')
   })
+
+  const removed = (): Message => ({ table: 'workspace_members', op: 'UPDATE', row: { workspace_id: WS, profile_id: ME, role: 'owner', removed_at: T(9), changed_at: T(9) } })
+
+  test('removed by someone else: "You\'re no longer in this workspace"', async () => {
+    const s = await opened()
+    s.channels[0].on.message(removed())
+    await sleep(5)
+    expect(s.env.backend.getState()).toMatchObject({ phase: 'gone', gone: 'removed' })
+  })
+
+  test('leaving yourself: nothing to say, and it closes; a refused leave stays open', async () => {
+    const made: ReturnType<typeof setup>[] = []
+    const backend = createStore<BackendState>()(() => ({ phase: 'closed' }))
+    const life = new Lifecycle(
+      () => {
+        const s = setup()
+        made.push(s)
+        return s.ws
+      },
+      backend,
+      new Registry(),
+    )
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    const s = made[0]
+    const phases: string[] = []
+    s.env.backend.subscribe((b) => phases.push(b.phase))
+
+    await expect(life.leave(async () => Promise.reject(new Error('A workspace needs at least one owner.')))).rejects.toThrow('owner')
+    expect(s.ws.leaving).toBe(false)
+    expect(life.current).toBe(s.ws)
+
+    // the database's message that you left comes before the leave call returns
+    await life.leave(async () => {
+      s.channels[0].on.message(removed())
+      await sleep(5)
+    })
+    expect(phases).not.toContain('gone')
+    expect(life.current).toBeNull()
+    expect(backend.getState().phase).toBe('closed')
+    expect(s.ws.closed).toBe(true)
+  })
 })
 
 describe('one workspace at a time', () => {
@@ -413,7 +455,7 @@ describe('the writer and the open workspace', () => {
       },
       createStore<BackendState>()(() => ({ phase: 'closed' })),
       new Registry(),
-      r.hooks,
+      { writes: r.hooks },
     )
     await life.open(WS, { id: ME, person: ANA })
     await sleep(5)
@@ -441,5 +483,101 @@ describe('the writer and the open workspace', () => {
     s.channels[0].on.message({ table: 'teams', op: 'DELETE', row: { id: 't-eng' } })
     await sleep(30)
     expect(changed).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('reading the workspace again', () => {
+  test('a quiet workspace (its newest change is old) still catches up; 44 days without catching up reads it again', async () => {
+    const changed = mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false }))
+    const reopen = mock(() => {})
+    const s = setup({ changed })
+    s.env.reopen = reopen
+    await s.ws.open()
+    s.ws.live = { ...s.ws.live, mark: '2025-01-01T00:00:00.000000+00:00' }
+    await s.ws.catchUp()
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(reopen).not.toHaveBeenCalled()
+    const later = Date.now() + 45 * 86_400_000
+    s.env.now = () => later
+    await s.ws.catchUp()
+    expect(reopen).toHaveBeenCalledTimes(1)
+    expect(changed).toHaveBeenCalledTimes(1)
+  })
+
+  test('what is on screen and the ids it names stay until the new copy is in', async () => {
+    const load = deferred<Incoming[]>()
+    const made: ReturnType<typeof setup>[] = []
+    const data = createStore<DataState>()(() => ({ ...EMPTY }))
+    const registry = new Registry()
+    const backend = createStore<BackendState>()(() => ({ phase: 'closed' }))
+    const life = new Lifecycle(
+      () => {
+        const s = setup(made.length ? { all: () => load.promise } : {})
+        Object.assign(s.env, { data, registry, backend })
+        made.push(s)
+        return s.ws
+      },
+      backend,
+      registry,
+    )
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    expect(data.getState().issues['i-1']).toBeDefined()
+    life.reopen(made[0].ws)
+    await sleep(5)
+    expect(made).toHaveLength(2)
+    expect(data.getState().issues['i-1'].title).toBe('First')
+    expect(registry.teamId('ENG')).toBe('t-eng')
+    load.resolve(world().map((i) => (i.from === 'fetch' && i.table === 'issues' ? fetch('issues', [issueRow('i-1', 'Read again', 3)]) : i)))
+    await sleep(5)
+    expect(data.getState().issues['i-1'].title).toBe('Read again')
+    expect(backend.getState().phase).toBe('open')
+  })
+
+  test('a failed open keeps what waits for "Try again"; opening another workspace sends it first', async () => {
+    const calls: string[] = []
+    const hooks: WritesHooks = {
+      attach: (t) => calls.push(`attach ${t.workspaceId}`),
+      detach: () => calls.push('detach'),
+      finish: async () => {
+        calls.push('finish')
+      },
+      stop: () => calls.push('stop'),
+      status: () => ({ pending: 0, waiting: false }),
+    }
+    let fail = true
+    const backend = createStore<BackendState>()(() => ({ phase: 'closed' }))
+    const life = new Lifecycle(
+      (id) => {
+        const s = setup({
+          all: async () => {
+            if (fail) throw new TypeError('Failed to fetch')
+            return world()
+          },
+        }, Promise.resolve('up'), hooks)
+        Object.assign(s.env, { backend })
+        return new LiveWorkspace(s.env, id, { id: ME, person: ANA })
+      },
+      backend,
+      new Registry(),
+      { writes: hooks },
+    )
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    expect(backend.getState().phase).toBe('failed')
+    // "Try again": the screen closes it and opens it once more
+    await life.close()
+    fail = false
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    expect(calls).toEqual(['detach', `attach ${WS}`])
+    // failed again, then another workspace
+    fail = true
+    await life.open('ws-2', { id: ME, person: ANA })
+    await sleep(5)
+    await life.close()
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    expect(calls).toEqual(['detach', `attach ${WS}`, 'finish', 'detach', 'finish'])
   })
 })

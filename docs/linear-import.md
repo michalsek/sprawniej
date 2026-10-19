@@ -107,7 +107,7 @@ views from Linear fails, the import goes on without them and says so.
 Each imported row remembers its Linear id (`linearId`), and so does a team that took in a Linear team (only one team
 at a time: another team that had it lets go). Running the
 import again picks those teams by itself and updates what came over instead of making copies, so you can import
-once early and again on switch-over day. If an import matches someone who hadn't joined to a person who has,
+once early and again on switch-over day. People who hadn't joined don't need another import: invite or link them in Settings › People from Linear. If an import matches someone who hadn't joined to a person who has,
 everything that pointed at them (imported or made here since: issues, archived issues, comments, project leads and
 views) moves to that person, the person who hadn't joined goes away, and the one who joined remembers their Linear id
 (`linearIds`). Linear's version wins for imported issues and views (except an issue's place in the list and a view's

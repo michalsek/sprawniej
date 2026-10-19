@@ -28,7 +28,8 @@ export const STATUSES: Status[] = [
 ]
 
 const byId = new Map(STATUSES.map((s) => [s.id, s]))
-export const statusOf = (id: StatusId): Status => byId.get(id)!
+/** a status this app doesn't know (written by a newer one, or by hand) reads as Backlog instead of breaking the screen */
+export const statusOf = (id: StatusId): Status => byId.get(id) ?? STATUSES[0]
 
 /** The tabs on a team's Issues page. */
 export type IssueTab = 'active' | 'backlog' | 'all'

@@ -213,5 +213,18 @@ export function projectProgress(projectId: string, issues: Issue[]): { done: num
 export const isUnread = (n: Pick<InboxItem, 'id' | 'at' | 'readAt'>, r: ReadState) =>
   !n.readAt && !r.read.includes(n.id) && (!r.readUntil || n.at > r.readUntil)
 
-/** you are an owner or an admin of the open workspace (deleting teams, renaming it, importing) */
-export const isAdmin = (s: { me: Person | null; members: Record<string, Member> }): boolean => !!s.me && ['owner', 'admin'].includes(s.members[s.me.login]?.role ?? '')
+type WithMembers = { members: Record<string, Member>; me: Person | null }
+
+/** your role in the open workspace (null: not in it, or not known yet) */
+export const roleOf = (s: WithMembers): Member['role'] | null => {
+  const m = s.me ? s.members[s.me.login] : undefined
+  return m && !m.removedAt ? m.role : null
+}
+
+/** admins and owners invite people, change roles, rename the workspace, delete teams and import */
+export const isAdmin = (s: WithMembers): boolean => {
+  const r = roleOf(s)
+  return r === 'owner' || r === 'admin'
+}
+
+export const ownerCount = (s: Pick<WithMembers, 'members'>): number => Object.values(s.members).filter((m) => m.role === 'owner' && !m.removedAt).length

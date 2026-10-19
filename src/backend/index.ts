@@ -5,18 +5,23 @@
 import { toast } from 'sonner'
 import { create } from 'zustand'
 import { useData } from '@/data/store'
+import { handOver } from '@/lib/beforeHide'
 import { useAuth } from './auth'
 import type { Existing, ImportExtras, ImportResult } from '@/features/import/linearMap'
 import { getClient, type Db } from './client'
 import { friendlyDbError } from './problem'
 import { ImportProblem, planImport, readExisting, runImport, type ImportPlan } from './importRows'
 import { watchConnection } from './connection'
+import type { EventRow } from '@/data/history'
+import { fetchIssueEvents } from './history'
+import { pictures, usePictures } from './pictures'
 import { Channels, type ChannelStatus, type Topic } from './live'
 import { Loader } from './load'
 import type { MyProfile } from './profiles'
 import { registry } from './registry'
 import { useSaveStatus } from './status'
 import { DELAYS, Lifecycle, LiveWorkspace, type BackendState, type WritesHooks } from './workspace'
+import { leaveWorkspace } from './workspaces'
 import { attach, debugWrites, detach, flush, pending, startWrites, started, stopWrites, writesStatus } from './writes'
 import { postgrest } from './writes/send'
 
@@ -32,8 +37,13 @@ const writes: WritesHooks = {
     if (!started()) startWrites({ transport: postgrest(db), tell: (m) => toast(m), onStatus: () => life.current?.refresh() })
     attach(target)
   },
-  detach,
+  // the screen is about to go: fields hand over what you typed first, so it's saved too
+  detach() {
+    handOver()
+    detach()
+  },
   finish: async (ms) => {
+    handOver()
     await flush(ms)
     stopWrites()
   },
@@ -59,6 +69,7 @@ const life: Lifecycle = new Lifecycle(
         reopen: () => life.reopen(ws),
         delays: DELAYS,
         writes,
+        now: () => Date.now(),
       },
       workspaceId,
       me,
@@ -67,8 +78,24 @@ const life: Lifecycle = new Lifecycle(
   },
   useBackend,
   registry,
-  writes,
+  { writes, closed: () => forget() },
 )
+
+/**
+ * What belongs to one open workspace and is kept in memory beside the store (pictures' signed addresses, which
+ * work for whoever holds them; read history): forgotten when it closes for good (switching workspace, signing out)
+ * or goes away (deleted, or you were removed).
+ */
+const forgetting: (() => void)[] = [() => pictures.clear()]
+export function onForget(fn: () => void): void {
+  forgetting.push(fn)
+}
+function forget() {
+  for (const fn of forgetting) fn()
+}
+useBackend.subscribe((s, was) => {
+  if (s.phase === 'gone' && was.phase !== 'gone') forget()
+})
 
 const CLOSED_CHANNELS: Record<Topic, ChannelStatus> = { ws: 'CLOSED', me: 'CLOSED' }
 
@@ -87,6 +114,8 @@ export const backend = {
   open: (workspaceId: string, me: MyProfile): Promise<void> => life.open(workspaceId, me),
   /** closing: what's waiting gets a moment to be sent first */
   close: (): Promise<void> => life.close(),
+  /** you leave the open workspace, and it closes (no "You're no longer in this workspace" for your own leaving) */
+  leave: (): Promise<void> => life.leave(leaveWorkspace),
   /** read what changed since the last change we know of (scripted checks call it too) */
   catchUp: (): Promise<void> => life.current?.catchUp() ?? Promise.resolve(),
   /** archived issues into the store, once per opening */
@@ -134,6 +163,13 @@ export const backend = {
       importing = false
     }
   },
+  /** an issue's history events after `afterId`, oldest first (src/data/history.ts reads them) */
+  history: (issueId: string, afterId?: number): Promise<EventRow[]> => {
+    const ws = life.current
+    const db = getClient()
+    if (!ws || ws.closed || !db) return Promise.reject(new Error('No workspace is open.'))
+    return fetchIssueEvents(db, ws.workspaceId, issueId, afterId)
+  },
   /** for scripted checks */
   debug: () => {
     const ws = life.current
@@ -145,6 +181,7 @@ export const backend = {
       channels: ws?.channels && !ws.closed ? { ...ws.channels.status } : { ...CLOSED_CHANNELS },
       catchUps: ws?.catchUps ?? 0,
       writes: debugWrites(),
+      pictures: Object.keys(usePictures.getState().entries).length,
     }
   },
 }

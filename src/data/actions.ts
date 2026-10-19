@@ -10,22 +10,39 @@
  */
 import { generateKeyBetween } from 'fractional-indexing'
 import { ulid } from 'ulid'
-import type { AnyChange, Change, Writable } from '@/backend/changes'
+import { localKey } from '@/backend/apply/take'
+import type { AnyChange, Call, Change, Writable } from '@/backend/changes'
 import type { Json } from '@/backend/database.types'
-import { backend } from '@/backend'
 import { ImportProblem, type ImportPlan } from '@/backend/importRows'
 import type { KeyOf, LiveTable, Row } from '@/backend/tables'
 import { context, tell, write, type NoteRow, type WriteContext } from '@/backend/writes'
 import { MESSAGES } from '@/backend/writes/problems'
-import { createWorkspace } from '@/backend/workspaces'
-import type { Comment, Display, Filters, Issue, Label, Person, Project, Team, View } from '@/model/schema'
+import { backend } from '@/backend'
+import { PictureError, pictures, type PictureProblem } from '@/backend/pictures'
+import {
+  acceptInvite,
+  createInvite as makeInvite,
+  createWorkspace,
+  deleteInvite as removeInvite,
+  linkPerson as linkGuest,
+  removeMember,
+  RULES,
+  setMemberRole,
+  type Invite,
+  type InviteRole,
+  type Role,
+} from '@/backend/workspaces'
+import { useSession } from '@/session'
+import { canLeave, myWho, ruleFor, whoIs } from './roles'
+import type { Comment, Display, Filters, Issue, Label, Project, Team, View } from '@/model/schema'
 import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
 import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
+import { IMAGE_TYPES, MAX_IMAGE_MB, openWorkspaceId, pictureName, picturePath } from './assets'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
-import { isAdmin, isUnread } from './select'
+import { isAdmin, isUnread, ownerCount } from './select'
 import { issueRef, useData } from './store'
 
 const now = () => new Date().toISOString()
@@ -35,12 +52,21 @@ const now = () => new Date().toISOString()
 type Ctx = Pick<WriteContext, 'workspaceId' | 'registry'>
 
 /** typed by table where it's made; one change of some table where it's handed on */
-const any = <N extends LiveTable>(c: Change<N>): AnyChange => c as unknown as AnyChange
+const erase = <N extends LiveTable>(c: Change<N>): AnyChange => c as unknown as AnyChange
 const ins = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'insert'>, guess?: Partial<Row<N>>): AnyChange =>
-  any<N>({ table, key, op: 'insert', fields, ...(guess && { guess }) })
-const upd = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'update'>, guess?: Partial<Row<N>>): AnyChange =>
-  any<N>({ table, key, op: 'update', fields, ...(guess && { guess }) })
-const del = <N extends LiveTable>(table: N, key: KeyOf<N>): AnyChange => any<N>({ table, key, op: 'delete' })
+  erase<N>({ table, key, op: 'insert', fields, ...(guess && { guess }) })
+const upd = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'update'>, guess?: Partial<Row<N>>, call?: Call): AnyChange =>
+  erase<N>({ table, key, op: 'update', fields, ...(guess && { guess }), ...(call && { call }) })
+const del = <N extends LiveTable>(table: N, key: KeyOf<N>): AnyChange => erase<N>({ table, key, op: 'delete' })
+
+/** one update of a row, if anything in it changed */
+const updated = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'update'>): AnyChange[] => (Object.keys(fields).length ? [upd(table, key, fields)] : [])
+
+/** filters and display as the database keeps them */
+const toJson = (v: object): Json => v as Json
+
+/** every issue we have, archived ones too */
+const allIssues = (s: ReturnType<typeof useData.getState>): Issue[] => [...Object.values(s.issues), ...Object.values(s.archive)]
 
 /** a person's profile id; null for no one; undefined (and a warning) for a login nobody knows */
 function pid(c: Pick<WriteContext, 'registry'>, login: string | null | undefined): string | null | undefined {
@@ -279,7 +305,7 @@ export function createIssue(input: NewIssue): Issue {
   }
   const team = c && tid(c, input.team)
   if (!c || !s.me || !team) {
-    if (c) console.warn(`Sprawniej doesn’t know the team ${input.team} here, so the issue wasn’t saved`)
+    console.warn(c ? `Sprawniej doesn’t know the team ${input.team} here, so the issue wasn’t saved` : 'No workspace is open, so the issue wasn’t saved')
     return issue
   }
   const id = issue.id
@@ -316,7 +342,7 @@ export function createIssue(input: NewIssue): Issue {
     changes: [ins('issues', { id }, fields, guess), ...labelChanges(id, [], issue.labels, c)],
     notes: noteRows(id, issueNotes(null, issue, s.me.login, s.people), c),
     done: (r) => {
-      const real = r.ok ? r.rows.get(`issues:${id}`)?.number : undefined
+      const real = r.ok ? r.rows.get(localKey('issues', { id }))?.number : undefined
       if (typeof real === 'number') followNumber(input.team, number, real)
     },
   })
@@ -328,7 +354,7 @@ export function deleteIssue(id: string) {
   const c = context()
   const s = useData.getState()
   if (!c || !s.issues[id]) return
-  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  const all = allIssues(s)
   write({
     changes: [del('issues', { id })],
     // the database deletes its comments, labels, followers and notes along with it
@@ -351,9 +377,9 @@ export function moveIssueToTeam(id: string, team: string): Issue | undefined {
   const number = nextNumber(team)
   const guess: Partial<Row<'issues'>> = { team_id: to, number, former_refs: [...(old.formerRefs ?? []), issueRef(old)], updated_at: now() }
   write({
-    changes: [{ table: 'issues', key: { id }, op: 'update', fields: {}, guess, call: { fn: 'move_issue_to_team', args: { p_issue: id, p_team: to } } }],
+    changes: [upd('issues', { id }, {}, guess, { fn: 'move_issue_to_team', args: { p_issue: id, p_team: to } })],
     done: (r) => {
-      const real = r.ok ? r.rows.get(`issues:${id}`)?.number : undefined
+      const real = r.ok ? r.rows.get(localKey('issues', { id }))?.number : undefined
       if (typeof real === 'number') followNumber(team, number, real)
     },
   })
@@ -513,7 +539,8 @@ export function updateLabel(id: string, patch: Partial<Pick<Label, 'name' | 'col
   const fields: Writable<'labels', 'update'> = {}
   if (patch.name !== undefined && patch.name.trim() !== label.name) fields.name = patch.name.trim()
   if (patch.color !== undefined && patch.color !== label.color) fields.color = patch.color
-  if (Object.keys(fields).length) write({ changes: [upd('labels', { id }, fields)] })
+  const changes = updated('labels', { id }, fields)
+  if (changes.length) write({ changes })
 }
 
 /**
@@ -528,7 +555,7 @@ export function viewsWithout(views: Record<string, View>, field: 'labels' | 'pro
     const list = v.filters[field] as (string | null)[] | undefined
     if (!list?.includes(id)) continue
     const rest = list.filter((x) => x !== id)
-    if (rest.length) out.push(upd('views', { id: v.id }, { filters: { ...v.filters, [field]: rest } as Json }))
+    if (rest.length) out.push(upd('views', { id: v.id }, { filters: toJson({ ...v.filters, [field]: rest }) }))
   }
   return out
 }
@@ -538,9 +565,11 @@ export function deleteLabel(id: string) {
   const c = context()
   const s = useData.getState()
   if (!c || !s.labels[id]) return
-  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  const all = allIssues(s)
   write({
-    changes: [del('labels', { id }), ...viewsWithout(s.views, 'labels', id)],
+    changes: [del('labels', { id })],
+    // only once the label is gone: a refused delete leaves the views as they were
+    after: viewsWithout(s.views, 'labels', id),
     cascade: all.filter((i) => i.labels.includes(id)).map((i) => del('issue_labels', { issue_id: i.id, label_id: id })),
   })
 }
@@ -588,8 +617,8 @@ export function createView(input: NewView): View {
           name: view.name,
           emoji: view.emoji,
           description: view.description,
-          filters: view.filters as Json,
-          display: view.display as Json,
+          filters: toJson(view.filters),
+          display: toJson(view.display),
         },
         { owner_id: c.meId, created_at: view.createdAt, linear_id: null, extra: {} },
       ),
@@ -610,9 +639,10 @@ export function updateView(id: string, patch: ViewPatch) {
   if (next.name !== view.name) fields.name = next.name
   if (next.emoji !== view.emoji) fields.emoji = next.emoji
   if (next.description !== view.description) fields.description = next.description
-  if (!equal(next.filters, view.filters)) fields.filters = next.filters as Json
-  if (!equal(next.display, view.display)) fields.display = next.display as Json
-  if (Object.keys(fields).length) write({ changes: [upd('views', { id }, fields)] })
+  if (!equal(next.filters, view.filters)) fields.filters = toJson(next.filters)
+  if (!equal(next.display, view.display)) fields.display = toJson(next.display)
+  const changes = updated('views', { id }, fields)
+  if (changes.length) write({ changes })
 }
 
 export function deleteView(id: string) {
@@ -689,7 +719,7 @@ export function updateProject(id: string, patch: ProjectPatch) {
     if (lead !== undefined) fields.lead_id = lead
   }
   if (patch.targetDate !== undefined && patch.targetDate !== project.targetDate) fields.target_date = patch.targetDate
-  const changes = [...(Object.keys(fields).length ? [upd('projects', { id }, fields)] : []), ...(patch.teams ? projectTeamChanges(id, project.teams, patch.teams, c) : [])]
+  const changes = [...updated('projects', { id }, fields), ...(patch.teams ? projectTeamChanges(id, project.teams, patch.teams, c) : [])]
   if (changes.length) write({ changes })
 }
 
@@ -700,12 +730,13 @@ export function deleteProject(id: string) {
   const project = s.projects[id]
   if (!c || !project) return
   write({
-    changes: [del('projects', { id }), ...viewsWithout(s.views, 'projects', id)],
+    changes: [del('projects', { id })],
+    after: viewsWithout(s.views, 'projects', id),
     cascade: project.teams.flatMap((key) => {
       const team_id = tid(c, key)
       return team_id ? [del('project_teams', { project_id: id, team_id })] : []
     }),
-    untilEcho: [...Object.values(s.issues), ...Object.values(s.archive)].filter((i) => i.project === id).map((i) => upd('issues', { id: i.id }, { project_id: null })),
+    untilEcho: allIssues(s).filter((i) => i.project === id).map((i) => upd('issues', { id: i.id }, { project_id: null })),
   })
 }
 
@@ -735,7 +766,7 @@ export function setAutoArchive(key: string, months: number) {
   const c = context()
   const team = useData.getState().teams[key]
   const id = c && tid(c, key)
-  if (!id || !team || (team.autoArchive ?? AUTO_ARCHIVE_MONTHS) === months) return
+  if (!c || !id || !team || (team.autoArchive ?? AUTO_ARCHIVE_MONTHS) === months) return
   write({ changes: [upd('teams', { id }, { auto_archive: months })] })
 }
 
@@ -747,9 +778,10 @@ export function updateTeam(key: string, patch: { name?: string; emoji?: string }
   if (!id || !team) return
   const fields: Writable<'teams', 'update'> = {}
   const name = patch.name?.trim()
-  if (name !== undefined && name && name !== team.name) fields.name = name
+  if (name && name !== team.name) fields.name = name
   if (patch.emoji !== undefined && patch.emoji !== team.emoji) fields.emoji = patch.emoji
-  if (Object.keys(fields).length) write({ changes: [upd('teams', { id }, fields)] })
+  const changes = updated('teams', { id }, fields)
+  if (changes.length) write({ changes })
 }
 
 /** what deleting a team takes with it, for the warning; `archived` counts what's loaded (backend.countArchived counts all) */
@@ -763,7 +795,6 @@ export function teamContents(key: string): { issues: number; archived: number; c
     views: Object.values(s.views).filter((v) => v.team === key).length,
   }
 }
-
 
 /**
  * Delete a team for everyone: its issues, comments, archive and its own views go. Sub-issues in other teams lose their
@@ -779,11 +810,13 @@ export function deleteTeam(key: string): boolean {
     tell(MESSAGES.deleteTeam)
     return false
   }
-  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  const all = allIssues(s)
   const gone = new Set(all.filter((i) => i.team === key).map((i) => i.id))
   const views = new Set(Object.values(s.views).filter((v) => v.team === key).map((v) => v.id))
   write({
-    changes: [del('teams', { id }), ...viewsWithout(s.views, 'teams', key, views)],
+    changes: [del('teams', { id })],
+    // only once the team is gone: a refused delete leaves the other views as they were
+    after: viewsWithout(s.views, 'teams', key, views),
     // all of this the database deletes along with the team
     cascade: [
       ...[...gone].map((i) => del('issues', { id: i })),
@@ -846,12 +879,14 @@ export function renameMe(name: string) {
   write({ changes: [upd('profiles', { id: c.meId }, { name: typed, name_set_here: true })] })
 }
 
-/**
- * Someone from the Linear import who hadn't joined is this person. Not here yet: the screen that offers it is hidden
- * until linking comes back.
- */
-export function linkPerson(_guest: string, _to: Person) {
-  tell("Linking people from Linear isn't available yet.")
+// ---------- members, roles and invites ----------
+// Awaited, not handed to the writer: the database rules word their refusals precisely, and nothing should flicker
+// back. Each throws an Error whose message can be shown as it is; the store follows from the database's echo.
+
+function openHere(): WriteContext {
+  const c = context()
+  if (!c) throw new Error('Open the workspace first.')
+  return c
 }
 
 /**
@@ -863,6 +898,68 @@ export async function importFromLinear(plan: ImportPlan, progress: (saved: numbe
   if (!isAdmin(useData.getState())) throw new ImportProblem('Only admins and owners can import from Linear.')
   return backend.importRows(plan, progress)
 }
+
+function idOf(c: WriteContext, login: string): string {
+  const id = c.registry.profileId(login)
+  if (!id) throw new Error(`Sprawniej doesn't know @${login} here.`)
+  return id
+}
+
+async function changeMember(login: string, to: Role | 'removed') {
+  const c = openHere()
+  const s = useData.getState()
+  const target = whoIs(s, login)
+  if (!target) throw new Error("They're not in this workspace any more.")
+  if (to === target.role) return
+  const why = ruleFor(myWho(s), target, to, ownerCount(s))
+  if (why) throw new Error(why)
+  if (to === 'removed') await removeMember(c.workspaceId, idOf(c, login))
+  else await setMemberRole(c.workspaceId, idOf(c, login), to)
+  void backend.catchUp()
+}
+
+/** admins and owners; only owners make or change owners */
+export const setRole = (login: string, role: Role): Promise<void> => changeMember(login, role)
+
+/** they can't open the workspace any more; their work keeps their name */
+export const removeFromWorkspace = (login: string): Promise<void> => changeMember(login, 'removed')
+
+/** you leave the open workspace (the last owner can't), and land on the list of workspaces */
+export async function leaveWorkspace(): Promise<void> {
+  const c = openHere()
+  const s = useData.getState()
+  const can = canLeave(myWho(s), ownerCount(s))
+  if (!can.ok) throw new Error(can.why ?? "You're not in this workspace any more.")
+  // what you changed last is saved before you go
+  await backend.flush(3_000)
+  await backend.leave()
+  useSession.getState().forget(c.workspaceId)
+  location.hash = '#/'
+}
+
+/** a link for one person (for someone from Linear: they become that person when they join) */
+export async function createInvite(o: { role: InviteRole; forGuest?: string; forEmail?: string }): Promise<Invite> {
+  const c = openHere()
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notInviter)
+  return makeInvite(c.workspaceId, { role: o.role, forEmail: o.forEmail, ...(o.forGuest && { forProfile: idOf(c, o.forGuest) }) })
+}
+
+export async function deleteInvite(id: string): Promise<void> {
+  openHere()
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notInviter)
+  await removeInvite(id)
+}
+
+/** Someone from the Linear import who hadn't joined is this member: their issues, comments and views move over. */
+export async function linkPerson(guest: string, to: string): Promise<void> {
+  const c = openHere()
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notLinker)
+  await linkGuest(c.workspaceId, idOf(c, guest), idOf(c, to))
+  void backend.catchUp()
+}
+
+/** joins with an invite link (no workspace needs to be open); returns the workspace's id. Throws an InviteError. */
+export const joinWorkspace = (token: string): Promise<string> => acceptInvite(token)
 
 /** A brand-new workspace with you as its owner and its first team. Returns its id. */
 export function startWorkspace(name: string, firstTeam: TeamDraft): Promise<string> {
@@ -883,12 +980,34 @@ export function renameWorkspace(name: string) {
 
 // ---------- pictures ----------
 
-const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
-export const MAX_IMAGE_MB = 10
+/** what to tell someone whose picture couldn't be added */
+export const PICTURE_MESSAGES: Record<PictureProblem, string> = {
+  'too-big': `This picture is too big. Pictures can be up to ${MAX_IMAGE_MB} MB.`,
+  'wrong-type': 'Only PNG, JPEG, GIF and WebP pictures can be added.',
+  refused: "You can't add pictures to this workspace.",
+  'signed-out': 'Please sign in again, then add the picture.',
+  network: "This picture couldn't be added. Check your connection and try again.",
+}
 
-/** Keep a pasted or dropped picture in the workspace. Returns the address to put in the Markdown. Coming back soon. */
-export async function addImage(file: Blob): Promise<string> {
-  if (!IMAGE_TYPES[file.type]) throw new Error('Only PNG, JPEG, GIF and WebP pictures can be added.')
-  if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(`This picture is too big. Pictures can be up to ${MAX_IMAGE_MB} MB.`)
-  throw new Error("Pictures can't be added just yet. They're coming back soon.")
+/**
+ * Keep a pasted or dropped picture with the workspace. Returns the address to put in the Markdown; `named` hears it
+ * as soon as it's known, while the picture already shows from this browser's own copy.
+ */
+export async function addImage(file: Blob, named?: (src: string) => void): Promise<string> {
+  const ext = IMAGE_TYPES[file.type]
+  if (!ext) throw new Error(PICTURE_MESSAGES['wrong-type'])
+  if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(PICTURE_MESSAGES['too-big'])
+  const ws = openWorkspaceId()
+  if (!ws) throw new Error('Pictures can be added once your workspace is open.')
+  const name = await pictureName(file, ext)
+  const path = picturePath(ws, name)
+  const src = `/assets/${name}`
+  pictures.preview(path, file)
+  named?.(src)
+  try {
+    await pictures.add(path, file)
+  } catch (e) {
+    throw new Error(PICTURE_MESSAGES[e instanceof PictureError ? e.kind : 'network'], { cause: e })
+  }
+  return src
 }
