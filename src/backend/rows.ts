@@ -9,17 +9,19 @@
 import type { Json } from './database.types'
 import type { Registry } from './registry'
 import type { Insert, Row } from './tables'
-import type { Member } from '@/data/store'
 import {
   AUTO_ARCHIVE_MONTHS,
   isGuest,
+  linearIdsOf,
   type ArchivedIssue,
   type Comment,
   type Display,
   type Filters,
   type InboxItem,
   type Issue,
+  type Known,
   type Label,
+  type Member,
   type Person,
   type Project,
   type ReadState,
@@ -31,29 +33,31 @@ import type { Priority, StatusId } from '@/model/status'
 
 // ---------- times ----------
 
-const STAMP = /^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)(?:\.(\d{1,9}))?(Z|[+-]\d\d(?::?\d\d)?)?$/
+const STAMP = /^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)(?:\.(\d{1,9}))?(?:Z|([+-])(\d\d)(?::?(\d\d))?)?$/
 
-/** microseconds since 1970, exact (a bigint), for changed_at and deleted_at comparisons (P19); null if unreadable */
+/**
+ * Microseconds since 1970, exact (a bigint), for comparing changed_at and deleted_at: the database keeps
+ * microseconds, and two changes within one millisecond must still come in the right order. Null if unreadable.
+ */
 export function micros(s: string): bigint | null {
   const m = STAMP.exec(s)
   if (!m) return null
-  const [, y, mo, d, h, mi, sec, frac = '', zone = 'Z'] = m
+  const [, y, mo, d, h, mi, sec, frac = '', sign, oh = '0', om = '0'] = m
   const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(sec))
   if (Number.isNaN(ms)) return null
-  let offset = 0
-  if (zone !== 'Z') {
-    const z = /^([+-])(\d\d):?(\d\d)?$/.exec(zone)!
-    offset = (z[1] === '-' ? -1 : 1) * (Number(z[2]) * 60 + Number(z[3] ?? 0))
-  }
+  const offset = (sign === '-' ? -1 : 1) * (Number(oh) * 60 + Number(om))
   return (BigInt(ms) - BigInt(offset) * 60_000n) * 1000n + BigInt(frac.padEnd(6, '0').slice(0, 6))
+}
+
+/** -1, 0 or 1 for two times already read with micros(); null counts as the oldest */
+export function compareMicros(x: bigint | null, y: bigint | null): number {
+  if (x === null || y === null) return x === y ? 0 : x === null ? -1 : 1
+  return x < y ? -1 : x > y ? 1 : 0
 }
 
 /** -1, 0 or 1; a missing or unreadable time counts as the oldest */
 export function compareStamp(a: string | null | undefined, b: string | null | undefined): number {
-  const x = a ? micros(a) : null
-  const y = b ? micros(b) : null
-  if (x === null || y === null) return x === y ? 0 : x === null ? -1 : 1
-  return x < y ? -1 : x > y ? 1 : 0
+  return compareMicros(a ? micros(a) : null, b ? micros(b) : null)
 }
 
 /** a time as the app keeps it: "….123Z" (milliseconds cut, not rounded); something unreadable comes back as it is */
@@ -77,45 +81,50 @@ export interface Resolve {
   miss?: (id: string, table: 'profiles' | 'teams') => void
 }
 
+type Linked = { linearId?: string }
+const names = <T>(...keys: (keyof Known<T> & string)[]): ReadonlySet<string> => new Set(keys)
+
 /** the fields each kind has (or makes up from other tables), so none of them is kept in `extra` as well */
 const KNOWN = {
-  workspace: new Set(['id', 'name', 'format', 'createdAt']),
-  person: new Set(['id', 'login', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'linearId', 'linearIds']),
-  team: new Set(['id', 'key', 'name', 'emoji', 'members', 'createdAt', 'lastNumber', 'autoArchive', 'linearId']),
-  label: new Set(['id', 'name', 'color', 'linearId']),
-  project: new Set(['id', 'name', 'emoji', 'description', 'status', 'lead', 'teams', 'targetDate', 'createdAt', 'linearId']),
-  issue: new Set([
+  workspace: names<Workspace>('id', 'name', 'format', 'createdAt'),
+  person: names<Person & Linked & { id: string; linearIds: string[] }>('id', 'login', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'linearId', 'linearIds'),
+  team: names<Team & Linked & { id: string }>('id', 'key', 'name', 'emoji', 'members', 'createdAt', 'lastNumber', 'autoArchive', 'linearId'),
+  label: names<Label & Linked>('id', 'name', 'color', 'linearId'),
+  project: names<Project & Linked>('id', 'name', 'emoji', 'description', 'status', 'lead', 'teams', 'targetDate', 'createdAt', 'linearId'),
+  issue: names<ArchivedIssue & Linked>(
     'id', 'team', 'number', 'title', 'description', 'status', 'priority', 'assignee', 'labels', 'project', 'parent',
     'dueDate', 'estimate', 'sortOrder', 'createdBy', 'createdAt', 'updatedAt', 'completedAt', 'duplicateOf',
     'subscribers', 'unsubscribed', 'formerRefs', 'linearId', 'archivedAt', 'archivedBy', 'comments',
-  ]),
-  comment: new Set(['id', 'issue', 'author', 'createdAt', 'editedAt', 'body', 'linearId']),
-  view: new Set(['id', 'name', 'emoji', 'description', 'owner', 'team', 'filters', 'display', 'createdAt', 'linearId']),
-  inbox: new Set(['id', 'type', 'issue', 'actor', 'at', 'comment', 'status', 'readAt']),
-  readState: new Set(['readUntil', 'read']),
+  ),
+  comment: names<Comment & Linked>('id', 'issue', 'author', 'createdAt', 'editedAt', 'body', 'linearId'),
+  view: names<View & Linked>('id', 'name', 'emoji', 'description', 'owner', 'team', 'filters', 'display', 'createdAt', 'linearId'),
+  inbox: names<InboxItem>('id', 'type', 'issue', 'actor', 'at', 'comment', 'status', 'readAt'),
+  readState: names<ReadState>('readUntil', 'read'),
 }
 
-const asObject = (v: unknown): Record<string, unknown> =>
-  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+/** a JSON column that holds an object (extra, filters, display); anything else reads as {} */
+function jsonObject<T extends object>(v: Json | undefined): T {
+  return (v && typeof v === 'object' && !Array.isArray(v) ? v : {}) as T
+}
 
 /** what `extra` holds, minus names the row has a column for (a column always wins) */
-function fromExtra(extra: unknown, known: ReadonlySet<string>): Record<string, unknown> {
+function fromExtra(extra: Json | undefined, known: ReadonlySet<string>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(asObject(extra))) if (!known.has(k)) out[k] = v
+  for (const [k, v] of Object.entries(jsonObject<Record<string, Json>>(extra))) if (!known.has(k)) out[k] = v
   return out
 }
 
 /** the model's own fields the database has no column for */
 function toExtra(model: object, known: ReadonlySet<string>): Json {
-  const out: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(model)) if (!known.has(k) && v !== undefined) out[k] = v
-  return out as Json
+  const out: { [key: string]: Json } = {}
+  for (const [k, v] of Object.entries(model)) if (!known.has(k) && v !== undefined) out[k] = v as Json
+  return out
 }
 
 const linear = (row: { linear_id: string | null }) => (row.linear_id != null ? { linearId: row.linear_id } : {})
 
 /** a person's login; an id nobody knows yet stands in for it until their profile arrives */
-function login(id: string | null, r: Resolve): string | null {
+function login(id: string | null | undefined, r: Resolve): string | null {
   if (!id) return null
   const known = r.registry.login(id)
   if (known !== undefined) return known
@@ -123,7 +132,9 @@ function login(id: string | null, r: Resolve): string | null {
   return id
 }
 
-function teamKey(id: string, r: Resolve): string | undefined {
+/** undefined while the team isn't known (and for a row that has none) */
+function teamKey(id: string | null | undefined, r: Resolve): string | undefined {
+  if (!id) return undefined
   const key = r.registry.teamKey(id)
   if (key === undefined) r.miss?.(id, 'teams')
   return key
@@ -133,13 +144,14 @@ type Stamped = { changed_at?: string | null }
 
 /** names in the order their join rows were made (oldest first, ones not saved yet last), then by name */
 function inOrder<R extends Stamped>(rows: readonly R[], name: (row: R) => string | undefined): string[] {
+  const byName = (a: { n: string }, b: { n: string }) => (a.n < b.n ? -1 : a.n > b.n ? 1 : 0)
   const named = rows.flatMap((row) => {
     const n = name(row)
-    return n === undefined ? [] : [{ n, at: row.changed_at ?? null }]
+    return n === undefined ? [] : [{ n, at: row.changed_at ? micros(row.changed_at) : null }]
   })
   named.sort((a, b) => {
-    if (!a.at || !b.at) return a.at === b.at ? (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) : a.at ? -1 : 1
-    return compareStamp(a.at, b.at) || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0)
+    if (a.at === null || b.at === null) return a.at === b.at ? byName(a, b) : a.at === null ? 1 : -1
+    return compareMicros(a.at, b.at) || byName(a, b)
   })
   return [...new Set(named.map((x) => x.n))]
 }
@@ -150,7 +162,7 @@ export function rowToWorkspace(row: Row<'workspaces'>): Workspace {
   return { ...fromExtra(row.extra, KNOWN.workspace), id: row.id, name: row.name, createdAt: iso(row.created_at) }
 }
 
-/** a guest keeps one Linear id (`linearId`); an account can stand for several (`linearIds`, see relink.ts) */
+/** a guest keeps one Linear id (`linearId`); an account can stand for several (`linearIds`) */
 export function rowToPerson(row: Row<'profiles'>): Person {
   const ids = row.linear_ids ?? []
   return {
@@ -208,6 +220,7 @@ export function rowToProject(row: Row<'projects'>, teams: readonly ProjectTeamIn
 
 export type IssueLabelIn = Pick<Row<'issue_labels'>, 'label_id'> & Stamped
 export type IssueFollowerIn = Pick<Row<'issue_followers'>, 'profile_id' | 'following'> & Stamped
+export type IssueResult = { archived: false; issue: Issue } | { archived: true; issue: ArchivedIssue }
 
 /**
  * An issue with its labels and followers. Archived (archived_at set): an ArchivedIssue that holds its comments.
@@ -219,11 +232,11 @@ export function rowToIssue(
   followers: readonly IssueFollowerIn[],
   r: Resolve,
   comments: Comment[] = [],
-): Issue | ArchivedIssue | undefined {
+): IssueResult | undefined {
   const team = teamKey(row.team_id, r)
   if (team === undefined) return undefined
   const who = (following: boolean) =>
-    [...new Set(followers.filter((f) => f.following === following).map((f) => login(f.profile_id, r)!))].sort()
+    [...new Set(followers.flatMap((f) => (f.following === following ? [login(f.profile_id, r)] : [])).filter((l) => l !== null))].sort()
   const subscribers = who(true)
   const unsubscribed = who(false)
   const issue: Issue = {
@@ -253,8 +266,8 @@ export function rowToIssue(
     ...(row.former_refs?.length > 0 && { formerRefs: [...row.former_refs] }),
     ...linear(row),
   }
-  if (!row.archived_at) return issue
-  return { ...issue, archivedAt: iso(row.archived_at), archivedBy: login(row.archived_by, r) ?? '', comments }
+  if (!row.archived_at) return { archived: false, issue }
+  return { archived: true, issue: { ...issue, archivedAt: iso(row.archived_at), archivedBy: login(row.archived_by, r) ?? '', comments } }
 }
 
 export function rowToComment(row: Row<'comments'>, r: Resolve): Comment {
@@ -282,8 +295,8 @@ export function rowToView(row: Row<'views'>, r: Resolve): View | undefined {
     description: row.description,
     owner: login(row.owner_id, r) ?? '',
     team,
-    filters: asObject(row.filters) as Filters,
-    display: asObject(row.display) as Display,
+    filters: jsonObject<Filters>(row.filters),
+    display: jsonObject<Display>(row.display),
     createdAt: iso(row.created_at),
     ...linear(row),
   }
@@ -309,14 +322,18 @@ export function rowToReadState(row: Row<'read_state'>): ReadState {
 }
 
 // ---------- the app to rows ----------
-// For the import and the actions. A login or team key the registry doesn't know is a mistake in the code, so it throws.
+// Whole rows for the import (import_rows), which may write every column, times and Linear ids included. Actions
+// send only the columns people may write (changes.ts, Writable). A login or team key the registry doesn't know is
+// a mistake in the code, so it throws.
 
-function profileId(who: string | null | undefined, reg: Registry): string | null {
-  if (!who) return null
+function requiredProfileId(who: string, reg: Registry): string {
   const id = reg.profileId(who)
   if (!id) throw new Error(`Unknown person: ${who}`)
   return id
 }
+
+/** no one ('' or null) is null */
+const profileId = (who: string | null | undefined, reg: Registry): string | null => (who ? requiredProfileId(who, reg) : null)
 
 function teamId(key: string, reg: Registry): string {
   const id = reg.teamId(key)
@@ -330,14 +347,6 @@ const ownId = (model: object): string | undefined => {
   return typeof id === 'string' && id ? id : undefined
 }
 
-/** the same as linearIdsOf in src/data/relink.ts, kept apart so this file doesn't pull in the repo file code (files.ts, project.ts) */
-function linearIds(p: Person): string[] {
-  const x = p as { linearId?: unknown; linearIds?: unknown }
-  const own = typeof x.linearId === 'string' ? [x.linearId] : []
-  const more = Array.isArray(x.linearIds) ? x.linearIds.filter((i): i is string => typeof i === 'string') : []
-  return [...new Set([...own, ...more])]
-}
-
 const linearId = (model: object): string | null => {
   const id = (model as { linearId?: unknown }).linearId
   return typeof id === 'string' ? id : null
@@ -348,17 +357,15 @@ export function workspaceToRow(w: Workspace, workspaceId: string): Insert<'works
 }
 
 export function personToProfile(p: Person, workspaceId: string, reg: Registry): Insert<'profiles'> {
-  const id = ownId(p) ?? reg.profileId(p.login)
-  if (!id) throw new Error(`Unknown person: ${p.login}`)
   return {
-    id,
+    id: ownId(p) ?? requiredProfileId(p.login, reg),
     login: p.login,
     github_id: p.githubId > 0 ? p.githubId : null,
     name: p.name,
     avatar_url: p.avatarUrl,
     name_set_here: !!p.nameSetHere,
     guest_of: isGuest(p.login) ? workspaceId : null,
-    linear_ids: linearIds(p),
+    linear_ids: linearIdsOf(p),
     extra: toExtra(p, KNOWN.person),
   }
 }
@@ -378,7 +385,7 @@ export function teamToRows(t: Team, workspaceId: string, reg: Registry): { teams
       created_at: t.createdAt,
       extra: toExtra(t, KNOWN.team),
     },
-    team_members: t.members.map((m) => ({ workspace_id: workspaceId, team_id: id, profile_id: profileId(m, reg)! })),
+    team_members: t.members.map((m) => ({ workspace_id: workspaceId, team_id: id, profile_id: requiredProfileId(m, reg) })),
   }
 }
 
@@ -386,7 +393,7 @@ export function labelToRow(l: Label, workspaceId: string): Insert<'labels'> {
   return { id: l.id, workspace_id: workspaceId, name: l.name, color: l.color, linear_id: linearId(l), extra: toExtra(l, KNOWN.label) }
 }
 
-/** project_teams in the project's order: reading them back keeps the order they were made in (E45) */
+/** project_teams in the project's order: the database stamps them as they arrive, and reading keeps that order */
 export function projectToRows(
   p: Project,
   workspaceId: string,
@@ -417,8 +424,8 @@ export function issueToRows(
   reg: Registry,
 ): { issues: Insert<'issues'>; issue_labels: Insert<'issue_labels'>[]; issue_followers: Insert<'issue_followers'>[] } {
   const followers = new Map<string, boolean>()
-  for (const l of i.subscribers ?? []) followers.set(profileId(l, reg)!, true)
-  for (const l of i.unsubscribed ?? []) followers.set(profileId(l, reg)!, false)
+  for (const l of i.subscribers ?? []) followers.set(requiredProfileId(l, reg), true)
+  for (const l of i.unsubscribed ?? []) followers.set(requiredProfileId(l, reg), false)
   return {
     issues: {
       id: i.id,
@@ -486,7 +493,7 @@ export function inboxToRow(n: InboxItem, workspaceId: string, reg: Registry, rec
   return {
     id: n.id,
     workspace_id: workspaceId,
-    recipient_id: profileId(recipient, reg)!,
+    recipient_id: requiredProfileId(recipient, reg),
     actor_id: profileId(n.actor, reg),
     type: n.type,
     issue_id: n.issue,

@@ -14,6 +14,9 @@ export const FORMAT_VERSION = 1
 const iso = z.string() // ISO 8601 date-time
 const login = z.string() // GitHub login
 
+/** a shape's own fields, without the "anything else" `.passthrough()` allows, so a misspelled field doesn't compile */
+export type Known<T> = { [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K] }
+
 /** sprawniej.json at the repo root */
 export const workspaceSchema = z
   .object({
@@ -50,6 +53,21 @@ export type Person = z.infer<typeof personSchema>
  */
 export const isGuest = (login: string | null | undefined): boolean => !!login && login.startsWith('~')
 
+/** the Linear ids a person stands for: a guest's own (`linearId`), and the ones linked to an account (`linearIds`) */
+export function linearIdsOf(p: Person | undefined): string[] {
+  const x = p as { linearId?: unknown; linearIds?: unknown } | undefined
+  const own = typeof x?.linearId === 'string' ? [x.linearId] : []
+  const linked = Array.isArray(x?.linearIds) ? x.linearIds.filter((i): i is string => typeof i === 'string') : []
+  return [...new Set([...own, ...linked])]
+}
+
+/** someone's place in a workspace (only the database keeps this; a workspace repo has none) */
+export interface Member {
+  role: 'owner' | 'admin' | 'member'
+  /** when they left or were removed; their name still shows on old work */
+  removedAt: string | null
+}
+
 /** labels/<id>.json */
 export const labelSchema = z
   .object({
@@ -63,10 +81,13 @@ export type Label = z.infer<typeof labelSchema>
 /** months after which finished issues are archived, unless a team says otherwise (team.autoArchive) */
 export const AUTO_ARCHIVE_MONTHS = 6
 
+/** a team key (ENG): a capital letter, then up to six capitals or digits; the database checks the same */
+export const TEAM_KEY_PATTERN = /^[A-Z][A-Z0-9]{0,6}$/
+
 /** teams/<KEY>/team.json */
 export const teamSchema = z
   .object({
-    key: z.string().regex(/^[A-Z][A-Z0-9]{0,6}$/),
+    key: z.string().regex(TEAM_KEY_PATTERN),
     name: z.string(),
     emoji: z.string(),
     members: z.array(login),

@@ -4,29 +4,14 @@
 -- Do not "force row level security": the tables belong to postgres, and that is what lets the security definer
 -- functions write history, used numbers and deletions.
 
--- Every table: rules on, nothing for people who aren't signed in, read for signed-in people (the policies narrow it),
--- and the four standard member policies where the wiring list says so (P22).
+-- Every table in private.wiring: rules on, read for signed-in people, the standard member policies, the changed_at
+-- stamp, deletion notes and broadcasts (private.wire, in the helpers file). It comes first because it starts by taking
+-- every right away; the column grants below give back what people may write.
 do $$
 declare w record;
 begin
-  for w in select * from private.wiring loop
-    execute format('alter table public.%I enable row level security', w.name);
-    execute format('revoke all on public.%I from anon, authenticated', w.name);   -- also drops truncate, trigger, references
-    execute format('grant select on public.%I to authenticated', w.name);
-    if w.policies is not null then
-      execute format('create policy "members read" on public.%I for select to authenticated '
-                     'using (workspace_id in (select private.my_workspaces()))', w.name);
-      execute format('create policy "members add" on public.%I for insert to authenticated '
-                     'with check (workspace_id in (select private.my_workspaces()))', w.name);
-      execute format('create policy "members change" on public.%I for update to authenticated '
-                     'using (workspace_id in (select private.my_workspaces())) '
-                     'with check (workspace_id in (select private.my_workspaces()))', w.name);
-      if w.policies = 'members' then
-        execute format('create policy "members delete" on public.%I for delete to authenticated '
-                       'using (workspace_id in (select private.my_workspaces()))', w.name);
-        execute format('grant delete on public.%I to authenticated', w.name);
-      end if;
-    end if;
+  for w in select name from private.wiring order by name loop
+    call private.wire(w.name);
   end loop;
 end $$;
 

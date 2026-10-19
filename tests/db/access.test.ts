@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { client, closeChannels, enabled, RUN, expectDenied, getWorld, newIssue, ok, TABLES, ulid, wsColumn, type World } from './support'
+import { anyTable, client, closeChannels, enabled, expectDenied, getWorld, newIssue, ok, RUN, TABLES, ulid, wsColumn, type World } from './support'
 
 describe.skipIf(!enabled)('who sees and changes what', () => {
   let w: World
@@ -11,13 +11,13 @@ describe.skipIf(!enabled)('who sees and changes what', () => {
   test('someone outside the workspace sees nothing and changes nothing', async () => {
     const issue = await newIssue(w.ana, w.ws, w.eng, { title: 'Private' })
     for (const t of TABLES) {
-      const rows = await ok(w.cy.db.from(t).select().eq(wsColumn(t), w.ws))
+      const rows = await ok(anyTable(w.cy.db, t).select().match({ [wsColumn(t)]: w.ws }))
       expect({ t, rows }).toEqual({ t, rows: [] })
     }
     const { error } = await w.cy.db.from('issues').insert({ id: ulid(), workspace_id: w.ws, team_id: w.eng, title: 'x', sort_order: 'a0' })
     expect(error?.code).toBe('42501')
     expect(await ok(w.cy.db.from('issues').update({ title: 'Hacked' }).eq('id', issue.id).select())).toEqual([])
-    const same = await ok(w.ana.db.from('issues').select('title').eq('id', issue.id).single<{ title: string }>())
+    const same = await ok(w.ana.db.from('issues').select('title').eq('id', issue.id).single())
     expect(same.title).toBe('Private')
     const moved = await w.cy.db.rpc('move_issue_to_team', { p_issue: issue.id, p_team: w.des })
     expect(moved.error).not.toBeNull()
@@ -41,7 +41,7 @@ describe.skipIf(!enabled)('who sees and changes what', () => {
     await expectDenied(w.bob.db.from('invites').insert({ workspace_id: w.ws }))
   })
 
-  test('only admins delete teams; every member deletes labels, projects, views and issues', async () => {
+  test('only admins delete teams; members delete the rest', async () => {
     expect(await ok(w.bob.db.from('teams').delete().eq('id', w.des).select())).toEqual([])
     expect(await ok(w.ana.db.from('teams').select('id').eq('id', w.des))).toHaveLength(1)
 
@@ -49,17 +49,10 @@ describe.skipIf(!enabled)('who sees and changes what', () => {
     await ok(w.bob.db.from('teams').insert({ id: team, workspace_id: w.ws, key: 'GONE', name: 'Gone' }))
     expect(await ok(w.ana.db.from('teams').delete().eq('id', team).select('id'))).toHaveLength(1)
 
+    // labels, projects, views and issues share the same generated "members delete" policy; one stands for all
     const label = ulid()
     await ok(w.ana.db.from('labels').insert({ id: label, workspace_id: w.ws, name: `Bug ${label}`, color: '#eb5757' }))
-    const project = ulid()
-    await ok(w.ana.db.from('projects').insert({ id: project, workspace_id: w.ws, name: 'Charts' }))
-    const view = ulid()
-    await ok(w.ana.db.from('views').insert({ id: view, workspace_id: w.ws, name: 'Mine', display: {} }))
-    const issue = await newIssue(w.ana, w.ws, w.eng)
     expect(await ok(w.bob.db.from('labels').delete().eq('id', label).select('id'))).toHaveLength(1)
-    expect(await ok(w.bob.db.from('projects').delete().eq('id', project).select('id'))).toHaveLength(1)
-    expect(await ok(w.bob.db.from('views').delete().eq('id', view).select('id'))).toHaveLength(1)
-    expect(await ok(w.bob.db.from('issues').delete().eq('id', issue.id).select('id'))).toHaveLength(1)
   })
 
   test('only admins rename the workspace', async () => {
@@ -67,4 +60,24 @@ describe.skipIf(!enabled)('who sees and changes what', () => {
     const renamed = await ok(w.ana.db.from('workspaces').update({ name: `dbtest ${RUN} main` }).eq('id', w.ws).select('name'))
     expect(renamed).toHaveLength(1)
   })
+
+  test('only people in the workspace can be put on its teams, issues, followers and projects', async () => {
+    const issue = await newIssue(w.ana, w.ws, w.eng)
+    await expectDenied(w.ana.db.from('team_members').insert({ workspace_id: w.ws, team_id: w.des, profile_id: w.cy.profileId }))
+    await expectDenied(w.ana.db.from('issues').update({ assignee_id: w.cy.profileId }).eq('id', issue.id))
+    await expectDenied(newIssueWith({ assignee_id: w.cy.profileId }))
+    await expectDenied(
+      w.ana.db.from('issue_followers').insert({ workspace_id: w.ws, issue_id: issue.id, profile_id: w.cy.profileId, following: true }),
+    )
+    const project = ulid()
+    await expectDenied(w.ana.db.from('projects').insert({ id: project, workspace_id: w.ws, name: 'Theirs', lead_id: w.cy.profileId }))
+    await ok(w.ana.db.from('projects').insert({ id: project, workspace_id: w.ws, name: 'Ours', lead_id: w.guest }))
+    await expectDenied(w.ana.db.from('projects').update({ lead_id: w.cy.profileId }).eq('id', project))
+    // people from the workspace, its people from Linear, and nobody, are all fine
+    expect(await ok(w.ana.db.from('issues').update({ assignee_id: w.guest }).eq('id', issue.id).select('id'))).toHaveLength(1)
+    expect(await ok(w.ana.db.from('issues').update({ assignee_id: null }).eq('id', issue.id).select('id'))).toHaveLength(1)
+  })
+
+  const newIssueWith = (more: { assignee_id: string }) =>
+    w.ana.db.from('issues').insert({ id: ulid(), workspace_id: w.ws, team_id: w.eng, title: 'x', sort_order: 'a0', ...more })
 })

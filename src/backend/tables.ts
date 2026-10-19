@@ -1,6 +1,6 @@
 /**
  * The database tables the app reads, as TypeScript sees them (docs/supabase-plan.md, section 2). The row types come
- * from database.types.ts; the keys here must match private.wiring (supabase/migrations/20261020000002_helpers.sql).
+ * from database.types.ts; the keys here must match private.wiring (supabase/migrations/20261019000002_helpers.sql).
  */
 import type { Database } from './database.types'
 
@@ -52,7 +52,7 @@ export const KEYS = {
 export type KeyOf<N extends LiveTable> = { [K in (typeof KEYS)[N][number]]: string }
 
 /**
- * What arrives on a channel (private.broadcast in 20261020000006_realtime.sql). An UPDATE carries only the changed
+ * What arrives on a channel (private.broadcast in 20261019000004_realtime.sql). An UPDATE carries only the changed
  * columns plus the keys and changed_at; a DELETE only the keys; a row too big to send comes without description or
  * body and with `partial`. `table` is a plain string: a message for a table we don't know is skipped, not an error.
  */

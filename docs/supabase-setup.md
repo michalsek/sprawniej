@@ -19,27 +19,36 @@ in any account. No Docker is needed. Commands run from the repo folder.
    cp supabase/.env.example supabase/.env
    bunx supabase config push --project-ref <ref>
    ```
-   Read the changes it shows before you say yes: it pushes every section of `config.toml`.
-   Once GitHub sign-in is switched on, make a GitHub OAuth app for this project (its callback is
-   `https://<ref>.supabase.co/auth/v1/callback`; GitHub allows one callback per app, so each project needs its own) and
-   give its id and secret for that one command only, never in a file:
+   In `supabase/.env`, `SPRAWNIEJ_SITE_URL` is where the app runs: `http://localhost:5173` for a development project,
+   the real address (`https://michalsek.github.io/sprawniej/`) for the one a team uses. Sign-in sends people back
+   there. Read the changes `config push` shows before you say yes (`bunx supabase config diff` shows them without
+   pushing).
+
+   **GitHub sign-in**: make a GitHub OAuth app for this project (its callback is
+   `https://<ref>.supabase.co/auth/v1/callback`; GitHub allows one callback per app, so each project needs its own),
+   set `enabled = true` under `[auth.external.github]` in `config.toml`, and give the app's id and secret for that one
+   command only, never in a file:
    ```sh
    SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID=... SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET=... bunx supabase config push --project-ref <ref>
    ```
-5. **Tell the app where it is**: write `.env.local` (it is not saved in git) with the project's address and its
+5. **Realtime: private channels only.** In the dashboard, Realtime, Settings, switch off "Allow public access".
+   `config.toml` can't hold this setting (it is only in the dashboard and the Management API: `private_only` on
+   `PATCH /v1/projects/<ref>/config/realtime`). Sprawniej only uses private channels, so this keeps anyone from
+   opening public ones on the project.
+6. **Tell the app where it is**: write `.env.local` (it is not saved in git) with the project's address and its
    publishable key (Dashboard, Project Settings, API keys). The publishable key is public; it only works within the
    database rules.
    ```
    VITE_SUPABASE_URL=https://<ref>.supabase.co
    VITE_SUPABASE_KEY=sb_publishable_...
    ```
-6. **Check it**: `bun run test:db` (below).
+7. **Check it**, on a development or throwaway project only: `bun run test:db`, then the cleanup (below).
 
 ## Database tests
 
-`bun run test:db` runs `tests/db` against the project in `.env.local`. They sign up throwaway accounts
-(`dbtest-<run>-<name>@mailinator.com`), make their own workspaces (`dbtest <run> ...`) and check the rules, numbers,
-history, deletions, realtime and pictures through the same API the app uses.
+For a development or throwaway project only. `bun run test:db` runs `tests/db` against the project in `.env.local`.
+They sign up throwaway accounts (`dbtest-<run>-<name>@mailinator.com`), make their own workspaces (`dbtest <run> ...`)
+and check the rules, numbers, history, deletions, realtime and pictures through the same API the app uses.
 
 - They need **email confirmations off** (`enable_confirmations = false` in `config.toml`, pushed with step 4, or
   Dashboard, Authentication, Email, "Confirm email"). With confirmations on, a sign-up gets no session and the tests
@@ -86,10 +95,12 @@ start of the file name).
   channel. Someone removed from a workspace keeps getting its changes until their browser reconnects (a reload, a
   dropped connection). Everything they try to read or change is refused at once. For a team of eight, that is fine.
 - **Imports** go through `import_rows(workspace, table, rows)`, admins only. The caller sends the same columns in every
-  row of a batch (a column missing from one row becomes empty, not its default) and reuses the id of every row that came
-  over before (rows are matched on their id; a new id with an old Linear id fails on purpose). Imports keep their
-  numbers and times, write no history and send one "catch up" message per batch instead of one per row. A second run
-  with the same rows changes nothing.
+  row of a batch (a column missing from one row becomes empty, not its default), sends every required column in every
+  row even when the row is already there and will only be updated (Postgres checks the whole row before it notices the
+  row exists), and reuses the id of every row that came over before (rows are matched on their id; a new id with an
+  old Linear id fails on purpose). A row whose id is used in another workspace is refused, and comments written here
+  are never changed by an import. Imports keep their numbers and times, write no history and send one "catch up"
+  message per batch instead of one per row. A second run with the same rows changes nothing.
 - **Upsert needs every column.** A write that might insert or update (an upsert) needs permission to update every
   column it sends. Only read marks (`read_state`) allow that; everything else is an insert or an update.
 - **Don't ask for notes back.** You can't read the inbox notes you send (they belong to the person they're for), so

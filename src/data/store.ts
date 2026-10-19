@@ -3,14 +3,7 @@
  * they never change it directly. All changes go through `actions.ts` (see CLAUDE.md, golden rules).
  */
 import { create } from 'zustand'
-import type { ArchivedIssue, Comment, InboxItem, Issue, Label, Person, Project, ReadState, Team, View, Workspace } from '@/model/schema'
-
-/** someone's place in the workspace */
-export interface Member {
-  role: 'owner' | 'admin' | 'member'
-  /** when they left or were removed; their name still shows on old work */
-  removedAt: string | null
-}
+import type { ArchivedIssue, Comment, InboxItem, Issue, Label, Member, Person, Project, ReadState, Team, View, Workspace } from '@/model/schema'
 
 export interface DataState {
   workspace: Workspace | null

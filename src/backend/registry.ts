@@ -4,12 +4,14 @@
  *
  * It only ever grows: a deleted guest or someone who left is still known, so their old work keeps their name. Logins
  * and team keys never change (no rule lets anyone change them), so an id keeps its name too.
- * Guest logins are unique only within one workspace (P5): clear() runs when another workspace opens and on sign-out.
+ * Guest logins are unique only within one workspace, so clear() runs when another workspace opens and on sign-out.
  */
 export class Registry {
+  /** profile id → login, and back */
   private loginOf = new Map<string, string>()
   private profileOf = new Map<string, string>()
-  private keyOf = new Map<string, string>()
+  /** team id → team key, and back */
+  private teamKeyOf = new Map<string, string>()
   private teamOf = new Map<string, string>()
 
   /** true when this id is new */
@@ -24,10 +26,10 @@ export class Registry {
 
   /** true when this id is new */
   learnTeam(id: string, key: string): boolean {
-    const was = this.keyOf.get(id)
+    const was = this.teamKeyOf.get(id)
     if (was === key) return false
     if (was !== undefined) this.teamOf.delete(was)
-    this.keyOf.set(id, key)
+    this.teamKeyOf.set(id, key)
     this.teamOf.set(key, id)
     return was === undefined
   }
@@ -41,7 +43,7 @@ export class Registry {
   }
 
   teamKey(id: string): string | undefined {
-    return this.keyOf.get(id)
+    return this.teamKeyOf.get(id)
   }
 
   teamId(key: string): string | undefined {
@@ -52,7 +54,7 @@ export class Registry {
   clear(): void {
     this.loginOf.clear()
     this.profileOf.clear()
-    this.keyOf.clear()
+    this.teamKeyOf.clear()
     this.teamOf.clear()
   }
 }

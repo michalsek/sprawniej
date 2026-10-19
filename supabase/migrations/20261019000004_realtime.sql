@@ -5,7 +5,7 @@
 -- Access is checked once, when a browser joins a channel. Someone removed from a workspace keeps receiving its
 -- changes until they rejoin (reload, reconnect). That is fine for a team of eight (P23).
 
--- Arguments: the topic prefix, the column that completes the topic, then the key columns.
+-- Arguments: the topic prefix, the column that completes the topic (empty for profiles), then the key columns.
 -- An update sends only what changed, plus the keys and changed_at; a delete sends the keys.
 create function private.broadcast() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -50,16 +50,8 @@ begin
   return null;
 end $$;
 
--- one trigger per broadcast table; invites, history, used numbers and deletions are not broadcast (P9)
-do $$
-declare w record;
-begin
-  for w in select * from private.wiring where topic is not null loop
-    execute format('create trigger live after insert or update or delete on public.%I '
-                   'for each row execute function private.broadcast(%s)',
-                   w.name, (select string_agg(quote_literal(x), ', ') from unnest(array[w.topic, w.topic_col] || w.keys) x));
-  end loop;
-end $$;
+-- The "live" trigger that calls it on every broadcast table is made by private.wire() (20261019000005_rls.sql).
+-- invites, history, used numbers and deletions are not broadcast (P9).
 
 -- Who may listen. The topic is compared as text, so a topic that isn't a workspace id is simply refused (P8).
 -- There is no insert policy: browsers can't send on these channels.
@@ -71,7 +63,3 @@ using (
     or (select realtime.topic()) = 'me:' || (select private.my_profile_id())::text
   )
 );
-
-revoke execute on all functions in schema private from public, anon, authenticated;
-grant execute on function private.my_profile_id(), private.my_workspaces(), private.my_admin_workspaces(),
-  private.my_owner_workspaces(), private.my_people() to authenticated;

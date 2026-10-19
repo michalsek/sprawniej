@@ -2,22 +2,62 @@
  * One change to one row, as an action makes it. The app shows it at once (apply.ts, `local`) and sends it to the
  * database (phase 5, writes.ts).
  */
-import { KEYS, type Insert, type KeyOf, type LiveTable, type Row } from './tables'
+import { KEYS, type Insert, type KeyOf, type LiveTable, type Row, type Update } from './tables'
 
 export type Op = 'insert' | 'update' | 'delete'
 
-export interface Change<N extends LiveTable = LiveTable> {
+/**
+ * The columns a signed-in person may write, as the database grants them (supabase/migrations/*_rls.sql). Everything
+ * else (changed_at, numbers, authors, times, linear_id) is filled in by the database. Keep in step with the grants.
+ */
+interface Grants {
+  workspaces: { insert: never; update: 'name' | 'extra' }
+  profiles: { insert: never; update: 'name' | 'avatar_url' | 'name_set_here' | 'extra' }
+  workspace_members: { insert: never; update: 'role' | 'removed_at' }
+  teams: { insert: 'id' | 'workspace_id' | 'key' | 'name' | 'emoji' | 'auto_archive' | 'extra'; update: 'name' | 'emoji' | 'auto_archive' | 'extra' }
+  team_members: { insert: 'workspace_id' | 'team_id' | 'profile_id'; update: never }
+  labels: { insert: 'id' | 'workspace_id' | 'name' | 'color' | 'extra'; update: 'name' | 'color' | 'extra' }
+  projects: {
+    insert: 'id' | 'workspace_id' | 'name' | 'emoji' | 'description' | 'status' | 'lead_id' | 'target_date' | 'extra'
+    update: 'name' | 'emoji' | 'description' | 'status' | 'lead_id' | 'target_date' | 'extra'
+  }
+  project_teams: { insert: 'workspace_id' | 'project_id' | 'team_id'; update: never }
+  issues: {
+    insert:
+      | 'id' | 'workspace_id' | 'team_id' | 'title' | 'description' | 'status' | 'priority' | 'assignee_id' | 'project_id'
+      | 'parent_id' | 'due_date' | 'estimate' | 'sort_order' | 'duplicate_of' | 'extra'
+    update:
+      | 'title' | 'description' | 'status' | 'priority' | 'assignee_id' | 'project_id' | 'parent_id' | 'due_date'
+      | 'estimate' | 'sort_order' | 'duplicate_of' | 'archived_at' | 'extra'
+  }
+  issue_labels: { insert: 'workspace_id' | 'issue_id' | 'label_id'; update: never }
+  issue_followers: { insert: 'workspace_id' | 'issue_id' | 'profile_id' | 'following'; update: 'following' }
+  comments: { insert: 'id' | 'workspace_id' | 'issue_id' | 'body' | 'extra'; update: 'body' | 'extra' }
+  views: {
+    insert: 'id' | 'workspace_id' | 'team_id' | 'name' | 'emoji' | 'description' | 'filters' | 'display' | 'extra'
+    update: 'name' | 'emoji' | 'description' | 'filters' | 'display' | 'extra'
+  }
+  inbox: { insert: 'id' | 'workspace_id' | 'recipient_id' | 'type' | 'issue_id' | 'comment_id' | 'status' | 'extra'; update: 'read_at' }
+  read_state: { insert: 'profile_id' | 'workspace_id' | 'read_until' | 'extra'; update: 'profile_id' | 'workspace_id' | 'read_until' | 'extra' }
+}
+
+/** what a signed-in person may send for this table */
+export type Writable<N extends LiveTable, O extends 'insert' | 'update'> = Partial<
+  O extends 'insert' ? Pick<Insert<N>, Grants[N]['insert'] & keyof Insert<N>> : Pick<Update<N>, Grants[N]['update'] & keyof Update<N>>
+>
+
+interface Base<N extends LiveTable> {
   table: N
-  op: Op
   key: KeyOf<N>
-  /** sent to the database: insert = the new row (only columns people may write); update = only changed columns; delete = {} */
-  fields: Partial<Insert<N>>
-  /**
-   * shown at once, never sent: what the database fills in (issues.number, created_at, created_by, updated_at…).
-   * Kept apart so writes.ts never sends a column only the database may set.
-   */
+  /** shown at once, never sent: what the database fills in (issues.number, created_at, created_by, updated_at…) */
   guess?: Partial<Row<N>>
 }
+export type Change<N extends LiveTable = LiveTable> =
+  /** the new row, only the columns people may write */
+  | (Base<N> & { op: 'insert'; fields: Writable<N, 'insert'> })
+  /** only the changed columns */
+  | (Base<N> & { op: 'update'; fields: Writable<N, 'update'> })
+  | (Base<N> & { op: 'delete'; fields?: Record<string, never> })
 export type AnyChange = { [N in LiveTable]: Change<N> }[LiveTable]
 
 /** the key columns joined with "|", in KEYS order: "01J…" or "<issue id>|<label id>" */

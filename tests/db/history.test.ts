@@ -8,12 +8,8 @@ describe.skipIf(!enabled)('history and deletions', () => {
   }, 60_000)
   afterAll(closeChannels)
 
-  const events = async (issue: string) =>
-    (await ok(w.ana.db.from('issue_events').select('actor_id, changes').eq('issue_id', issue).order('id'))) as Array<{
-      actor_id: string | null
-      changes: Record<string, any>
-    }>
-  const issueRow = async (id: string) => ok(w.ana.db.from('issues').select().eq('id', id).single<Record<string, any>>())
+  const events = async (issue: string) => ok(w.ana.db.from('issue_events').select('actor_id, changes').eq('issue_id', issue).order('id'))
+  const issueRow = async (id: string) => ok(w.ana.db.from('issues').select().eq('id', id).single())
   const newLabel = async () => {
     const id = ulid()
     await ok(w.ana.db.from('labels').insert({ id, workspace_id: w.ws, name: `L ${id}`, color: '#26b5ce' }))
@@ -50,17 +46,17 @@ describe.skipIf(!enabled)('history and deletions', () => {
   test('archive, restore, done and back', async () => {
     const issue = await newIssue(w.ana, w.ws, w.eng)
     expect(issue.completed_at).toBeNull()
-    const done = await ok(w.ana.db.from('issues').update({ status: 'done' }).eq('id', issue.id).select().single<Record<string, any>>())
+    const done = await ok(w.ana.db.from('issues').update({ status: 'done' }).eq('id', issue.id).select().single())
     expect(done.completed_at).not.toBeNull()
     const archived = await ok(
-      w.bob.db.from('issues').update({ archived_at: '2000-01-01T00:00:00Z' }).eq('id', issue.id).select().single<Record<string, any>>(),
+      w.bob.db.from('issues').update({ archived_at: '2000-01-01T00:00:00Z' }).eq('id', issue.id).select().single(),
     )
     expect(archived.archived_by).toBe(w.bob.profileId)
-    expect(archived.archived_at > '2020').toBe(true)
-    const restored = await ok(w.ana.db.from('issues').update({ archived_at: null }).eq('id', issue.id).select().single<Record<string, any>>())
+    expect((archived.archived_at ?? '') > '2020').toBe(true)
+    const restored = await ok(w.ana.db.from('issues').update({ archived_at: null }).eq('id', issue.id).select().single())
     expect(restored.archived_by).toBeNull()
     expect(restored.updated_at > archived.updated_at).toBe(true)
-    const todo = await ok(w.ana.db.from('issues').update({ status: 'todo' }).eq('id', issue.id).select().single<Record<string, any>>())
+    const todo = await ok(w.ana.db.from('issues').update({ status: 'todo' }).eq('id', issue.id).select().single())
     expect(todo.completed_at).toBeNull()
     expect((await events(issue.id)).map((e) => e.changes)).toEqual([
       { status: ['todo', 'done'] },

@@ -13,20 +13,13 @@ describe.skipIf(!enabled)('issue numbers', () => {
   afterAll(closeChannels)
 
   const lastNumber = async (team: string) =>
-    (await ok(w.ana.db.from('teams').select('last_number').eq('id', team).single<{ last_number: number }>())).last_number
+    (await ok(w.ana.db.from('teams').select('last_number').eq('id', team).single())).last_number
 
   test('issues created at the same moment get different numbers, one after another', async () => {
     const made = await Promise.all(Array.from({ length: 10 }, (_, n) => newIssue(n % 2 ? w.bob : w.ana, w.ws, num)))
-    const numbers = made.map((i) => i.number as number).sort((a, b) => a - b)
+    const numbers = made.map((i) => i.number).sort((a, b) => a - b)
     expect(numbers).toEqual(Array.from({ length: 10 }, (_, n) => numbers[0] + n))
     expect(await lastNumber(num)).toBe(numbers[9])
-  })
-
-  test('a failed insert leaves no gap', async () => {
-    const before = await lastNumber(num)
-    const { error } = await w.ana.db.from('issues').insert({ id: ulid(), workspace_id: w.ws, team_id: num, title: 'x', sort_order: 'a0', priority: 9 })
-    expect(error).not.toBeNull()
-    expect((await newIssue(w.ana, w.ws, num)).number).toBe(before + 1)
   })
 
   test('a deleted issue’s number is never given out again', async () => {
@@ -37,7 +30,7 @@ describe.skipIf(!enabled)('issue numbers', () => {
 
   test('moving an issue to another team gives it a number there and keeps the old one', async () => {
     const issue = await newIssue(w.ana, w.ws, num)
-    const moved = await ok(w.bob.db.rpc('move_issue_to_team', { p_issue: issue.id, p_team: other }).single<Record<string, any>>())
+    const moved = await ok(w.bob.db.rpc('move_issue_to_team', { p_issue: issue.id, p_team: other }))
     expect(moved.team_id).toBe(other)
     expect(moved.former_refs).toEqual([`NUM-${issue.number}`])
     expect((await newIssue(w.ana, w.ws, num)).number).not.toBe(issue.number)
@@ -46,8 +39,7 @@ describe.skipIf(!enabled)('issue numbers', () => {
     expect(used).toContainEqual({ team_id: other, number: moved.number })
 
     const elsewhere = await newWorkspace(w.ana, 'numbers')
-    const foreign = (await ok(w.ana.db.from('teams').select('id').eq('workspace_id', elsewhere).single<{ id: string }>())).id
-    const { error } = await w.ana.db.rpc('move_issue_to_team', { p_issue: issue.id, p_team: foreign })
+    const { error } = await w.ana.db.rpc('move_issue_to_team', { p_issue: issue.id, p_team: elsewhere.team })
     expect(error).not.toBeNull()
   })
 

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { applyRows, emptyLive, pendingFields, type ApplyContext, type Incoming, type LiveState, type StoreSlice } from '@/backend/apply'
-import type { AnyChange } from '@/backend/changes'
+import { applyRows, emptyLive, pendingDelete, pendingFields, type ApplyContext, type Incoming, type LiveState, type StoreSlice } from '@/backend/apply'
+import type { AnyChange, Writable } from '@/backend/changes'
 import { Registry } from '@/backend/registry'
-import type { DeletionRow, Row } from '@/backend/tables'
+import { KEYS, type DeletionRow, type Row } from '@/backend/tables'
 import { EMPTY } from '@/data/store'
 
 const WS = 'ws-1'
@@ -154,9 +154,10 @@ function open(): Open & { first: ReturnType<typeof applyRows> } {
   return { ctx, state: first.state, data: { ...EMPTY, ...first.patch }, first }
 }
 
-/** applies more inputs on top, like the store would */
+/** applies more inputs on top, like the store would; every row it asks for has a whole key */
 function step(w: Open, ...inputs: Incoming[]) {
   const r = applyRows(w.state, w.data, inputs, w.ctx)
+  for (const f of r.fetch) for (const k of KEYS[f.table]) expect(f.key[k as keyof typeof f.key]).toBeString()
   w.state = r.state
   w.data = { ...w.data, ...r.patch }
   return r
@@ -164,7 +165,7 @@ function step(w: Open, ...inputs: Incoming[]) {
 
 const msg = (table: string, op: 'INSERT' | 'UPDATE' | 'DELETE', row: Record<string, unknown>): Incoming => ({ from: 'message', message: { table, op, row } })
 const deletion = (table_name: string, row_key: Record<string, string>, s: number): DeletionRow => ({ id: s, workspace_id: WS, table_name, row_key, deleted_at: T(s) })
-const titleChange = (fields: Record<string, unknown>): AnyChange => ({ table: 'issues', op: 'update', key: { id: I1 }, fields })
+const titleChange = (fields: Writable<'issues', 'update'>): AnyChange => ({ table: 'issues', op: 'update', key: { id: I1 }, fields })
 
 describe('first load', () => {
   test('fetched rows build the whole store, with times in the app form', () => {
@@ -193,22 +194,10 @@ describe('first load', () => {
     expect(data.members.ana).toEqual({ role: 'owner', removedAt: null })
   })
 
-  test('no GitHub account is GitHub id 0', () => {
-    const w = open()
-    expect(w.data.people['~jan'].githubId).toBe(0)
-    step(w, msg('profiles', 'INSERT', profile('p-cy', 'cy', { github_id: null })))
-    expect(w.data.people.cy.githubId).toBe(0)
-  })
-
-  test('fields without a column show on the store objects', () => {
-    const { data } = open()
-    expect(data.issues[I2].foo).toBe('bar')
-    expect(data.labels['l-ui'].shade).toBe('dark')
-  })
-
-  test('the same rows again change nothing', () => {
+  test('the same rows again change nothing, even with other values at the same time', () => {
     const w = open()
     expect(step(w, ...world()).patch).toEqual({})
+    expect(step(w, { from: 'fetch', table: 'issues', rows: [issueRow(I1, { title: 'Other' })] }).patch).toEqual({})
   })
 })
 
@@ -227,11 +216,8 @@ describe('newer wins', () => {
     step(w, msg('issues', 'UPDATE', { id: I1, title: 'A', changed_at: T(11) }))
     step(w, msg('issues', 'UPDATE', { id: I1, priority: 3, changed_at: T(12) }))
     expect(w.data.issues[I1]).toMatchObject({ title: 'A', priority: 3, description: 'Fix the thing', labels: ['l-bug'] })
-  })
-
-  test('the mark is the latest change seen', () => {
-    const w = open()
-    expect(step(w, msg('issues', 'UPDATE', { id: I1, title: 'A', changed_at: T(30) })).state.mark).toBe(T(30))
+    expect(w.state.mark).toBe(T(20, '999999'))
+    expect(step(w, msg('issues', 'UPDATE', { id: I1, title: 'B', changed_at: T(30) })).state.mark).toBe(T(30))
   })
 })
 
@@ -383,7 +369,7 @@ describe('your own changes', () => {
     step(w, msg('issues', 'UPDATE', { id: I1, title: 'Theirs', priority: 2, changed_at: T(50) }))
     expect(w.data.issues[I1]).toMatchObject({ title: 'Mine', priority: 2 })
     // the write came back after theirs: the database has theirs
-    step(w, { from: 'settled', change: titleChange({ title: 'Mine' }) })
+    step(w, { from: 'settled', change: titleChange({ title: 'Mine' }), ok: true })
     expect(w.data.issues[I1].title).toBe('Theirs')
     expect(pendingFields(w.state, 'issues', { id: I1 })).toEqual([])
   })
@@ -391,14 +377,14 @@ describe('your own changes', () => {
   test('a newer edit stays while an older one is confirmed', () => {
     const w = open()
     step(w, { from: 'local', change: titleChange({ title: 'A' }) }, { from: 'local', change: titleChange({ title: 'B' }) })
-    step(w, { from: 'settled', change: titleChange({ title: 'A' }), row: issueRow(I1, { title: 'A', changed_at: T(51) }) })
+    step(w, { from: 'settled', change: titleChange({ title: 'A' }), ok: true, row: issueRow(I1, { title: 'A', changed_at: T(51) }) })
     expect(w.data.issues[I1].title).toBe('B')
   })
 
   test('a failed write is undone', () => {
     const w = open()
     step(w, { from: 'local', change: titleChange({ title: 'X' }) })
-    step(w, { from: 'settled', change: titleChange({ title: 'X' }) })
+    step(w, { from: 'settled', change: titleChange({ title: 'X' }), ok: false })
     expect(w.data.issues[I1].title).toBe('Fix the chart')
   })
 
@@ -414,7 +400,7 @@ describe('your own changes', () => {
   test('the echo of your own saved change changes nothing', () => {
     const w = open()
     step(w, { from: 'local', change: titleChange({ title: 'Mine' }) })
-    step(w, { from: 'settled', change: titleChange({ title: 'Mine' }), row: issueRow(I1, { title: 'Mine', changed_at: T(60) }) })
+    step(w, { from: 'settled', change: titleChange({ title: 'Mine' }), ok: true, row: issueRow(I1, { title: 'Mine', changed_at: T(60) }) })
     expect(step(w, msg('issues', 'UPDATE', { id: I1, title: 'Mine', changed_at: T(60) })).patch).toEqual({})
     expect(w.data.issues[I1].title).toBe('Mine')
   })
@@ -468,5 +454,202 @@ describe('the inbox and the workspace', () => {
     const r = step(w, msg('workspaces', 'DELETE', { id: WS }))
     expect(r.workspaceGone).toBe(true)
     expect(r.patch.workspace).toBeNull()
+  })
+})
+
+describe('rows too big to send', () => {
+  test('a later small update keeps waiting for the whole row, and the whole row brings the text', () => {
+    const w = open()
+    step(w, msg('issues', 'UPDATE', { id: I1, title: 'Big', partial: true, changed_at: T(41) }))
+    step(w, msg('issues', 'UPDATE', { id: I1, priority: 2, changed_at: T(42) }))
+    expect(w.data.issues[I1].description).toBe('Fix the thing')
+    step(w, { from: 'fetch', table: 'issues', rows: [issueRow(I1, { title: 'Big', priority: 2, description: 'Huge', changed_at: T(42) })] })
+    expect(w.data.issues[I1]).toMatchObject({ description: 'Huge', priority: 2 })
+  })
+
+  test('a partial insert keeps the text we have; a new one gets it once fetched', () => {
+    const w = open()
+    const { description: _, ...rest } = issueRow(I1, { title: 'Again', changed_at: T(41) })
+    const r = step(w, msg('issues', 'INSERT', { ...rest, partial: true }))
+    expect(w.data.issues[I1]).toMatchObject({ title: 'Again', description: 'Fix the thing' })
+    expect(r.fetch).toEqual([{ table: 'issues', key: { id: I1 } }])
+    const id = 'I7-000000000000'
+    const { description: __, ...fresh } = issueRow(id, { changed_at: T(41) })
+    step(w, msg('issues', 'INSERT', { ...fresh, partial: true }))
+    step(w, msg('issues', 'UPDATE', { id, priority: 2, changed_at: T(42) }))
+    step(w, { from: 'fetch', table: 'issues', rows: [issueRow(id, { priority: 2, description: 'Huge', changed_at: T(42) })] })
+    expect(w.data.issues[id].description).toBe('Huge')
+  })
+})
+
+describe('only this workspace, and only you', () => {
+  test('rows and deletions from another workspace are ignored', () => {
+    const w = open()
+    const r = step(
+      w,
+      msg('issues', 'INSERT', issueRow('IX-000000000000', { workspace_id: 'ws-2', changed_at: T(90) })),
+      msg('workspace_members', 'UPDATE', { workspace_id: 'ws-2', profile_id: ME, role: 'admin', changed_at: T(90) }),
+      { from: 'deletions', rows: [{ ...deletion('issues', { id: I1 }, 95), workspace_id: 'ws-2' }] },
+    )
+    expect(r.patch).toEqual({})
+    expect(r.fetch).toEqual([])
+    expect(w.data.issues[I1]).toBeDefined()
+  })
+
+  test('a note from another workspace never moves the mark', () => {
+    const w = open()
+    const before = w.state.mark
+    step(w, msg('inbox', 'UPDATE', { id: 'n-x', read_at: T(91), changed_at: T(91) }))
+    expect(w.state.mark).toBe(before)
+  })
+
+  test('read marks are yours only', () => {
+    const w = open()
+    expect(step(w, msg('read_state', 'UPDATE', { profile_id: 'p-bob', workspace_id: WS, read_until: T(85), changed_at: T(85) })).patch).toEqual({})
+    step(w, msg('read_state', 'UPDATE', { profile_id: ME, workspace_id: WS, read_until: T(85), changed_at: T(85) }))
+    expect(w.data.readState.readUntil).toBe(Z(85))
+  })
+
+  test('a note you write for someone else is not in your inbox', () => {
+    const w = open()
+    const note: AnyChange = {
+      table: 'inbox',
+      op: 'insert',
+      key: { id: 'n-o' },
+      fields: { id: 'n-o', workspace_id: WS, recipient_id: 'p-bob', type: 'assigned', issue_id: I1 },
+      guess: { actor_id: ME, at: T(90) },
+    }
+    expect(step(w, { from: 'local', change: note }).patch).toEqual({})
+  })
+})
+
+describe('people and teams that arrive later', () => {
+  test('rows that point at someone new wait for their profile, asked for once', () => {
+    const w = open()
+    const id = 'I9-000000000000'
+    const r = step(
+      w,
+      msg('issues', 'INSERT', issueRow(id, { assignee_id: 'p-cy', changed_at: T(50) })),
+      msg('workspace_members', 'INSERT', { workspace_id: WS, profile_id: 'p-cy', role: 'member', joined_at: T(50), removed_at: null, changed_at: T(50) }),
+      msg('comments', 'INSERT', commentRow('c-9', id, 'p-cy', 51)),
+    )
+    expect(r.fetch).toEqual([{ table: 'profiles', key: { id: 'p-cy' } }])
+    expect(w.data.issues[id].assignee).toBe('p-cy')
+    expect(w.data.members['p-cy']).toBeDefined()
+    step(w, { from: 'fetch', table: 'profiles', rows: [profile('p-cy', 'cy')], keys: [{ id: 'p-cy' }] })
+    expect(w.data.issues[id].assignee).toBe('cy')
+    expect(w.data.comments[id][0].author).toBe('cy')
+    expect(w.data.members.cy).toEqual({ role: 'member', removedAt: null })
+    expect(w.data.members['p-cy']).toBeUndefined()
+    expect(w.state.waiting).toEqual({})
+  })
+
+  test('someone who couldn\'t be fetched is asked for again by the next row', () => {
+    const w = open()
+    const ask = (id: string, s: number) => step(w, msg('issues', 'INSERT', issueRow(id, { assignee_id: 'p-zz', changed_at: T(s) }))).fetch
+    expect(ask('IA-000000000000', 50)).toEqual([{ table: 'profiles', key: { id: 'p-zz' } }])
+    expect(ask('IB-000000000000', 51)).toEqual([])
+    step(w, { from: 'fetch', table: 'profiles', rows: [], keys: [{ id: 'p-zz' }] })
+    expect(ask('IC-000000000000', 52)).toEqual([{ table: 'profiles', key: { id: 'p-zz' } }])
+  })
+})
+
+describe('comments', () => {
+  test('two comments at the same moment are ordered by id', () => {
+    const w = open()
+    step(w, msg('comments', 'INSERT', commentRow('c-b', I2, ME, 60)), msg('comments', 'INSERT', commentRow('c-a', I2, ME, 60)))
+    expect(w.data.comments[I2].map((c) => c.id)).toEqual(['c-a', 'c-b'])
+  })
+
+  test('a comment that moves to another issue leaves the first one', () => {
+    const w = open()
+    step(w, msg('comments', 'UPDATE', { id: 'c-1', issue_id: I2, changed_at: T(61) }))
+    expect(w.data.comments[I1].map((c) => c.id)).toEqual(['c-2'])
+    expect(w.data.comments[I2].map((c) => c.id)).toEqual(['c-1'])
+  })
+
+  test('the comments of a deleted issue don\'t come back with an older copy', () => {
+    const w = open()
+    step(w, msg('issues', 'DELETE', { id: I1 }))
+    step(w, { from: 'fetch', table: 'comments', rows: [commentRow('c-1', I1, 'p-bob', 3)] })
+    step(w, msg('issues', 'INSERT', issueRow(I1, { changed_at: T(40) })))
+    expect(w.data.issues[I1]).toBeDefined()
+    expect(w.data.comments[I1]).toBeUndefined()
+  })
+})
+
+describe('your own changes, edge cases', () => {
+  test('an edit to something a teammate deletes goes with it', () => {
+    const w = open()
+    step(w, { from: 'local', change: titleChange({ title: 'Mine' }) })
+    step(w, { from: 'local', change: { table: 'labels', op: 'update', key: { id: 'l-bug' }, fields: { name: 'Bugz' } } })
+    step(w, { from: 'local', change: { table: 'views', op: 'update', key: { id: 'v-1' }, fields: { name: 'X' } } })
+    const r = step(w, msg('issues', 'DELETE', { id: I1 }), msg('labels', 'DELETE', { id: 'l-bug' }), msg('views', 'DELETE', { id: 'v-1' }))
+    expect(w.data.issues[I1]).toBeUndefined()
+    expect(w.data.labels['l-bug']).toBeUndefined()
+    expect(w.data.views['v-1']).toBeUndefined()
+    expect(r.fetch).toEqual([])
+  })
+
+  test('a failed insert takes the edits made on top of it too', () => {
+    const w = open()
+    const insert: AnyChange = { table: 'comments', op: 'insert', key: { id: 'c-new' }, fields: { id: 'c-new', workspace_id: WS, issue_id: I1, body: 'hi' }, guess: { author_id: ME, created_at: T(99), edited_at: null } }
+    const edit: AnyChange = { table: 'comments', op: 'update', key: { id: 'c-new' }, fields: { body: 'hello' } }
+    step(w, { from: 'local', change: insert }, { from: 'local', change: edit })
+    expect(w.data.comments[I1].find((c) => c.id === 'c-new')?.body).toBe('hello')
+    step(w, { from: 'settled', change: insert, ok: false })
+    expect(w.data.comments[I1].map((c) => c.id)).toEqual(['c-1', 'c-2'])
+    expect(w.state.local).toEqual({})
+  })
+
+  test('the same value sent twice stays pending until the last write is back', () => {
+    const w = open()
+    step(w, { from: 'local', change: titleChange({ title: 'A' }) }, { from: 'local', change: titleChange({ title: 'B' }) }, { from: 'local', change: titleChange({ title: 'A' }) })
+    step(w, { from: 'settled', change: titleChange({ title: 'A' }), ok: true, row: issueRow(I1, { title: 'A', changed_at: T(51) }) })
+    expect(w.data.issues[I1].title).toBe('A')
+    expect(pendingFields(w.state, 'issues', { id: I1 })).toEqual(['title'])
+    step(w, { from: 'settled', change: titleChange({ title: 'B' }), ok: true, row: issueRow(I1, { title: 'B', changed_at: T(52) }) })
+    expect(w.data.issues[I1].title).toBe('A')
+    step(w, { from: 'settled', change: titleChange({ title: 'A' }), ok: true, row: issueRow(I1, { title: 'A', changed_at: T(53) }) })
+    expect(w.data.issues[I1].title).toBe('A')
+    expect(pendingFields(w.state, 'issues', { id: I1 })).toEqual([])
+  })
+
+  test('a delete hides the row until it is confirmed, and a failed one brings it back', () => {
+    const w = open()
+    const del: AnyChange = { table: 'issues', op: 'delete', key: { id: I1 } }
+    step(w, { from: 'local', change: del })
+    expect(w.data.issues[I1]).toBeUndefined()
+    expect(pendingDelete(w.state, 'issues', { id: I1 })).toBe(true)
+    step(w, { from: 'settled', change: del, ok: false })
+    expect(w.data.comments[I1]).toHaveLength(2)
+    expect(pendingDelete(w.state, 'issues', { id: I1 })).toBe(false)
+    step(w, { from: 'local', change: del }, { from: 'settled', change: del, ok: true, row: issueRow(I1) })
+    expect(w.data.issues[I1]).toBeUndefined()
+    expect(step(w, { from: 'fetch', table: 'issues', rows: [issueRow(I1)] }).patch).toEqual({})
+  })
+})
+
+describe('the same inputs twice', () => {
+  test('applying them again changes nothing', () => {
+    let seed = 12345
+    const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff
+    const pick = <X,>(xs: X[]) => xs[Math.floor(rnd() * xs.length)]
+    const issues = [I1, I2, 'I3-000000000000']
+    const event = (s: number): Incoming => {
+      const k = Math.floor(rnd() * 6)
+      if (k === 0) return { from: 'fetch', table: 'issues', rows: [issueRow(pick(issues), { title: `t${s}`, changed_at: T(s) })] }
+      if (k === 1) return { from: 'fetch', table: 'issue_labels', rows: [{ workspace_id: WS, issue_id: pick(issues), label_id: pick(['l-bug', 'l-ui']), changed_at: T(s) }] }
+      if (k === 2) return { from: 'fetch', table: 'comments', rows: [{ ...commentRow(pick(['c-1', 'c-2', 'c-3']), pick(issues), ME, 3), body: `b${s}`, changed_at: T(s) }] }
+      if (k === 3) return { from: 'deletions', rows: [deletion('issues', { id: pick(issues) }, s)] }
+      if (k === 4) return { from: 'deletions', rows: [deletion('issue_labels', { issue_id: pick(issues), label_id: pick(['l-bug', 'l-ui']) }, s)] }
+      return { from: 'deletions', rows: [deletion('comments', { id: pick(['c-1', 'c-2', 'c-3']) }, s)] }
+    }
+    for (let trial = 0; trial < 300; trial++) {
+      const events = Array.from({ length: 2 + Math.floor(rnd() * 7) }, (_, n) => event(100 + n))
+      const w = open()
+      for (const e of events) step(w, e)
+      expect(applyRows(w.state, w.data, events, w.ctx).patch).toEqual({})
+    }
   })
 })

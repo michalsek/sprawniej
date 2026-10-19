@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { generateNKeysBetween } from 'fractional-indexing'
-import { linearIdsOf } from '@/data/relink'
+import { linearIdsOf } from '@/model/schema'
 import { EMPTY } from '@/data/store'
 import { buildImport, existingFrom, guestLogins, emojiFor, freeKey, guessPerson, involvedUsers, mapStatus, rewriteLinks, type Existing, type ImportChoices, type ImportResult, type IssueRow } from '@/features/import/linearMap'
 import type { ArchivedIssue, Issue, Project, Team, View } from '@/model/schema'

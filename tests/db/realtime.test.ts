@@ -15,8 +15,8 @@ describe.skipIf(!enabled)('realtime', () => {
     await ok(w.ana.db.from('issues').update({ title: 'After' }).eq('id', issue.id))
     const m = await heard.waitFor((m) => m.table === 'issues' && m.op === 'UPDATE' && m.row?.id === issue.id, 3000)
     expect(m).toBeDefined()
-    expect(m!.row).toMatchObject({ id: issue.id, title: 'After' })
-    expect(Object.keys(m!.row).sort()).toEqual(['changed_at', 'id', 'title', 'updated_at'])
+    expect(m?.row).toMatchObject({ id: issue.id, title: 'After' })
+    expect(Object.keys(m?.row ?? {}).sort()).toEqual(['changed_at', 'id', 'title', 'updated_at'])
   })
 
   test('people outside the workspace, and topics that are not workspaces, are refused', async () => {

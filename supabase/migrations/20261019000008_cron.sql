@@ -1,5 +1,5 @@
 -- Nightly jobs (docs/supabase-plan.md, section 4): what tidyArchive and tidyInbox did in the browser.
--- cron.schedule with a name that exists replaces that job, so applying this file again is safe.
+-- The jobs have names, and cron.schedule with a name that exists replaces that job instead of adding a second one.
 
 create extension if not exists pg_cron with schema pg_catalog;
 grant usage on schema cron to postgres;
@@ -29,8 +29,12 @@ language plpgsql security definer set search_path = '' as $$
 declare gone integer;
 begin
   delete from public.inbox x
-   where x.at < now() - interval '90 days'
-      or (x.at < now() - interval '30 days'
+   where x.at < now() - interval
+         -- @days inbox-unread
+         '90 days'
+      or (x.at < now() - interval
+          -- @days inbox-read
+          '30 days'
           and (x.read_at is not null
                or exists (select 1 from public.read_state r
                            where r.profile_id = x.recipient_id and r.workspace_id = x.workspace_id
@@ -48,10 +52,6 @@ begin
   get diagnostics n = row_count;
   return n;
 end $$;
-
-revoke execute on all functions in schema private from public, anon, authenticated;
-grant execute on function private.my_profile_id(), private.my_workspaces(), private.my_admin_workspaces(),
-  private.my_owner_workspaces(), private.my_people() to authenticated;
 
 select cron.schedule('sprawniej-auto-archive',     '17 2 * * *', 'select private.auto_archive()');
 select cron.schedule('sprawniej-tidy-inboxes',     '27 2 * * *', 'select private.tidy_inboxes()');

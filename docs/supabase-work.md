@@ -29,10 +29,10 @@ Status: `todo`, `doing`, `done`.
 | # | Phase | Status | Notes |
 | --- | --- | --- | --- |
 | 0 | Plan merged into `main`, Supabase CLI as a dev dependency | done | |
-| 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | doing | built in 95beeff, 47/47 DB tests pass; QA and code review running |
+| 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | done | 95beeff + fix round; 53/53 DB tests, QA attack scripts pass |
 | 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | done | 70b978b, be04249 and a last fix; QA and code review passed |
-| 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | doing | being built |
-| 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | todo | being planned |
+| 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | done | 2b367bd + fix round; QA probes re-run |
+| 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | doing | |
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | todo | after 4 |
 | 6 | Linear import end to end (`import_rows`) | todo | after 2 and 5; parallel with 7, 8, 9 |
 | 7 | History and pictures | todo | after 5 |
@@ -65,7 +65,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | P16 | roadmap planner | `remember_deletion` on `workspaces` must use `id`, not `workspace_id`; pass the column as an argument | fixed | 95beeff: triggers.sql `remember_deletion` (workspaces leave no notes) |
 | P17 | roadmap planner | Nightly auto-archive must match `tidyArchive` (greatest(completed_at, updated_at), skip 0) | fixed | 95beeff: cron.sql `auto_archive` |
 | P18 | roadmap planner | Catch-up must include archived rows; index `(workspace_id, changed_at)` without the `archived_at is null` predicate | fixed | 95beeff: tables.sql catch-up indexes |
-| P19 | roadmap planner | Newer-only comparisons must keep microsecond precision of `changed_at`, not `toISOString()` | open | database keeps microseconds (95beeff); client side in phase 3 (`rows.ts`) |
+| P19 | roadmap planner | Newer-only comparisons must keep microsecond precision of `changed_at`, not `toISOString()` | fixed | 2b367bd: `rows.ts` keeps raw `changed_at` and compares microseconds |
 | P20 | roadmap planner | Redirect URLs need `http://localhost:4173` and the Pages URL with `/**`; `publicAppUrl()` is null on localhost so sign-in needs its own redirect helper | open | redirect URLs in config.toml (95beeff); sign-in redirect helper in phase 4; Pages URL in phase 11 |
 | P21 | roadmap planner | Bucket insert needs `on conflict do nothing`; storage objects can't be deleted with plain SQL (wipe through the Storage API) | fixed | 95beeff: storage.sql; `db reset --linked` replaces wipe.sql |
 | P22 | roadmap planner | Per-table policies and triggers the plan shows once: generate them in one loop, with a test that every table has them (except `issue_events`, `issue_numbers`) | fixed | 95beeff: helpers.sql `private.wiring` loops; tests/db/wiring.test.ts |
@@ -92,7 +92,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E19 | phase 2 planner | `tests/fixtures/linear.ts:1` mentions a browser test's pretend Linear that doesn't exist | open |  |
 | E20 | phase 2 planner | `tests/linearImport.test.ts:123,274,283,295,302` invalid `now` values silently switch the archive rule off | fixed | 70b978b (amendment A5) |
 | E21 | phase 1 planner | `vite.config.ts:20` the app's install description still says the workspace is kept in a GitHub repo | open | phase 10 |
-| E22 | phase 1 planner | `src/data/select.ts:192` `isUnread` compares ISO strings, so database times must come in `toISOString` form (P19) | open | phase 3 |
+| E22 | phase 1 planner | `src/data/select.ts:192` `isUnread` compares ISO strings, so database times must come in `toISOString` form (P19) | fixed | 2b367bd: `iso()` on every model time |
 | E23 | phase 1 planner | `actions.ts` `createIssue`: an issue created as Done gets `completedAt: null`; the new trigger sets it (small behaviour change) | open | phase 5 |
 | E24 | phase 1 planner | `actions.ts` `toldRecently` moves to the database (`check_note` trigger); delete it | open | phase 5 |
 | E25 | phase 1 planner | `.github/workflows/pages.yml` runs `bun test`; safe only while `tests/db` stays gated on `SPRAWNIEJ_DB_TESTS` | open | document in supabase-setup.md |
@@ -112,10 +112,10 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E39 | phase 2 code review | `src/model/schema.ts` uses `.passthrough()`, deprecated in Zod 4 (`.loose()`) | open | phase 10 |
 | E40 | phase 2 code review | `src/data/relink.ts:97` compares with key-order-sensitive `JSON.stringify` while `linearMap` has its own `same` | open | phase 10 (relink.ts mostly goes) |
 | E41 | phase 2 QA | A new Linear issue sorting first makes every issue of its team come back as changed (sort keys rebuilt per run) | fixed | phase 2 fix round (F4) |
-| E42 | phase 2 QA | Guest rows carry `githubId: 0` but `profiles.github_id` is unique; the client mapping must send null | open | phase 3 (`rows.ts`) |
+| E42 | phase 2 QA | Guest rows carry `githubId: 0` but `profiles.github_id` is unique; the client mapping must send null | fixed | 2b367bd: `rows.ts` maps githubId 0 to null |
 | E43 | phase 2 QA | A team row can take a Linear id another team still holds (unique per workspace) | fixed | phase 2 fix round (F1) |
 | E44 | phase 2 QA | `docs/supabase-plan.md` says `import_rows` upserts on `(workspace_id, linear_id)`; it must be the primary key | fixed | 95beeff (plan says primary key) |
-| E45 | phase 2 QA | Change detection on re-import needs `rows.ts` to return the same text the import writes (times as `.000Z`) | open | phase 3 |
+| E45 | phase 2 QA | Change detection on re-import needs `rows.ts` to return the same text the import writes (times as `.000Z`) | fixed | 2b367bd: round trip tested with the real import |
 | E46 | phase 2 QA | `setMonth` rolls past month end (Aug 31 minus 6 months is Mar 3), in both the import and `tidyArchive` | fixed | phase 2 fix round (F5, UTC with day clamp) |
 | E47 | phase 2 QA | The renumbered note shows the key here, not Linear's identifier | fixed | phase 2 fix round (F7) |
 | E48 | phase 2 QA | Import page copy says "Ready to import" and "run the import again later" while saving is off | fixed | phase 2 fix round (F9) |
@@ -131,8 +131,47 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E58 | phase 3 planner | `project.ts:127` sorts comments by `createdAt` with no tiebreak | open | phase 3 reducer tiebreaks by id; project.ts goes in phase 10 |
 | E59 | phase 3 planner | `select.ts` `isUnread` does `read.includes` per note (quadratic for unread counts) | open |  |
 | E60 | phase 3 planner | `schema.ts:14` `iso = z.string()` checks nothing, so a `+00:00` time passes silently | open |  |
-| E61 | phase 3 planner | `actions.ts` `markAllRead` takes the newest `at` by string compare; right only while all times are in Z form | open | phase 3 (`iso()` everywhere) |
+| E61 | phase 3 planner | `actions.ts` `markAllRead` takes the newest `at` by string compare; right only while all times are in Z form | fixed | 2b367bd: all times in Z form |
 | E62 | phase 3 planner | `docs/supabase-plan.md` `broadcast()` text differs from the shipped one (keys in updates, `last_number` skipped, profiles loop) | open | phase 10 docs |
+| E63 | phase 1 QA | CRITICAL: `import_rows` let an admin of their own workspace overwrite rows of any other workspace (issues, comments, teams, labels, projects, views, followers) | fixed | phase 1 fix round, commit after 62a9e22 (S1) |
+| E64 | phase 1 QA | `import_rows` let an admin rewrite a member's comment, bypassing the author-only rule | fixed | phase 1 fix round, commit after 62a9e22 (S2) |
+| E65 | phase 1 QA | People outside a workspace can be attached as assignee, team member, follower or project lead | fixed | phase 1 fix round, commit after 62a9e22 (S3) |
+| E66 | phase 1 QA | An admin can bring back someone who left or was removed without an invite | fixed | phase 1 fix round, commit after 62a9e22 (S4) |
+| E67 | phase 1 QA | Imported issue numbers have no bounds (a huge number breaks every later issue in the team) | fixed | phase 1 fix round, commit after 62a9e22 (S5) |
+| E68 | phase 1 QA + review | Private functions created later are open to everyone unless each file revokes them (no default-privileges revoke) | fixed | phase 1 fix round, commit after 62a9e22 (S6) |
+| E69 | phase 1 review | `import_rows` can't update part of a row (NOT NULL is checked before conflict handling); undocumented | fixed | phase 1 fix round, commit after 62a9e22 (Q1) |
+| E70 | phase 1 review | The policy/trigger wiring loops only run once; a later table would get none | fixed | phase 1 fix round, commit after 62a9e22 (Q2) |
+| E71 | phase 1 review | `import_spec` repeats `wiring` (and tests/db/support.ts a third time) | fixed | phase 1 fix round, commit after 62a9e22 (Q3) |
+| E72 | phase 1 review | Repeated SQL logic: number hand-out, the import flag + catch-up dance, the login pattern, completed statuses | fixed | phase 1 fix round, commit after 62a9e22 (Q4) |
+| E73 | phase 1 review | Generated types make `issues.number` required on insert though the trigger fills it | fixed | phase 1 fix round, commit after 62a9e22 (Q5) |
+| E74 | phase 1 review | Some database error messages say "rows" or show table names, against the writing rules | fixed | phase 1 fix round, commit after 62a9e22 (Q6) |
+| E75 | phase 1 review | Runbook gaps: how to switch GitHub on, the real site address, tests only on development projects, Realtime public access | fixed | phase 1 fix round, commit after 62a9e22 (Q7) |
+| E76 | phase 1 review | DB tests aren't typed (`any`, casts) though generated types exist | fixed | phase 1 fix round, commit after 62a9e22 (Q8) |
+| E77 | phase 1 review | `wiring.test.ts` doesn't cover every wired table; inbox keep times aren't checked against the app | fixed | phase 1 fix round, commit after 62a9e22 (Q9) |
+| E78 | phase 1 review | Migration files are dated tomorrow, so a migration made today would sort before them | fixed | phase 1 fix round, commit after 62a9e22 (Q13) |
+| E79 | phase 1 QA | `cleanup-tests.sql` deletes every profile starting with `dbt-`, which could hit a real person | fixed | phase 1 fix round, commit after 62a9e22 (Q16) |
+| E80 | phase 1 review | Redundant indexes already covered by primary keys | won't do | the foreign-key advisor wants indexes that start with the foreign-key columns |
+| E81 | phase 1 QA | Re-imports never update `archived_at` or `sort_order` | won't do | by design: archive state and order here are kept |
+| E82 | phase 1 QA | Deleting a workspace also sends one message per guest profile | won't do | harmless |
+| E83 | phase 1 review | The team key pattern is copied three times and the login pattern four times in the app | open | phase 10 |
+| E84 | phase 1 review | `src/data/store.ts:61` issue references match `[A-Z][A-Z0-9]*`, looser than team keys | open |  |
+| E85 | phase 4 planner | Sign-out leaves other `sprawniej:` keys and comment drafts on a shared computer | open | phase 4 |
+| E86 | phase 4 planner | `session.toured` is never read (the tour uses its own key) | open | phase 4 |
+| E87 | phase 4 planner | `Crash.tsx:37` and docs/design.md promise changes are kept on this device | open | phase 5 / 10 |
+| E88 | phase 4 planner | `Step.tsx:33` `Problem` uses a raw red instead of a theme colour | open |  |
+| E89 | phase 4 planner | `Tour.tsx:28-33` queries the page on every animation frame while a tip is open | open |  |
+| E90 | phase 4 planner | `updates.ts:50-52` adds an interval and listeners on every registration and never removes them | open |  |
+| E91 | phase 3 QA | A big description can stay stale or empty for good (a small update clears the partial flag) | fixed | phase 3 fix round, commit after 62a9e22 (B1) |
+| E92 | phase 3 QA + review | An unsaved edit of yours keeps a row on screen after a teammate deletes it, and asks to fetch an empty key; a failed insert leaves a ghost | fixed | phase 3 fix round, commit after 62a9e22 (B2) |
+| E93 | phase 3 QA | Unsaved edits are matched by value, so A, B, A edits flicker | fixed | phase 3 fix round, commit after 62a9e22 (B3) |
+| E94 | phase 3 QA | A missing person or team is fetched once only, never again after a failure | fixed | phase 3 fix round, commit after 62a9e22 (B4) |
+| E95 | phase 3 QA | An inbox message from another workspace moves the catch-up mark | fixed | phase 3 fix round, commit after 62a9e22 (B5) |
+| E96 | phase 3 QA | Re-delivered old child rows can come back after their parent was deleted | fixed | phase 3 fix round, commit after 62a9e22 (B6) |
+| E97 | phase 3 review | `applyRows` is one 513-line function with 26 inner closures; the unsaved-changes rules aren't written down | fixed | phase 3 fix round, commit after 62a9e22 (C1, C2) |
+| E98 | phase 3 review | Typed mirror thrown away (`as unknown as`), non-null assertions, untyped KNOWN sets | fixed | phase 3 fix round, commit after 62a9e22 (C3, C5) |
+| E99 | phase 3 review | Write helpers send columns signed-in people can't write; `Change.fields` isn't limited to writable columns | fixed | phase 3 fix round, commit after 62a9e22 (C4) |
+| E100 | phase 3 review | `src/config.ts:5` env reads have no types | fixed | phase 3 fix round, commit after 62a9e22 (C6) |
+| E101 | phase 3 review | `select.ts:65` `PRIORITY_RANK.get(...)!` gives NaN for an unknown priority | open |  |
 
 ## Waiting on the user
 
@@ -140,6 +179,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | --- | --- |
 | GitHub OAuth app for sign-in (homepage `https://michalsek.github.io/sprawniej/`, callback `https://wkqofiacqfuxowavuqxj.supabase.co/auth/v1/callback`); id and secret stay in the user's shell | asked 2026-10-19 |
 | `bunx supabase login` once, so the CLI can push the schema and auth settings | done 2026-10-19 |
+| Realtime "Allow public access" off (dashboard, Realtime, Settings) | done 2026-10-19 |
 | Run the Linear import with your own Linear key (phase 6) | later |
 | Database password for `db push`, approve the final wipe (phase 11) | later |
 | Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | later |

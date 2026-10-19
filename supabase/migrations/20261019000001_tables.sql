@@ -1,12 +1,22 @@
 -- Every table. Rules, functions, triggers and realtime come in the later files (docs/supabase-plan.md, section 2).
 -- No column default calls a private.* function (work log P1): the author columns are filled by triggers instead
--- (20261020000005_triggers.sql), so this file only needs the tables themselves.
+-- (20261019000003_triggers.sql). The one helper the tables need, valid_login, comes first.
 --
 -- The lines marked "-- @list", "-- @range", "-- @regex" and "-- @default" must match src/model; tests/statusLists.test.ts
 -- reads the line right after each marker.
 
 create schema if not exists private;          -- helpers for rules and triggers; not exposed through the API
 grant usage on schema private to authenticated;
+
+-- a login people pick here (@ana-k): letters, digits and dashes, up to 39, not starting with a dash; the same rule as
+-- GitHub's. People from Linear who haven't joined get "~" in front. Used by the profiles check and the functions.
+create function private.valid_login(login text) returns boolean
+language sql immutable set search_path = '' as $$
+  select coalesce(login ~ '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$', false)
+$$;
+-- the check on profiles runs as whoever changes their profile
+revoke execute on function private.valid_login(text) from public;
+grant execute on function private.valid_login(text) to authenticated;
 
 -- ---------- workspaces and people ----------
 
@@ -33,8 +43,8 @@ create table public.profiles (
   changed_at     timestamptz not null default clock_timestamp(),
   extra          jsonb not null default '{}',
   -- a real account never starts with "~"; a guest always does and has no account (P5)
-  check (case when guest_of is null then login ~ '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$'
-              else user_id is null and login ~ '^~[A-Za-z0-9][A-Za-z0-9-]{0,38}$' end)
+  check (case when guest_of is null then private.valid_login(login)
+              else user_id is null and left(login, 1) = '~' and private.valid_login(substr(login, 2)) end)
 );
 -- logins are unique among people with accounts; guest logins only within their workspace (P5)
 create unique index profiles_login on public.profiles (lower(login)) where guest_of is null;
@@ -164,7 +174,8 @@ create table public.issues (
   id            text primary key check (length(id) between 10 and 40),
   workspace_id  uuid not null references public.workspaces (id) on delete cascade,
   team_id       uuid not null,
-  number        integer not null,               -- given out by a trigger (next_issue_number)
+  number        integer not null default 0      -- given out by a trigger (next_issue_number), so 0 never stays
+                check (number between 1 and 1000000),
   title         text not null,
   description   text not null default '',       -- Markdown
   status        text not null default 'todo'

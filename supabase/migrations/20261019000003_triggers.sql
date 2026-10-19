@@ -1,5 +1,6 @@
--- Triggers: times, authors, issue numbers, history, deletions, inbox checks and owners (docs/supabase-plan.md,
--- section 4). Every trigger function runs as its owner, so the helpers it calls need no grant.
+-- Triggers: times, authors, issue numbers, history, deletions, inbox checks, people and owners
+-- (docs/supabase-plan.md, section 4). Every trigger function runs as its owner, so the helpers it calls need no grant.
+-- The triggers every shared table gets (a_stamp, forget, live) are made by private.wire() in 20261019000005_rls.sql.
 --
 -- Postgres fires "before" triggers on the same event in the alphabetical order of their names. That is why they are
 -- called a_*, b_*, c_*: authors and times first (a_), then the number (b_), then checks that need both (c_).
@@ -15,6 +16,15 @@ begin
   return new;
 end $$;
 
+-- the statuses that count as finished: completed_at is set when an issue gets one
+create function private.is_completed(status text) returns boolean
+language sql immutable set search_path = '' as $$
+  select status in (
+    -- @list completed-statuses
+    'done'
+  )
+$$;
+
 -- issues: author, times and who archived. During imports, the times that came with the row stay (P13).
 create function private.issue_times() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -25,10 +35,7 @@ begin
     if private.importing() then return new; end if;
     new.created_at := now();
     new.updated_at := now();
-    new.completed_at := case when new.status in (
-      -- @list completed-statuses
-      'done'
-    ) then now() end;
+    new.completed_at := case when private.is_completed(new.status) then now() end;
     return new;
   end if;
   if private.importing() then return new; end if;
@@ -42,10 +49,7 @@ begin
     new.updated_at := now();
   end if;
   if new.status is distinct from old.status then
-    new.completed_at := case when new.status in (
-      -- @list completed-statuses
-      'done'
-    ) then now() end;
+    new.completed_at := case when private.is_completed(new.status) then now() end;
   end if;
   if old.archived_at is null and new.archived_at is not null then
     new.archived_at := now();
@@ -95,29 +99,48 @@ create trigger a_author before insert on public.invites
 -- ---------- issue numbers ----------
 
 -- teams.last_number counts every number ever given out; taking the next one locks the team's row, so two people
--- creating issues at the same moment get different numbers. issue_numbers makes sure a number is never given twice.
--- Imports keep their numbers and move the counter past them; an upsert of an existing issue keeps its number (P3).
+-- creating issues at the same moment get different numbers. issue_numbers makes sure a number is never given twice
+-- (deleted and moved issues included). With p_number (imports keep their numbers), the counter moves past it instead.
+create function private.take_number(p_ws uuid, p_team uuid, p_number integer default null) returns integer
+language plpgsql security definer set search_path = '' as $$
+declare n integer;
+begin
+  if p_number is null then
+    update public.teams set last_number = last_number + 1
+     where id = p_team and workspace_id = p_ws
+    returning last_number into n;
+  else
+    n := p_number;
+    update public.teams set last_number = greatest(last_number, p_number)
+     where id = p_team and workspace_id = p_ws;
+  end if;
+  if not found then raise exception 'There is no such team.' using errcode = '23503'; end if;
+  insert into public.issue_numbers (workspace_id, team_id, number) values (p_ws, p_team, n);
+  return n;
+exception when unique_violation then
+  raise exception 'Number % is already used in this team.', n using errcode = '23505';
+end $$;
+
+-- A new issue gets the next number of its team. An import keeps its number, and an upsert of an issue that is
+-- already here keeps the one it has (P3). That one goes on the proposed row too, because Postgres checks the proposed
+-- row (number between 1 and 1000000) before it finds the conflict.
 create function private.next_issue_number() returns trigger
 language plpgsql security definer set search_path = '' as $$
+declare had integer;
 begin
   if private.importing() then
-    if exists (select 1 from public.issues i where i.id = new.id) then return new; end if;
-    if new.number is not null then
-      update public.teams set last_number = greatest(last_number, new.number)
-       where id = new.team_id and workspace_id = new.workspace_id;
-      if not found then raise exception 'There is no such team.' using errcode = '23503'; end if;
-      insert into public.issue_numbers (workspace_id, team_id, number) values (new.workspace_id, new.team_id, new.number);
+    select i.number into had from public.issues i where i.id = new.id and i.workspace_id = new.workspace_id;
+    if found then
+      new.number := had;
+      return new;
+    end if;
+    if coalesce(new.number, 0) <> 0 then          -- 0 (the default) or null: take the next one
+      new.number := private.take_number(new.workspace_id, new.team_id, new.number);
       return new;
     end if;
   end if;
-  update public.teams set last_number = last_number + 1
-   where id = new.team_id and workspace_id = new.workspace_id
-  returning last_number into new.number;
-  if not found then raise exception 'There is no such team.' using errcode = '23503'; end if;
-  insert into public.issue_numbers (workspace_id, team_id, number) values (new.workspace_id, new.team_id, new.number);
+  new.number := private.take_number(new.workspace_id, new.team_id);
   return new;
-exception when unique_violation then
-  raise exception 'Number % is already used in this team.', new.number using errcode = '23505';
 end $$;
 
 create trigger b_number before insert on public.issues
@@ -229,9 +252,39 @@ end $$;
 create trigger c_check_note before insert on public.inbox
   for each row execute function private.check_note();
 
+-- ---------- people named in a row ----------
+
+-- A team member, an assignee, a follower or a project lead must be in the workspace (now or before) or one of its
+-- people from Linear. The arguments are the columns to check; empty (null) is fine.
+create function private.check_people() returns trigger
+language plpgsql security definer set search_path = '' as $$
+declare
+  rec jsonb := to_jsonb(new);
+  was jsonb := case when tg_op = 'UPDATE' then to_jsonb(old) end;
+  col text;
+begin
+  foreach col in array tg_argv loop
+    if rec ->> col is not null and (was is null or was ->> col is distinct from rec ->> col)
+       and not private.belongs((rec ->> col)::uuid, new.workspace_id) then
+      raise exception 'That person isn''t in this workspace.' using errcode = '42501';
+    end if;
+  end loop;
+  return new;
+end $$;
+
+create trigger c_people before insert or update on public.team_members
+  for each row execute function private.check_people('profile_id');
+create trigger c_people before insert or update on public.issues
+  for each row execute function private.check_people('assignee_id');
+create trigger c_people before insert or update on public.issue_followers
+  for each row execute function private.check_people('profile_id');
+create trigger c_people before insert or update on public.projects
+  for each row execute function private.check_people('lead_id');
+
 -- ---------- members and owners (P7) ----------
 
--- Only an owner makes or unmakes owners or removes one; nobody but an owner changes their own role.
+-- Only an owner makes or unmakes owners or removes one; nobody but an owner changes their own role; someone who left
+-- or was removed comes back only through an invite (accept_invite).
 -- accept_invite and leave_workspace turn sprawniej.trusted on; jobs and the SQL editor have no signed-in person.
 create function private.guard_members() returns trigger
 language plpgsql security definer set search_path = '' as $$
@@ -240,6 +293,9 @@ declare
   my_role text;
 begin
   if (select auth.uid()) is null or current_setting('sprawniej.trusted', true) = 'on' then return new; end if;
+  if old.removed_at is not null and new.removed_at is null then
+    raise exception 'Someone who left comes back with a new invite.' using errcode = '42501';
+  end if;
   select m.role into my_role from public.workspace_members m
    where m.workspace_id = new.workspace_id and m.profile_id = me and m.removed_at is null;
   if (new.role is distinct from old.role and 'owner' in (old.role, new.role))
@@ -273,25 +329,3 @@ end $$;
 
 create trigger keep_an_owner after update or delete on public.workspace_members
   for each row execute function private.keep_an_owner();
-
--- ---------- the same triggers on every table (P22) ----------
-
-do $$
-declare w record;
-begin
-  for w in select * from private.wiring loop
-    if w.stamp is not null then
-      execute format('create trigger a_stamp before insert or update on public.%I '
-                     'for each row execute function private.%I()', w.name, w.stamp);
-    end if;
-    if w.forget then
-      execute format('create trigger forget after delete on public.%I '
-                     'for each row execute function private.remember_deletion(%s)',
-                     w.name, (select string_agg(quote_literal(x), ', ') from unnest(array[w.ws_col] || w.keys) x));
-    end if;
-  end loop;
-end $$;
-
-revoke execute on all functions in schema private from public, anon, authenticated;
-grant execute on function private.my_profile_id(), private.my_workspaces(), private.my_admin_workspaces(),
-  private.my_owner_workspaces(), private.my_people() to authenticated;

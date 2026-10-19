@@ -430,7 +430,7 @@ export type Database = {
           former_refs?: string[]
           id: string
           linear_id?: string | null
-          number: number
+          number?: number
           parent_id?: string | null
           priority?: number
           project_id?: string | null

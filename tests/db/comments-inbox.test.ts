@@ -11,20 +11,19 @@ describe.skipIf(!enabled)('comments, inbox and read marks', () => {
   test('only the author edits and deletes a comment', async () => {
     const issue = await newIssue(w.ana, w.ws, w.eng)
     const id = ulid()
-    const made = await ok(w.bob.db.from('comments').insert({ id, workspace_id: w.ws, issue_id: issue.id, body: 'Hi' }).select().single<Record<string, any>>())
+    const made = await ok(w.bob.db.from('comments').insert({ id, workspace_id: w.ws, issue_id: issue.id, body: 'Hi' }).select().single())
     expect(made.author_id).toBe(w.bob.profileId)
     expect(made.edited_at).toBeNull()
     expect(await ok(w.ana.db.from('comments').update({ body: 'Not mine' }).eq('id', id).select())).toEqual([])
     expect(await ok(w.ana.db.from('comments').delete().eq('id', id).select())).toEqual([])
-    const edited = await ok(w.bob.db.from('comments').update({ body: 'Hello' }).eq('id', id).select().single<Record<string, any>>())
+    const edited = await ok(w.bob.db.from('comments').update({ body: 'Hello' }).eq('id', id).select().single())
     expect(edited.body).toBe('Hello')
     expect(edited.edited_at).not.toBeNull()
     await expectDenied(w.bob.db.from('comments').insert({ id: ulid(), workspace_id: w.ws, issue_id: issue.id, body: 'x', author_id: w.ana.profileId }))
   })
 
   test('someone removed from a workspace can no longer edit or delete their comments', async () => {
-    const ws = await newWorkspace(w.ana, 'removed')
-    const team = (await ok(w.ana.db.from('teams').select('id').eq('workspace_id', ws).single<{ id: string }>())).id
+    const { ws, team } = await newWorkspace(w.ana, 'removed')
     await addMember(w.ana, w.dee, ws)
     const issue = await newIssue(w.ana, ws, team)
     const id = ulid()
@@ -40,7 +39,7 @@ describe.skipIf(!enabled)('comments, inbox and read marks', () => {
     const issue = await newIssue(w.ana, w.ws, w.eng)
     const id = ulid()
     await ok(w.ana.db.from('inbox').insert({ id, workspace_id: w.ws, recipient_id: w.bob.profileId, type: 'assigned', issue_id: issue.id }))
-    const mine = await ok(w.bob.db.from('inbox').select().eq('id', id).single<Record<string, any>>())
+    const mine = await ok(w.bob.db.from('inbox').select().eq('id', id).single())
     expect(mine.actor_id).toBe(w.ana.profileId)
     expect(await ok(w.ana.db.from('inbox').select().eq('id', id))).toEqual([])
     expect(await ok(w.cy.db.from('inbox').select().eq('id', id))).toEqual([])
@@ -51,7 +50,7 @@ describe.skipIf(!enabled)('comments, inbox and read marks', () => {
 
   test('notes to people outside the workspace are skipped quietly, and repeats within ten minutes too', async () => {
     const issue = await newIssue(w.ana, w.ws, w.eng)
-    const note = (to: string, type: string, more: Record<string, unknown> = {}) => ({
+    const note = (to: string, type: string, more: { comment_id?: string } = {}) => ({
       id: ulid(),
       workspace_id: w.ws,
       recipient_id: to,

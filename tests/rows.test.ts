@@ -18,7 +18,6 @@ import {
   rowToProject,
   rowToTeam,
   rowToView,
-  rowToWorkspace,
   teamToRows,
   viewToRow,
 } from '@/backend/rows'
@@ -162,14 +161,23 @@ describe('extra fields', () => {
   })
 
   test('a column always wins over extra', () => {
-    const issue = rowToIssue(issueRow({ extra: { title: 'Sneaky', foo: 'bar' } }), [], [], resolver())!
+    const issue = rowToIssue(issueRow({ extra: { title: 'Sneaky', foo: 'bar' } }), [], [], resolver())!.issue
     expect(issue.title).toBe('Fix the chart')
     expect(issue.foo).toBe('bar')
   })
 
+  test('names the app has its own field for are not taken from extra', () => {
+    const label = rowToLabel({ id: 'l-1', workspace_id: WS, name: 'Bug', color: '#f00', linear_id: null, changed_at: T(1), extra: { linearId: 'stale', foo: 1 } })
+    expect(label).toEqual({ id: 'l-1', name: 'Bug', color: '#f00', foo: 1 } as never)
+    const issue = rowToIssue(issueRow({ extra: { team: 'XYZ', subscribers: ['eve'], archivedAt: 'x' } }), [], [], resolver())!
+    expect(issue.archived).toBe(false)
+    expect(issue.issue.team).toBe('ENG')
+    expect('subscribers' in issue.issue || 'archivedAt' in issue.issue).toBe(false)
+  })
+
   test('names the app makes up never go into extra', () => {
     const issue = {
-      ...rowToIssue(issueRow({ linear_id: 'LIN-1', assignee_id: 'p-bob' }), [{ label_id: 'l-1' }], [{ profile_id: 'p-bob', following: true }], resolver())!,
+      ...rowToIssue(issueRow({ linear_id: 'LIN-1', assignee_id: 'p-bob' }), [{ label_id: 'l-1' }], [{ profile_id: 'p-bob', following: true }], resolver())!.issue,
       formerRefs: ['WEB-1'],
       archivedAt: T(5),
       archivedBy: 'ana',
@@ -189,7 +197,7 @@ describe('issues', () => {
       { label_id: 'l-c', changed_at: T(0) },
       { label_id: 'l-d' }, // not saved yet
     ]
-    const issue = rowToIssue(issueRow({ assignee_id: 'p-bob' }), labels, [], r)!
+    const issue = rowToIssue(issueRow({ assignee_id: 'p-bob' }), labels, [], r)!.issue
     expect(issue.team).toBe('ENG')
     expect(issue.assignee).toBe('bob')
     expect(issue.createdBy).toBe('ana')
@@ -203,33 +211,34 @@ describe('issues', () => {
       { profile_id: 'p-ana', following: true },
       { profile_id: 'p-jan', following: false },
     ]
-    const issue = rowToIssue(issueRow(), [], followers, resolver())!
+    const issue = rowToIssue(issueRow(), [], followers, resolver())!.issue
     expect(issue.subscribers).toEqual(['ana', 'bob'])
     expect(issue.unsubscribed).toEqual(['~jan'])
-    const none = rowToIssue(issueRow(), [], [], resolver())!
+    const none = rowToIssue(issueRow(), [], [], resolver())!.issue
     expect('subscribers' in none || 'unsubscribed' in none).toBe(false)
   })
 
   test('empty columns are null, times are in the app form, Linear id only when there is one', () => {
-    const issue = rowToIssue(issueRow(), [], [], resolver())!
+    const issue = rowToIssue(issueRow(), [], [], resolver())!.issue
     expect(issue).toMatchObject({ assignee: null, project: null, parent: null, dueDate: null, estimate: null, completedAt: null, duplicateOf: null })
     expect(issue.createdAt).toBe('2026-10-19T12:00:01.123Z')
     expect('linearId' in issue || 'formerRefs' in issue).toBe(false)
-    const linked = rowToIssue(issueRow({ linear_id: 'LIN-1', estimate: 1.5, former_refs: ['WEB-2'] }), [], [], resolver())!
+    const linked = rowToIssue(issueRow({ linear_id: 'LIN-1', estimate: 1.5, former_refs: ['WEB-2'] }), [], [], resolver())!.issue
     expect(linked).toMatchObject({ linearId: 'LIN-1', estimate: 1.5, formerRefs: ['WEB-2'] })
     expect(issueToRows(linked, WS, registry()).issues.linear_id).toBe('LIN-1')
   })
 
   test('someone unknown stands in by id until they arrive; an unknown team hides the issue', () => {
     const r = resolver()
-    expect(rowToIssue(issueRow({ assignee_id: 'p-new' }), [], [], r)!.assignee).toBe('p-new')
+    expect(rowToIssue(issueRow({ assignee_id: 'p-new' }), [], [], r)!.issue.assignee).toBe('p-new')
     expect(rowToIssue(issueRow({ team_id: 't-new' }), [], [], r)).toBeUndefined()
     expect(r.missed).toEqual(['profiles:p-new', 'teams:t-new'])
   })
 
   test('an archived issue carries when, who and its comments', () => {
-    const issue = rowToIssue(issueRow({ archived_at: T(9), archived_by: null }), [], [], resolver())!
-    expect(issue).toMatchObject({ archivedAt: '2026-10-19T12:00:09.123Z', archivedBy: '', comments: [] })
+    const result = rowToIssue(issueRow({ archived_at: T(9), archived_by: null }), [], [], resolver())
+    expect(result?.archived).toBe(true)
+    expect(result?.issue).toMatchObject({ archivedAt: '2026-10-19T12:00:09.123Z', archivedBy: '', comments: [] })
   })
 
   test('an issue the import builds comes back the same after a trip through the database', () => {
@@ -261,11 +270,11 @@ describe('issues', () => {
     // the database stamps each row as it is inserted, in the order sent
     const stamped = <R,>(rs: R[]) => rs.map((row, n) => ({ ...row, changed_at: T(10 + n) }))
     const back = rowToIssue({ ...out.issues, changed_at: T(20) } as Row<'issues'>, stamped(out.issue_labels), stamped(out.issue_followers), resolver())
-    expect(back).toEqual(fixture)
+    expect(back).toEqual({ archived: false, issue: fixture })
   })
 })
 
-describe('teams, projects, views, inbox, workspace', () => {
+describe('teams, projects, views, inbox', () => {
   test('a team: members in the order they joined, and its settings', () => {
     const row: Row<'teams'> = { id: 't-eng', workspace_id: WS, key: 'ENG', name: 'Engineering', emoji: '🛠️', last_number: 12, auto_archive: 0, linear_id: null, created_at: T(0), changed_at: T(0), extra: {} }
     const team = rowToTeam(row, [{ profile_id: 'p-bob', changed_at: T(2) }, { profile_id: 'p-ana', changed_at: T(1) }], resolver())
@@ -317,16 +326,11 @@ describe('teams, projects, views, inbox, workspace', () => {
     expect(inboxToRow(note, WS, registry(), 'ana')).toMatchObject({ recipient_id: 'p-ana', actor_id: 'p-bob', comment_id: null, read_at: note.readAt })
     expect('readAt' in rowToInbox({ ...row, read_at: null }, resolver())).toBe(false)
   })
-
-  test('a workspace has its id and no file format', () => {
-    const ws = rowToWorkspace({ id: WS, name: 'Acme', created_by: null, created_at: T(0), changed_at: T(0), extra: {} })
-    expect(ws).toEqual({ id: WS, name: 'Acme', createdAt: '2026-10-19T12:00:00.123Z' })
-  })
 })
 
 describe('writing', () => {
   test('a login or team key nobody knows is a mistake that says which', () => {
-    const issue = rowToIssue(issueRow(), [], [], resolver()) as Issue
+    const issue: Issue = rowToIssue(issueRow(), [], [], resolver())!.issue
     expect(() => issueToRows({ ...issue, assignee: 'nobody' }, WS, registry())).toThrow('nobody')
     expect(() => issueToRows({ ...issue, team: 'XYZ' }, WS, registry())).toThrow('XYZ')
     expect(() => personToProfile({ login: 'ghost', githubId: 0, name: '', avatarUrl: '' }, WS, registry())).toThrow('ghost')

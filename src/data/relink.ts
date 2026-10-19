@@ -6,7 +6,7 @@
 import { plain } from '@/lib/plain'
 import { archiveFiles, parsedFiles } from './project'
 import { commentToFile, issueToFile, jsonToFile, classify, paths, type Parsed } from './files'
-import type { Comment, Issue, Person, Project, View } from '@/model/schema'
+import { linearIdsOf, type Comment, type Issue, type Person, type Project, type View } from '@/model/schema'
 
 /** login → the login it is now */
 export type Relink = (login: string) => string
@@ -70,12 +70,6 @@ export function relinkArchiveLine(line: string, r: Relink): string {
   if (Array.isArray(a.comments)) a.comments = a.comments.map((c: Record<string, unknown>) => (typeof c?.author === 'string' ? { ...c, author: r(c.author) } : c))
   const next = JSON.stringify(a)
   return next === JSON.stringify(JSON.parse(line)) ? line : next
-}
-
-/** the Linear ids a person stands for: a guest's own (`linearId`), and the ones linked to an account (`linearIds`) */
-export function linearIdsOf(p: Person | undefined): string[] {
-  const x = p as { linearId?: unknown; linearIds?: unknown } | undefined
-  return [...new Set([...(typeof x?.linearId === 'string' ? [x.linearId] : []), ...(Array.isArray(x?.linearIds) ? x.linearIds.filter((i) => typeof i === 'string') : [])])]
 }
 
 /**

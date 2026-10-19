@@ -3,6 +3,4 @@ dist
 dev-dist
 *.local
 .DS_Store
-supabase/.temp
-supabase/.branches
 supabase/.env

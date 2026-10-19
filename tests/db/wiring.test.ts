@@ -1,16 +1,36 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { closeChannels, DISPLAY, enabled, getWorld, type Listener, listen, newIssue, newTeam, ok, ulid, type World } from './support'
+import {
+  addMember,
+  anyTable,
+  type Change,
+  closeChannels,
+  DISPLAY,
+  enabled,
+  getWorld,
+  type Listener,
+  listen,
+  newIssue,
+  newTeam,
+  newWorkspace,
+  ok,
+  RUN,
+  type TableName,
+  ulid,
+  type World,
+} from './support'
+import type { Json } from '@/backend/database.types'
 
-// Every shared table gets the same triggers from one list (private.wiring, P22). This checks them by what they do:
-// changed_at moves on every write, a delete leaves a note in deletions, and members hear every change.
+// Every shared table gets the same rules and triggers from one list (private.wiring, P22). This checks them by what
+// they do: changed_at moves on every write, a delete leaves a note in deletions, and members hear every change.
+// tests/wiringList.test.ts checks that every table in the list is covered here.
 
 interface Case {
-  table: string
+  table: TableName
   /** makes the row's parents and returns the row to insert (without workspace_id) */
-  make: () => Promise<Record<string, unknown>>
+  make: () => Promise<Record<string, Json>>
   keys: string[]
   /** a change people may make, or nothing for tables that are only added and removed */
-  update?: Record<string, unknown>
+  update?: Record<string, Json>
 }
 
 describe.skipIf(!enabled)('every shared table is wired the same way', () => {
@@ -24,10 +44,10 @@ describe.skipIf(!enabled)('every shared table is wired the same way', () => {
   }, 60_000)
   afterAll(closeChannels)
 
-  const insert = async (table: string, row: Record<string, unknown>) => {
-    await ok(w.ana.db.from(table).insert({ workspace_id: w.ws, ...row }))
+  const insert = async (table: TableName, row: Record<string, Json>) => {
+    await ok(anyTable(w.ana.db, table).insert({ workspace_id: w.ws, ...row }))
   }
-  const issueId = async () => (await newIssue(w.ana, w.ws, team)).id as string
+  const issueId = async () => (await newIssue(w.ana, w.ws, team)).id
   const labelId = async () => {
     const id = ulid()
     await insert('labels', { id, name: `W ${id}`, color: '#000' })
@@ -38,6 +58,10 @@ describe.skipIf(!enabled)('every shared table is wired the same way', () => {
     await insert('projects', { id, name: 'Wired' })
     return id
   }
+  const changedAt = async (table: TableName, key: Record<string, unknown>) =>
+    (await ok(anyTable(w.ana.db, table).select('changed_at').match(key).single<{ changed_at: string }>())).changed_at
+  const about = (table: string, op: string, key: Record<string, unknown>) => (m: Change) =>
+    m.table === table && m.op === op && Object.entries(key).every(([k, v]) => m.row?.[k] === v)
 
   const cases: Case[] = [
     { table: 'teams', keys: ['id'], make: async () => ({ id: crypto.randomUUID(), key: 'WT', name: 'Wired team' }), update: { name: 'Renamed' } },
@@ -61,36 +85,81 @@ describe.skipIf(!enabled)('every shared table is wired the same way', () => {
     test(c.table, async () => {
       const row = await c.make()
       const key = Object.fromEntries(c.keys.map((k) => [k, row[k]]))
-      const match = (q: any) => c.keys.reduce((q2, k) => q2.eq(k, row[k]), q)
       await insert(c.table, row)
-      const first = await ok(match(w.ana.db.from(c.table).select('changed_at')).single())
+      const first = await changedAt(c.table, key)
       if (c.update) {
-        await ok(match(w.ana.db.from(c.table).update(c.update)))
-        const second = await ok(match(w.ana.db.from(c.table).select('changed_at')).single())
-        expect((second as any).changed_at > (first as any).changed_at).toBe(true)
+        await ok(anyTable(w.ana.db, c.table).update(c.update).match(key))
+        expect((await changedAt(c.table, key)) > first).toBe(true)
       }
-      await ok(match(w.ana.db.from(c.table).delete()))
+      await ok(anyTable(w.ana.db, c.table).delete().match(key))
 
       const notes = await ok(w.ana.db.from('deletions').select('row_key').eq('workspace_id', w.ws).eq('table_name', c.table))
       expect(notes.map((n) => n.row_key)).toContainEqual(key)
-      const about = (op: string) => (m: Record<string, any>) =>
-        m.table === c.table && m.op === op && c.keys.every((k) => m.row?.[k] === row[k])
-      expect(await heard.waitFor(about('INSERT'))).toBeDefined()
-      if (c.update) expect(await heard.waitFor(about('UPDATE'))).toBeDefined()
-      expect(await heard.waitFor(about('DELETE'))).toBeDefined()
+      expect(await heard.waitFor(about(c.table, 'INSERT', key))).toBeDefined()
+      if (c.update) expect(await heard.waitFor(about(c.table, 'UPDATE', key))).toBeDefined()
+      expect(await heard.waitFor(about(c.table, 'DELETE', key))).toBeDefined()
     })
   }
 
+  test('workspaces, members and read marks', async () => {
+    const mine = await listen(w.ana, `me:${w.ana.profileId}`)
+    expect(mine.status).toBe('SUBSCRIBED')
+    const { ws } = await newWorkspace(w.ana, 'wired')
+    expect(await mine.waitFor(about('read_state', 'INSERT', { workspace_id: ws }))).toBeDefined()
+
+    const there = await listen(w.ana, `ws:${ws}`)
+    expect(there.status).toBe('SUBSCRIBED')
+    const first = await changedAt('workspaces', { id: ws })
+    await ok(w.ana.db.from('workspaces').update({ name: `dbtest ${RUN} rewired` }).eq('id', ws))
+    expect((await changedAt('workspaces', { id: ws })) > first).toBe(true)
+    expect(await there.waitFor(about('workspaces', 'UPDATE', { id: ws }))).toBeDefined()
+
+    const member = { workspace_id: ws, profile_id: w.bob.profileId }
+    await addMember(w.ana, w.bob, ws)
+    expect(await there.waitFor(about('workspace_members', 'INSERT', member))).toBeDefined()
+    const joined = await changedAt('workspace_members', member)
+    await ok(w.ana.db.from('workspace_members').update({ role: 'admin' }).match(member))
+    expect((await changedAt('workspace_members', member)) > joined).toBe(true)
+    expect(await there.waitFor(about('workspace_members', 'UPDATE', member))).toBeDefined()
+
+    // a workspace that goes says so once, on its own channel, and leaves no notes (nobody could read them)
+    await ok(w.ana.db.from('workspaces').delete().eq('id', ws))
+    expect(await there.waitFor(about('workspaces', 'DELETE', { id: ws }))).toBeDefined()
+    expect(there.got.filter((m) => m.op === 'DELETE' && m.table !== 'workspaces' && m.table !== 'profiles')).toEqual([])
+    expect(await ok(w.ana.db.from('deletions').select().eq('workspace_id', ws))).toEqual([])
+  })
+
+  test('inbox notes come and go on their owner’s channel, without deletion notes', async () => {
+    const mine = await listen(w.bob, `me:${w.bob.profileId}`)
+    expect(mine.status).toBe('SUBSCRIBED')
+    const issue = await issueId()
+    const id = ulid()
+    await ok(w.ana.db.from('inbox').insert({ id, workspace_id: w.ws, recipient_id: w.bob.profileId, type: 'mentioned', issue_id: issue }))
+    await ok(w.bob.db.from('inbox').update({ read_at: new Date().toISOString() }).eq('id', id))
+    await ok(w.bob.db.from('inbox').delete().eq('id', id))
+    for (const op of ['INSERT', 'UPDATE', 'DELETE']) expect(await mine.waitFor(about('inbox', op, { id }))).toBeDefined()
+    expect(await ok(w.ana.db.from('deletions').select().eq('workspace_id', w.ws).eq('table_name', 'inbox'))).toEqual([])
+  })
+
+  test('a person from Linear who goes leaves a note in their workspace', async () => {
+    const guest = crypto.randomUUID()
+    await ok(w.ana.db.rpc('import_rows', { p_ws: w.ws, p_table: 'profiles', p_rows: [{ id: guest, login: `~dbt-${RUN}-g5`, name: 'Guest Five' }] }))
+    await ok(w.ana.db.rpc('link_person', { p_ws: w.ws, p_guest: guest, p_to: w.ana.profileId }))
+    const notes = await ok(w.ana.db.from('deletions').select('row_key').eq('workspace_id', w.ws).eq('table_name', 'profiles'))
+    expect(notes.map((n) => n.row_key)).toContainEqual({ id: guest })
+    expect(await heard.waitFor((m) => m.op === 'catch_up')).toBeDefined()
+  })
+
   test('a new name reaches the workspaces the person is in', async () => {
     await ok(w.bob.db.from('profiles').update({ name: 'Bob Renamed' }).eq('id', w.bob.profileId))
-    const m = await heard.waitFor((m) => m.table === 'profiles' && m.op === 'UPDATE' && m.row?.id === w.bob.profileId)
-    expect(m?.row.name).toBe('Bob Renamed')
+    const m = await heard.waitFor(about('profiles', 'UPDATE', { id: w.bob.profileId }))
+    expect(m?.row?.name).toBe('Bob Renamed')
   })
 
   test('read marks reach their owner', async () => {
     const mine = await listen(w.bob, `me:${w.bob.profileId}`)
     expect(mine.status).toBe('SUBSCRIBED')
     await ok(w.bob.db.from('read_state').update({ read_until: new Date().toISOString() }).eq('profile_id', w.bob.profileId).eq('workspace_id', w.ws))
-    expect(await mine.waitFor((m) => m.table === 'read_state' && m.op === 'UPDATE')).toBeDefined()
+    expect(await mine.waitFor(about('read_state', 'UPDATE', { profile_id: w.bob.profileId, workspace_id: w.ws }))).toBeDefined()
   })
 })

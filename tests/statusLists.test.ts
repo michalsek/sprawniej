@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { AUTO_ARCHIVE_MONTHS, inboxItemSchema, PROJECT_STATUSES, teamSchema } from '@/model/schema'
+import { INBOX_KEEP } from '@/data/actions'
+import { AUTO_ARCHIVE_MONTHS, inboxItemSchema, PROJECT_STATUSES, TEAM_KEY_PATTERN } from '@/model/schema'
 import { PRIORITY_IDS, STATUS_IDS, STATUSES } from '@/model/status'
 
 // The database checks copy the fixed lists from src/model. Each copy has a marker comment ("-- @list issue-statuses")
@@ -56,15 +57,20 @@ describe('database lists match src/model', () => {
 
   test('priorities', () => {
     const [line] = marked('range', 'priorities')
-    const m = line.match(/between (\d+) and (\d+)/)
-    expect(m).not.toBeNull()
-    expect([Number(m![1]), Number(m![2])]).toEqual([Math.min(...PRIORITY_IDS), Math.max(...PRIORITY_IDS)])
+    const range = line.match(/between (\d+) and (\d+)/)?.slice(1).map(Number)
+    expect(range).toEqual([Math.min(...PRIORITY_IDS), Math.max(...PRIORITY_IDS)])
   })
 
   test('team keys', () => {
     const [line] = marked('regex', 'team-key')
-    const check = teamSchema.shape.key.def.checks?.[0] as unknown as { _zod: { def: { pattern: RegExp } } } | undefined
-    expect(quoted(line)).toEqual([check!._zod.def.pattern.source])
+    expect(quoted(line)).toEqual([TEAM_KEY_PATTERN.source])
+  })
+
+  test('days before inbox notes are tidied away', () => {
+    const DAY = 24 * 60 * 60 * 1000
+    const days = (name: string) => marked('days', name).map((line) => Number(line.match(/'(\d+) days'/)?.[1]))
+    expect(days('inbox-read')).toEqual([INBOX_KEEP.read / DAY])
+    expect(days('inbox-unread')).toEqual([INBOX_KEEP.unread / DAY])
   })
 
   test('months before finished issues are archived', () => {

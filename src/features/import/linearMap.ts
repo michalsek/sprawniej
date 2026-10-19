@@ -7,11 +7,11 @@
  * rows with `archivedAt`. People who have joined since an earlier import come back as `links` (guest → account).
  */
 import { generateNKeysBetween } from 'fractional-indexing'
-import { linearIdsOf, plainName as plain } from '@/data/relink'
+import { plainName as plain } from '@/data/relink'
 import { dueForArchive } from '@/data/select'
 import type { DataState } from '@/data/store'
 import { STATUSES, type Priority, type StatusId } from '@/model/status'
-import { AUTO_ARCHIVE_MONTHS, isGuest, type Comment, type Issue, type Label, type Person, type Project, type Team, type View } from '@/model/schema'
+import { AUTO_ARCHIVE_MONTHS, isGuest, linearIdsOf, type Comment, type Issue, type Known, type Label, type Person, type Project, type Team, type View } from '@/model/schema'
 import { SUBSCRIBERS_READ, type LIssue, type LinearData, type LLabel, type LTeam, type LUser } from './linearApi'
 import { mapViewFilter, type FilterContext } from './linearFilters'
 
@@ -214,8 +214,6 @@ export type IssueRow = Issue & { linearId: string; archivedAt?: string; archived
 export type CommentRow = Comment & { linearId: string }
 export type ViewRow = View & { linearId: string }
 
-/** a row's own fields without the "anything else" the schemas allow, so a misspelled field doesn't compile */
-type Known<T> = { [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K] }
 
 /** what to write: only rows that are new or changed since an earlier import */
 export interface ImportResult {

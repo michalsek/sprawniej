@@ -1,6 +1,16 @@
 -- The functions the app calls (docs/supabase-plan.md, section 4), and what they share.
 -- Each one checks who is calling, runs as its owner (security definer) and only signed-in people may call it (P2).
--- Errors carry friendly text, because the app shows it as it is.
+-- Errors carry friendly text, because the app shows it as it is, and a code the app can tell apart:
+--   42501  not allowed (not signed in, not an admin, someone or something from another workspace)
+--   P0002  not there (an issue, an invite link, a person from Linear)
+--   23505  already taken (a login, an issue number)
+--   23503  no such team
+--   22023  not valid (a login, a person to link to)
+--   SP001  you already have a name here
+--   SP002  the invite was already used
+--   SP003  the invite has expired
+--   SP010  an import the database can't take (wrong table, too many or too few rows, rows without their keys);
+--          the detail says what, for whoever looks after Sprawniej
 
 -- ---------- profiles ----------
 
@@ -32,7 +42,7 @@ begin
      where github_id = gid and user_id is null and guest_of is null
     returning * into p;
     if found then return next p; return; end if;
-    if glogin ~ '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$' then
+    if private.valid_login(glogin) then
       insert into public.profiles (user_id, login, github_id, name, avatar_url)
       values (uid, glogin, gid, coalesce(gname, ''), coalesce(gavatar, ''))
       on conflict do nothing
@@ -55,9 +65,9 @@ declare
 begin
   if uid is null then raise exception 'Please sign in first.' using errcode = '42501'; end if;
   if exists (select 1 from public.profiles where user_id = uid) then
-    raise exception 'You already have a name here.';
+    raise exception 'You already have a name here.' using errcode = 'SP001';
   end if;
-  if wanted !~ '^[A-Za-z0-9][A-Za-z0-9-]{0,38}$' then
+  if not private.valid_login(wanted) then
     raise exception 'Use up to 39 letters, digits and dashes, starting with a letter or a digit.' using errcode = '22023';
   end if;
   select case when i.provider_id ~ '^\d{1,18}$' then i.provider_id::bigint end, coalesce(i.identity_data ->> 'avatar_url', '')
@@ -139,8 +149,12 @@ begin
              and m.profile_id = me and m.removed_at is null) then
     return inv.workspace_id;                                 -- already in
   end if;
-  if inv.accepted_at is not null then raise exception 'This invite was already used. Ask for a new one.'; end if;
-  if inv.expires_at < now() then raise exception 'This invite has expired. Ask for a new one.'; end if;
+  if inv.accepted_at is not null then
+    raise exception 'This invite was already used. Ask for a new one.' using errcode = 'SP002';
+  end if;
+  if inv.expires_at < now() then
+    raise exception 'This invite has expired. Ask for a new one.' using errcode = 'SP003';
+  end if;
   perform set_config('sprawniej.trusted', 'on', true);
   insert into public.workspace_members (workspace_id, profile_id, role) values (inv.workspace_id, me, inv.role)
   on conflict (workspace_id, profile_id) do update set removed_at = null, role = excluded.role, joined_at = now();
@@ -148,10 +162,7 @@ begin
   update public.invites set accepted_by = me, accepted_at = now() where id = inv.id;
   if inv.for_profile is not null and exists (select 1 from public.profiles g
                                              where g.id = inv.for_profile and g.guest_of = inv.workspace_id) then
-    perform set_config('sprawniej.importing', 'on', true);
     perform private.move_person(inv.for_profile, me, inv.workspace_id);
-    perform set_config('sprawniej.importing', 'off', true);
-    perform realtime.send(jsonb_build_object('op', 'catch_up'), 'change', 'ws:' || inv.workspace_id, true);
   end if;
   insert into public.read_state (profile_id, workspace_id) values (me, inv.workspace_id) on conflict do nothing;
   perform set_config('sprawniej.trusted', 'off', true);
@@ -186,11 +197,7 @@ begin
   end if;
   if i.team_id = p_team then return i; end if;
   select t.key || '-' || i.number into old_ref from public.teams t where t.id = i.team_id;
-  update public.teams set last_number = last_number + 1
-   where id = p_team and workspace_id = i.workspace_id
-  returning last_number into n;
-  if not found then raise exception 'There is no such team.' using errcode = 'P0002'; end if;
-  insert into public.issue_numbers (workspace_id, team_id, number) values (i.workspace_id, p_team, n);
+  n := private.take_number(i.workspace_id, p_team);
   update public.issues set team_id = p_team, number = n, former_refs = former_refs || old_ref
    where id = p_issue
   returning * into i;
@@ -214,8 +221,8 @@ language sql immutable set search_path = '' as $$
     where jsonb_typeof(f -> k) = 'array'), '{}'::jsonb)
 $$;
 
--- A person from Linear who hadn't joined is this person: every reference moves over and the guest goes.
--- Callers turn sprawniej.importing on (no history, no per-row broadcasts) and send one catch-up message after.
+-- A person from Linear who hadn't joined is this person: every reference moves over and the guest goes. Quietly (no
+-- history, no per-row broadcasts), then one catch-up message for the workspace.
 create function private.move_person(p_guest uuid, p_to uuid, p_ws uuid) returns void
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -228,6 +235,7 @@ begin
   if not found or t.guest_of is not null then
     raise exception 'You can only link someone to a person who has joined.' using errcode = '22023';
   end if;
+  perform set_config('sprawniej.importing', 'on', true);
   -- they join the teams the guest's issues are in, and the guest's teams
   insert into public.team_members (workspace_id, team_id, profile_id)
   select distinct p_ws, x.team_id, p_to from (
@@ -266,6 +274,8 @@ begin
    where id = p_to;
   delete from public.invites where for_profile = p_guest and accepted_at is null;
   delete from public.profiles where id = p_guest;          -- the forget trigger notes it under guest_of (P10)
+  perform set_config('sprawniej.importing', 'off', true);
+  perform realtime.send(jsonb_build_object('op', 'catch_up'), 'change', 'ws:' || p_ws, true);
 end $$;
 
 -- Admins: "this person from Linear is that member".
@@ -275,13 +285,11 @@ begin
   if p_ws is null or p_ws not in (select private.my_admin_workspaces()) then
     raise exception 'Only admins can link people.' using errcode = '42501';
   end if;
-  if not exists (select 1 from public.workspace_members m where m.workspace_id = p_ws and m.profile_id = p_to) then
-    raise exception 'You can only link someone to a person who has joined.' using errcode = '22023';
+  if not exists (select 1 from public.workspace_members m
+                 where m.workspace_id = p_ws and m.profile_id = p_to and m.removed_at is null) then
+    raise exception 'You can only link someone to a person who is in this workspace.' using errcode = '22023';
   end if;
-  perform set_config('sprawniej.importing', 'on', true);
   perform private.move_person(p_guest, p_to, p_ws);
-  perform set_config('sprawniej.importing', 'off', true);
-  perform realtime.send(jsonb_build_object('op', 'catch_up'), 'change', 'ws:' || p_ws, true);
 end $$;
 
 -- Admins: the email a person from Linear had there, so Settings can suggest inviting them. Empty forgets it.
@@ -310,115 +318,129 @@ $$;
 
 -- ---------- imports ----------
 
--- What import_rows may write: per table, the column that is pinned to the workspace, the key it matches on, the
--- columns it may insert and update, and the columns that name a person (who must be in the workspace) (P4).
+-- What import_rows may write, per table: the columns it may insert and update, the columns that name a person (who
+-- must be in the workspace) and whether it only updates rows that came from an import (comments: what people wrote
+-- here stays theirs). The workspace column and the keys come from private.wiring (P4).
 create table private.import_spec (
-  table_name   text primary key,
-  ws_col       text not null,
-  key_cols     text[] not null,
-  insert_cols  text[] not null,
-  update_cols  text[] not null default '{}',
-  person_cols  text[] not null default '{}'
+  table_name     text primary key references private.wiring (name),
+  insert_cols    text[] not null,
+  update_cols    text[] not null default '{}',
+  person_cols    text[] not null default '{}',
+  only_imported  boolean not null default false
 );
 
-insert into private.import_spec (table_name, ws_col, key_cols, insert_cols, update_cols, person_cols) values
-  ('profiles', 'guest_of', '{id}',
+insert into private.import_spec (table_name, insert_cols, update_cols, person_cols, only_imported) values
+  ('profiles',
    '{id,login,name,avatar_url,guest_of,linear_ids,extra}',
-   '{name,avatar_url,linear_ids,extra}', '{}'),
-  ('teams', 'workspace_id', '{id}',
+   '{name,avatar_url,linear_ids,extra}', '{}', false),
+  ('teams',
    '{id,workspace_id,key,name,emoji,auto_archive,linear_id,created_at,extra}',
-   '{name,emoji,linear_id,extra}', '{}'),
-  ('team_members', 'workspace_id', '{team_id,profile_id}',
-   '{workspace_id,team_id,profile_id}', '{}', '{profile_id}'),
-  ('labels', 'workspace_id', '{id}',
+   '{name,emoji,linear_id,extra}', '{}', false),
+  ('team_members',
+   '{workspace_id,team_id,profile_id}', '{}', '{profile_id}', false),
+  ('labels',
    '{id,workspace_id,name,color,linear_id,extra}',
-   '{name,color,linear_id,extra}', '{}'),
-  ('projects', 'workspace_id', '{id}',
+   '{name,color,linear_id,extra}', '{}', false),
+  ('projects',
    '{id,workspace_id,name,emoji,description,status,lead_id,target_date,linear_id,created_at,extra}',
-   '{name,emoji,description,status,lead_id,target_date,linear_id,extra}', '{lead_id}'),
-  ('project_teams', 'workspace_id', '{project_id,team_id}',
-   '{workspace_id,project_id,team_id}', '{}', '{}'),
-  ('issues', 'workspace_id', '{id}',
+   '{name,emoji,description,status,lead_id,target_date,linear_id,extra}', '{lead_id}', false),
+  ('project_teams',
+   '{workspace_id,project_id,team_id}', '{}', '{}', false),
+  ('issues',
    '{id,workspace_id,team_id,number,title,description,status,priority,assignee_id,project_id,parent_id,due_date,estimate,sort_order,duplicate_of,former_refs,created_by,created_at,updated_at,completed_at,archived_at,archived_by,linear_id,extra}',
    '{title,description,status,priority,assignee_id,project_id,parent_id,due_date,estimate,duplicate_of,completed_at,updated_at,linear_id,extra}',
-   '{assignee_id,created_by,archived_by}'),
-  ('issue_labels', 'workspace_id', '{issue_id,label_id}',
-   '{workspace_id,issue_id,label_id}', '{}', '{}'),
-  ('issue_followers', 'workspace_id', '{issue_id,profile_id}',
-   '{workspace_id,issue_id,profile_id,following}', '{following}', '{profile_id}'),
-  ('comments', 'workspace_id', '{id}',
+   '{assignee_id,created_by,archived_by}', false),
+  ('issue_labels',
+   '{workspace_id,issue_id,label_id}', '{}', '{}', false),
+  ('issue_followers',
+   '{workspace_id,issue_id,profile_id,following}', '{following}', '{profile_id}', false),
+  ('comments',
    '{id,workspace_id,issue_id,author_id,body,created_at,edited_at,linear_id,extra}',
-   '{body,edited_at,linear_id,extra}', '{author_id}'),
-  ('views', 'workspace_id', '{id}',
+   '{body,edited_at,linear_id,extra}', '{author_id}', true),
+  ('views',
    '{id,workspace_id,team_id,owner_id,name,emoji,description,filters,display,created_at,linear_id,extra}',
-   '{name,emoji,description,filters,linear_id,extra}', '{owner_id}');
+   '{name,emoji,description,filters,linear_id,extra}', '{owner_id}', false);
 
 -- Admins: insert or update up to 1000 rows of one table, quietly (no history, no per-row broadcasts), keeping the
 -- numbers and times that came with them, then one catch-up message for the workspace (P3, P4, P13, P15).
 --
 -- What the caller must do (phase 6):
 --   * send the same columns in every row of a batch (a column missing from one row becomes null, not its default);
+--   * send every required column in every row, even for a row that is already here and will only be updated:
+--     Postgres checks the proposed row (not null, checks) before it finds the conflict;
 --   * reuse the existing id for a row that matches an earlier import by linear_id. Rows match on the primary key,
 --     not on (workspace_id, linear_id): child rows point at ids, so ids must stay the same anyway, and one rule works
 --     for every table. A new id with an old linear_id fails loudly on unique (workspace_id, linear_id).
+-- A row whose key belongs to another workspace is refused, whatever the rows say about their workspace (S1).
 -- A second run with the same rows changes nothing and returns 0.
 create function public.import_rows(p_ws uuid, p_table text, p_rows jsonb) returns integer
 language plpgsql security definer set search_path = '' as $$
 declare
   s private.import_spec;
+  w private.wiring;
   pinned jsonb;
   present text[];
   ins text[];
   upd text[];
+  elsewhere boolean;
   n integer;
   q text;
+  cant constant text := 'This import has something Sprawniej can''t take. Try again, and tell whoever looks after '
+                        'Sprawniej if it keeps happening.';
 begin
   if p_ws is null or p_ws not in (select private.my_admin_workspaces()) then
     raise exception 'Only admins can import.' using errcode = '42501';
   end if;
   select * into s from private.import_spec where table_name = p_table;
-  if not found then raise exception 'Can''t import into %.', p_table using errcode = '22023'; end if;
+  if not found then raise exception '%', cant using errcode = 'SP010', detail = format('table %s', p_table); end if;
+  select * into w from private.wiring where name = p_table;
   if jsonb_typeof(p_rows) is distinct from 'array' or jsonb_array_length(p_rows) not between 1 and 1000 then
-    raise exception 'Send between 1 and 1000 rows at a time.' using errcode = '22023';
+    raise exception '%', cant using errcode = 'SP010', detail = 'send an array of 1 to 1000 rows';
   end if;
   if exists (select 1 from jsonb_array_elements(p_rows) r where jsonb_typeof(r) <> 'object') then
-    raise exception 'Every row must be an object.' using errcode = '22023';
+    raise exception '%', cant using errcode = 'SP010', detail = 'every row must be an object';
   end if;
   -- whatever the rows say, they land in this workspace
-  select jsonb_agg(r || jsonb_build_object(s.ws_col, p_ws)) into pinned from jsonb_array_elements(p_rows) r;
+  select jsonb_agg(r || jsonb_build_object(w.ws_col, p_ws)) into pinned from jsonb_array_elements(p_rows) r;
   select array_agg(distinct k) into present from jsonb_array_elements(pinned) r, jsonb_object_keys(r) k;
-  if not s.key_cols <@ present then
-    raise exception 'Every row needs %.', array_to_string(s.key_cols, ', ') using errcode = '22023';
+  if not w.keys <@ present then
+    raise exception '%', cant using errcode = 'SP010', detail = format('every row needs %s', array_to_string(w.keys, ', '));
   end if;
   ins := array(select c from unnest(s.insert_cols) c where c = any (present));
   upd := array(select c from unnest(s.update_cols) c where c = any (present));
   -- people named in the rows must be in this workspace
   if exists (select 1 from jsonb_array_elements(pinned) r, unnest(s.person_cols) c
              where r ->> c is not null and not private.belongs((r ->> c)::uuid, p_ws)) then
-    raise exception 'Someone in these rows isn''t in this workspace.' using errcode = '42501';
+    raise exception 'This import names someone who isn''t in this workspace.' using errcode = '42501';
   end if;
-  -- only people who haven't joined, and only this workspace's
-  if p_table = 'profiles' and exists (select 1 from jsonb_array_elements(pinned) r
-                                      join public.profiles p on p.id = (r ->> 'id')::uuid
-                                      where p.guest_of is distinct from p_ws) then
-    raise exception 'Only people who haven''t joined can be imported.' using errcode = '42501';
+  -- a key that is already used in another workspace (or by someone who has joined, for profiles) is refused (S1)
+  execute format('select exists (select 1 from public.%1$I t join jsonb_populate_recordset(null::public.%1$I, $1) r '
+                 'on %2$s where t.%3$I is distinct from $2)',
+                 p_table,
+                 (select string_agg(format('t.%1$I = r.%1$I', k), ' and ') from unnest(w.keys) k),
+                 w.ws_col)
+    into elsewhere using pinned, p_ws;
+  if elsewhere then
+    raise exception 'This import would change something outside this workspace.' using errcode = '42501';
   end if;
   perform set_config('sprawniej.importing', 'on', true);
   q := format('insert into public.%1$I as t (%2$s) select %2$s from jsonb_populate_recordset(null::public.%1$I, $1) '
               'on conflict (%3$s) ',
               p_table,
               (select string_agg(format('%I', c), ', ') from unnest(ins) c),
-              (select string_agg(format('%I', c), ', ') from unnest(s.key_cols) c));
+              (select string_agg(format('%I', c), ', ') from unnest(w.keys) c));
   if cardinality(upd) = 0 then
     q := q || 'do nothing';
   else
-    -- a re-run with the same values touches nothing (P3)
-    q := q || format('do update set %s where (%s) is distinct from (%s)',
+    -- only this workspace's rows; a re-run with the same values touches nothing (P3)
+    q := q || format('do update set %s where t.%I = $2%s and (%s) is distinct from (%s)',
       (select string_agg(format('%I = excluded.%I', c, c), ', ') from unnest(upd) c),
+      w.ws_col,
+      case when s.only_imported then ' and t.linear_id is not null' else '' end,
       (select string_agg(format('t.%I', c), ', ') from unnest(upd) c),
       (select string_agg(format('excluded.%I', c), ', ') from unnest(upd) c));
   end if;
-  execute q using pinned;
+  execute q using pinned, p_ws;
   get diagnostics n = row_count;
   perform set_config('sprawniej.importing', 'off', true);
   perform realtime.send(jsonb_build_object('op', 'catch_up', 'table', p_table), 'change', 'ws:' || p_ws, true);
@@ -426,18 +448,7 @@ begin
 end $$;
 
 -- ---------- who may call what ----------
-
-revoke all on all tables in schema private from public, anon, authenticated;
-revoke execute on all functions in schema private from public, anon, authenticated;
-grant execute on function private.my_profile_id(), private.my_workspaces(), private.my_admin_workspaces(),
-  private.my_owner_workspaces(), private.my_people() to authenticated;
-
-revoke execute on function
-  public.ensure_profile(), public.create_profile(text, text), public.create_workspace(text, text, text, text),
-  public.invite_info(text), public.accept_invite(text), public.leave_workspace(uuid),
-  public.move_issue_to_team(text, uuid), public.link_person(uuid, uuid, uuid), public.set_guest_email(uuid, text),
-  public.guest_emails(uuid), public.import_rows(uuid, text, jsonb)
-from public, anon;
+-- New functions are closed by default (helpers file); these are the ones signed-in people call.
 grant execute on function
   public.ensure_profile(), public.create_profile(text, text), public.create_workspace(text, text, text, text),
   public.invite_info(text), public.accept_invite(text), public.leave_workspace(uuid),
