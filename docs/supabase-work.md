@@ -32,7 +32,7 @@ Status: `todo`, `doing`, `done`.
 | 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | done | 95beeff + fix round; 53/53 DB tests, QA attack scripts pass |
 | 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | done | 70b978b, be04249 and a last fix; QA and code review passed |
 | 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | done | 2b367bd + fix round; QA probes re-run |
-| 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | doing | |
+| 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | doing | built in 537747e, 20/20 browser scenarios; QA running, review in |
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | todo | after 4 |
 | 6 | Linear import end to end (`import_rows`) | todo | after 2 and 5; parallel with 7, 8, 9 |
 | 7 | History and pictures | todo | after 5 |
@@ -172,6 +172,39 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E99 | phase 3 review | Write helpers send columns signed-in people can't write; `Change.fields` isn't limited to writable columns | fixed | phase 3 fix round, commit after 62a9e22 (C4) |
 | E100 | phase 3 review | `src/config.ts:5` env reads have no types | fixed | phase 3 fix round, commit after 62a9e22 (C6) |
 | E101 | phase 3 review | `select.ts:65` `PRIORITY_RANK.get(...)!` gives NaN for an unknown priority | open |  |
+| E102 | phase 4 review | A failure while opening (channel join or a bad row) leaves the spinner up for good | open | phase 4 fix round |
+| E103 | phase 4 review | Offline, the GitHub button says GitHub isn't switched on | open | phase 4 fix round |
+| E104 | phase 4 review | Sign-out tells other tabs before the sign-in is gone (double reloads, timing-dependent) | open | phase 4 fix round |
+| E105 | phase 4 review | The old `sprawniej-session` (with a GitHub key) stays until someone signs out | open | phase 4 fix round |
+| E106 | phase 4 review | The chip says "Not saved yet" during a slow join or short drop with nothing waiting | open | phase 4 fix round |
+| E107 | phase 4 review | `LiveWorkspace` lifecycle (open/close/catch-up/reopen) has no tests | open | phase 4 fix round |
+| E108 | phase 4 review | A GitHub sign-in that fails to finish says nothing and leaves `sb_flow_id` in the address | open | phase 4 fix round |
+| E109 | phase 4 review | New uses of the deprecated `FormEvent` type | open | phase 4 fix round |
+| E110 | phase 4 review | A failed fetch of asked-for rows is never retried | open | phase 4 fix round |
+| E111 | phase 4 review | Paging stops by comparing with 1000 rows, the server's row limit | open | phase 4 fix round |
+| E112 | phase 4 implementer | `useHistory.ts:57` and `ImportPage.tsx:72` still read the old save status | open | phases 6, 7 |
+| E113 | phase 4 implementer | After a workspace goes away while open, the chip keeps saying Saved behind the dialog | open | phase 4 fix round |
+| E114 | phase 5 planner | Settings: "Your GitHub profile stays as it is" / "Use your GitHub name" mean nothing now | open | phase 8 |
+| E115 | phase 5 planner | TeamMenu offers "Delete team" and Settings an editable workspace name to members who can't | open | phase 8 |
+| E116 | phase 5 planner | `Editor.tsx:26` imports `mergeText` from `src/sync/merge.ts` (deleted in phase 10) | open | phase 5 |
+| E117 | phase 5 planner | `last_number` is never broadcast, so `team.lastNumber` goes stale (number guesses corrected by the saved row) | won't do | the saved row corrects the number; broadcasting every counter change is noise |
+| E118 | phase 5 planner | Switching workspace has no "not saved yet" warning like signing out | open | phase 5 |
+| E119 | phase 5 planner | docs/architecture.md and docs/design.md still describe file merging and changes kept on the device | open | phase 10 |
+| E120 | phase 6 planner | Views can't change `team_id` through `import_rows` | won't do | a Linear view moving teams is rare; recreate it by hand |
+| E121 | phase 6 planner | `loadTable` reloads only active issues, so a big catch-up misses archived rows | open | phase 9 (catch-up pages every changed row) |
+| E122 | phase 6 planner | Existing teams never get newly matched people as members on re-import | open | phase 6 |
+| E123 | phase 7 planner | `statusOf` uses a non-null assertion: an unknown status crashes a screen | open | phase 7 |
+| E124 | phase 7 planner | Every description save writes its own history row | won't do | folded on screen; about 100 bytes a row is fine for 8 people |
+| E125 | phase 7 planner | The nightly archive doesn't take sub-issues along, while archiving by hand does | won't do | each finished issue goes on its own, as the old tidy-up did |
+| E126 | phase 7 planner | Pictures nobody uses any more are never removed, and pictures aren't in any backup | open | phase 10 (backup workflow notes) |
+| E127 | phase 8 planner | Admins can set any invite expiry (years) | open | phase 8 |
+| E128 | phase 8 planner | In stage B the email confirm link drops `#/join/<token>` | open | stage B (later) |
+| E129 | phase 8 planner | `invites.for_login` is no longer written | open | phase 10 |
+| E130 | phase 8 planner | GitHub added later never fills `github_id` or an empty avatar | won't do | no import from a GitHub workspace in this run, nothing to claim |
+| E131 | phase 8 planner | There is no way in the app to delete a workspace | won't do | not needed for the first team; owners can ask |
+| E132 | phase 9 planner | Catch-up reads changed profiles across all your workspaces and filters in the browser | open | phase 9 |
+| E133 | phase 9 planner | Inbox deletions leave no note, so catch-ups in memory miss notes removed meanwhile | open | phase 9 (inbox checked at open) |
+| E134 | phase 9 planner | `profileId` isn't kept across reloads, so even a cached open waits for one request | won't do | one small request; keeping it adds a stale-profile case |
 
 ## Waiting on the user
 
