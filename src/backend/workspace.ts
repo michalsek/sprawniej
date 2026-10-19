@@ -15,7 +15,7 @@ import { applyRows, emptyLive, type Incoming, type LiveState, type Mirror, type 
 import type { ConnectionEvents } from './connection'
 import { RowFetcher, type Asked } from './fetching'
 import { isMessage, track, type ChannelEvents, type ChannelsLike, type ChannelStatus, type Topic, type Tracked } from './live'
-import { planFetch, sinceMark, tooOld, type Reader } from './load'
+import { planFetch, sinceMark, tooLongAgo, type Reader } from './load'
 import type { MyProfile } from './profiles'
 import type { Registry } from './registry'
 import { chipState, type SaveStatus } from './status'
@@ -88,6 +88,8 @@ export interface WorkspaceEnv {
   reopen(): void
   delays: Delays
   writes: WritesHooks
+  /** the time here (Date.now; tests give their own) */
+  now?: () => number
 }
 
 const slice = (s: DataState): StoreSlice => ({
@@ -143,6 +145,8 @@ export class LiveWorkspace implements WriteTarget {
   private retries = 0
   private retryTimer: ReturnType<typeof setTimeout> | undefined
   private cascadeTimer: ReturnType<typeof setTimeout> | undefined
+  /** when this browser last had everything (the first read, or a catch-up that worked), by its own clock */
+  private caughtUpAt = 0
   private unwatch: (() => void) | undefined
 
   constructor(env: WorkspaceEnv, workspaceId: string, me: MyProfile) {
@@ -181,20 +185,30 @@ export class LiveWorkspace implements WriteTarget {
     return this.live.server
   }
 
-  /** never throws: whatever goes wrong while opening shows as "We couldn't open this workspace" */
-  async open(): Promise<void> {
+  private now(): number {
+    return (this.env.now ?? Date.now)()
+  }
+
+  /**
+   * Never throws: whatever goes wrong while opening shows as "We couldn't open this workspace". `again`: the same
+   * workspace read again from the start; what's on screen stays until the new copy is in (changes made meanwhile are
+   * shown on it), and the ids of people and teams stay known.
+   */
+  async open(again = false): Promise<void> {
     try {
-      await this.opening()
+      await this.opening(again)
     } catch (e) {
       console.warn('Sprawniej couldn’t open the workspace', e)
       this.fail('network')
     }
   }
 
-  private async opening() {
+  private async opening(again: boolean) {
     const { env } = this
-    env.registry.clear()
-    env.data.setState({ ...EMPTY, me: this.me.person })
+    if (!again) {
+      env.registry.clear()
+      env.data.setState({ ...EMPTY, me: this.me.person })
+    }
     env.status.setState({ state: 'loading', pending: 0, detail: undefined, progress: undefined, synced: false, caughtUpAt: undefined })
     env.backend.setState({ phase: 'opening', workspaceId: this.workspaceId, failure: undefined, gone: undefined })
 
@@ -215,7 +229,9 @@ export class LiveWorkspace implements WriteTarget {
     this.held = null
     // a held delete may be older than what was just read (deleted, then made again): catching up settles it
     const catchUp = this.gapWhileOpening || this.tracks.ws.missed || this.tracks.me.missed || held.some((m) => m.op === 'DELETE' || m.op === 'catch_up')
-    this.apply([...inputs, ...held.map((message): Incoming => ({ from: 'message', message }))])
+    // the first copy replaces whatever the store had
+    this.apply([...inputs, ...held.map((message): Incoming => ({ from: 'message', message }))], true)
+    this.caughtUpAt = this.now()
     if (this.closed || env.backend.getState().phase !== 'opening') return
     env.backend.setState({ phase: 'open' })
     this.unwatch = env.watch({
@@ -315,13 +331,18 @@ export class LiveWorkspace implements WriteTarget {
 
   // ---------- applying ----------
 
-  /** everything goes into the store through here: loads, messages, and your own changes (the writer) */
-  apply(inputs: Incoming[]) {
+  /**
+   * Everything goes into the store through here: loads, messages, and your own changes (the writer). `fresh`: the
+   * first copy, which replaces the whole store.
+   */
+  apply(inputs: Incoming[], fresh = false) {
     if (this.closed || !inputs.length) return
     const { env } = this
-    const r = applyRows(this.live, slice(env.data.getState()), inputs, { workspaceId: this.workspaceId, meId: this.me.id, registry: env.registry })
+    const base: DataState = fresh ? { ...EMPTY, me: this.me.person } : env.data.getState()
+    const r = applyRows(this.live, slice(base), inputs, { workspaceId: this.workspaceId, meId: this.me.id, registry: env.registry })
     this.live = r.state
-    if (Object.keys(r.patch).length) env.data.setState(r.patch)
+    if (fresh) env.data.setState({ ...base, ...r.patch })
+    else if (Object.keys(r.patch).length) env.data.setState(r.patch)
     if (r.workspaceGone) return this.goneAway('deleted')
     if (env.data.getState().members[this.me.person.login]?.removedAt) return this.goneAway('removed')
     if (r.fetch.length) this.fetcher.request(r.fetch)
@@ -358,7 +379,9 @@ export class LiveWorkspace implements WriteTarget {
   private async catchUpOnce(): Promise<boolean> {
     const { env } = this
     const from = this.floor ?? this.live.mark
-    if (!from || tooOld(sinceMark(from), Date.now())) {
+    // deletions are kept 45 days: away from them longer than that, some could be missed (a quiet workspace's newest
+    // change may be old; what counts is when this browser last had everything)
+    if (!from || tooLongAgo(this.caughtUpAt, this.now())) {
       env.reopen()
       return true
     }
@@ -383,6 +406,7 @@ export class LiveWorkspace implements WriteTarget {
       this.retries = 0
       clearTimeout(this.retryTimer)
       this.catchUps++
+      this.caughtUpAt = this.now()
       this.refresh({ caughtUpAt: Date.now() })
       const refetch = this.refetch
       this.refetch = []
@@ -483,6 +507,8 @@ export class Lifecycle {
   private registry: Registry
   private writes: WritesHooks
   private onClosed: () => void
+  /** the workspace whose unsaved changes the writer still holds, detached (it opens again next, or it failed to open) */
+  private kept: string | null = null
 
   /**
    * `writes`: the writer (none in some tests); `closed`: a workspace closed for good (not when it's read again from
@@ -505,8 +531,9 @@ export class Lifecycle {
     return this.queue(() => this.start(workspaceId, me, false))
   }
 
+  /** a workspace that failed to open keeps what's waiting: "Try again" opens it once more */
   close(): Promise<void> {
-    return this.queue(() => this.closeNow(false))
+    return this.queue(() => this.closeNow(this.backend.getState().phase === 'failed'))
   }
 
   /** the same workspace read again from the start, if it's still the one open; your unsaved changes carry over */
@@ -515,26 +542,36 @@ export class Lifecycle {
   }
 
   private async start(workspaceId: string, me: MyProfile, again: boolean) {
-    if (this.current) await this.closeNow(again)
+    const cur = this.current
+    if (cur) await this.closeNow(again || cur.workspaceId === workspaceId || this.backend.getState().phase === 'failed')
+    // what another workspace still had waiting gets a moment to be sent, then goes
+    if (this.kept !== null && this.kept !== workspaceId) await this.writes.finish(3_000)
+    this.kept = null
     const ws = this.make(workspaceId, me)
     if (!ws) return
     this.current = ws
     // opening isn't waited for here: a close that comes meanwhile marks it closed, and it stops at its next step
-    void ws.open()
+    void ws.open(again)
   }
 
-  /** `again`: the same workspace opens next, so what's waiting to be saved stays */
-  private async closeNow(again: boolean) {
+  /** `keep`: what's waiting to be saved stays with the writer (the same workspace opens next, or it failed to open) */
+  private async closeNow(keep: boolean) {
     const ws = this.current
     this.current = null
     if (!ws) return
-    if (again) this.writes.detach()
-    // switching workspace or signing out: a moment to send what's waiting, while it still shows
-    else await this.writes.finish(3_000)
+    if (keep) {
+      this.writes.detach()
+      this.kept = ws.workspaceId
+    } else {
+      // switching workspace or signing out: a moment to send what's waiting, while it still shows
+      await this.writes.finish(3_000)
+      this.kept = null
+    }
     await ws.close()
-    this.registry.clear()
+    // the same workspace read again keeps the ids it knows (changes made meanwhile name them)
+    if (!keep) this.registry.clear()
     this.backend.setState({ phase: 'closed', workspaceId: undefined, failure: undefined, gone: undefined })
     // once nothing shows it as open any more, so nothing asks for its pictures again
-    if (!again) this.onClosed()
+    if (!keep) this.onClosed()
   }
 }

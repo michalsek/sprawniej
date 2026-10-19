@@ -5,6 +5,7 @@
 import { toast } from 'sonner'
 import { create } from 'zustand'
 import { useData } from '@/data/store'
+import { handOver } from '@/lib/beforeHide'
 import { useAuth } from './auth'
 import { getClient } from './client'
 import { watchConnection } from './connection'
@@ -32,8 +33,13 @@ const writes: WritesHooks = {
     if (!started()) startWrites({ transport: postgrest(db), tell: (m) => toast(m), onStatus: () => life.current?.refresh() })
     attach(target)
   },
-  detach,
+  // the screen is about to go: fields hand over what you typed first, so it's saved too
+  detach() {
+    handOver()
+    detach()
+  },
   finish: async (ms) => {
+    handOver()
     await flush(ms)
     stopWrites()
   },
@@ -59,6 +65,7 @@ const life: Lifecycle = new Lifecycle(
         reopen: () => life.reopen(ws),
         delays: DELAYS,
         writes,
+        now: () => Date.now(),
       },
       workspaceId,
       me,

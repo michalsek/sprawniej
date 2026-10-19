@@ -22,7 +22,7 @@ import {
 } from '@/data/actions'
 import { DEFAULT_DISPLAY } from '@/data/displays'
 import { findByRef, useData } from '@/data/store'
-import { profileIdOf, seed, teamIdOf, WS, type World } from './support/fakeBackend'
+import { drain, profileIdOf, seed, teamIdOf, WS, type World } from './support/fakeBackend'
 
 let w: World
 let warn: ReturnType<typeof spyOn>
@@ -35,14 +35,9 @@ afterEach(() => {
   warn.mockRestore()
 })
 const state = () => useData.getState()
-const from = () => {
-  const n = w.db.log.length
-  return () => w.db.log.slice(n)
-}
-
 describe('teams', () => {
   test('rename and change the emoji; the key stays; a team needs a name', async () => {
-    const sent = from()
+    const sent = w.since()
     updateTeam('ENG', { name: '  Platform ', emoji: '🛠️' })
     expect(state().teams.ENG).toMatchObject({ key: 'ENG', name: 'Platform', emoji: '🛠️', members: ['ana'] })
     updateTeam('ENG', { name: '   ' })
@@ -52,7 +47,7 @@ describe('teams', () => {
   })
 
   test('join and leave', async () => {
-    const sent = from()
+    const sent = w.since()
     joinTeam('DES')
     expect(state().teams.DES.members).toEqual(['ana'])
     await w.settle()
@@ -77,7 +72,7 @@ describe('teams', () => {
 
   test('a member may not delete a team: told so, nothing sent', async () => {
     useData.setState({ members: { ...state().members, ana: { role: 'member', removedAt: null } } })
-    const sent = from()
+    const sent = w.since()
     expect(deleteTeam('ENG')).toBe(false)
     await w.settle()
     expect(sent()).toEqual([])
@@ -100,7 +95,7 @@ describe('teams', () => {
     expect(teamContents('ENG')).toEqual({ issues: 1, archived: 1, comments: 1, views: 1 })
     w.db.messages()
 
-    const sent = from()
+    const sent = w.since()
     expect(deleteTeam('ENG')).toBe(true)
     const s = state()
     expect(s.teams.ENG).toBeUndefined()
@@ -125,36 +120,26 @@ describe('teams', () => {
   })
 })
 
-test('a moved issue answers to its old number, whichever comes first: the saved row or its echo', async () => {
-  const issue = createIssue({ team: 'ENG', title: 'Moves around' })
-  await w.settle()
-  w.db.messages()
-  w.db.hold()
-  moveIssueToTeam(issue.id, 'DES')
-  await w.settle()
-  // the echo again after the saved row, then an older copy of the row: it stays in DES
-  w.echo()
-  const stale = { ...w.db.get('issues', { id: issue.id }), team_id: teamIdOf('ENG'), changed_at: '2026-10-19T11:00:00.000000+00:00' }
-  w.target.apply([{ from: 'fetch', table: 'issues', rows: [stale] } as Incoming])
-  expect(state().issues[issue.id]).toMatchObject({ team: 'DES', number: 1 })
-  expect(findByRef(state().issues, `ENG-${issue.number}`)?.id).toBe(issue.id)
-  expect(findByRef(state().issues, 'DES-1')?.id).toBe(issue.id)
-})
-
-test('the echo first, then the saved row: still in DES', async () => {
-  const issue = createIssue({ team: 'ENG', title: 'Moves around' })
-  await w.settle()
-  w.db.messages()
-  w.db.hold()
-  moveIssueToTeam(issue.id, 'DES')
-  await new Promise((r) => setTimeout(r, 0))
-  // the database moves it, its echo comes before the answer does
-  w.db.release(1)
-  await Promise.resolve()
-  w.echo()
-  await w.settle()
-  expect(state().issues[issue.id]).toMatchObject({ team: 'DES', number: 1, formerRefs: [`ENG-${issue.number}`] })
-})
+for (const order of ['the saved row first', 'the echo first'] as const) {
+  test(`a moved issue stays in its new team and answers to its old number: ${order}`, async () => {
+    const issue = createIssue({ team: 'ENG', title: 'Moves around' })
+    await w.settle()
+    w.db.messages()
+    // it lands, but its answer waits
+    w.db.hold('answers')
+    moveIssueToTeam(issue.id, 'DES')
+    await drain()
+    if (order === 'the echo first') w.echo()
+    await w.settle()
+    if (order === 'the saved row first') w.echo()
+    // an older copy of the row changes nothing
+    const stale = { ...w.db.get('issues', { id: issue.id }), team_id: teamIdOf('ENG'), changed_at: '2026-10-19T11:00:00.000000+00:00' }
+    w.target.apply([{ from: 'fetch', table: 'issues', rows: [stale] } as Incoming])
+    expect(state().issues[issue.id]).toMatchObject({ team: 'DES', number: 1, formerRefs: [`ENG-${issue.number}`] })
+    expect(findByRef(state().issues, `ENG-${issue.number}`)?.id).toBe(issue.id)
+    expect(findByRef(state().issues, 'DES-1')?.id).toBe(issue.id)
+  })
+}
 
 test('deleting a label, project or team takes it out of saved views', async () => {
   const label = createLabel('Bug')

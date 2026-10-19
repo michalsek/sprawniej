@@ -9,7 +9,7 @@
  *
  * No message says database, server, row or sync (CLAUDE.md, writing).
  */
-import { TECHNICAL } from '../problem'
+import { ownWords } from '../problem'
 
 export type ProblemKind = 'network' | 'auth' | 'refused' | 'gone' | 'bug'
 export interface Problem {
@@ -37,7 +37,14 @@ export const MESSAGES = {
   renameWorkspace: 'Only admins and owners can rename the workspace.',
   refused: "You can't change this, so your change was undone.",
   gone: "It was deleted meanwhile, so your change wasn't saved.",
+  goneIssue: "This issue was deleted meanwhile, so your change wasn't saved.",
   goneComment: "This issue was deleted meanwhile, so your comment wasn't saved.",
+  goneEditedComment: "This comment was deleted meanwhile, so your change wasn't saved.",
+  goneLabel: "This label was deleted meanwhile, so your change wasn't saved.",
+  goneLabelAdded: "This label was deleted meanwhile, so it wasn't added.",
+  goneProject: "This project was deleted meanwhile, so your change wasn't saved.",
+  goneView: "This view was deleted meanwhile, so your change wasn't saved.",
+  goneTeam: "This team was deleted meanwhile, so your change wasn't saved.",
   labelName: "There's already a label with this name.",
   teamKey: 'Another team already uses this key.',
   notSaved: "This change couldn't be saved, so it was undone.",
@@ -56,10 +63,40 @@ export function refusedMessage(what: What): string {
   return MESSAGES.refused
 }
 
-export const goneMessage = (what: What): string => (what.table === 'comments' && what.op === 'insert' ? MESSAGES.goneComment : MESSAGES.gone)
+/** what a row of each table is about, when it's gone */
+const GONE: Record<string, string> = {
+  issues: MESSAGES.goneIssue,
+  issue_followers: MESSAGES.goneIssue,
+  comments: MESSAGES.goneEditedComment,
+  labels: MESSAGES.goneLabel,
+  issue_labels: MESSAGES.goneLabelAdded,
+  projects: MESSAGES.goneProject,
+  project_teams: MESSAGES.goneProject,
+  views: MESSAGES.goneView,
+  teams: MESSAGES.goneTeam,
+  team_members: MESSAGES.goneTeam,
+}
 
-/** the database's own words, when they read as a sentence (our triggers write friendly ones) */
-const worded = (message: string | undefined): string | undefined => (message && !TECHNICAL.test(message) && !message.includes('"') ? message : undefined)
+/** the column a foreign key error names ("issue_labels_workspace_id_label_id_fkey"), as the thing that went */
+const POINTS_AT: [RegExp, string][] = [
+  [/_label_id_fkey$/, MESSAGES.goneLabelAdded],
+  [/_project_id_fkey$/, MESSAGES.goneProject],
+  [/_team_id_fkey$/, MESSAGES.goneTeam],
+  [/_(issue_id|parent_id|duplicate_of)_fkey$/, MESSAGES.goneIssue],
+]
+
+/**
+ * Something this change is about was deleted meanwhile, named for what it was. `constraint`: the foreign key that
+ * said so, when there is one (a comment on an issue that went names the issue, not the comment).
+ */
+export function goneMessage(what: What, constraint?: string): string {
+  if (what.table === 'comments' && what.op === 'insert') return MESSAGES.goneComment
+  for (const [re, message] of POINTS_AT) if (constraint && re.test(constraint)) return message
+  // a new issue in a team that went ("There is no such team.")
+  if (what.table === 'issues' && what.op === 'insert') return MESSAGES.goneTeam
+  return GONE[what.table] ?? MESSAGES.gone
+}
+
 
 export function classify(error: ErrorLike | null | undefined, status: number, what: What): Problem {
   const code = error?.code ?? ''
@@ -73,15 +110,15 @@ export function classify(error: ErrorLike | null | undefined, status: number, wh
   if (fromDb && /^(08|40|53|57)/.test(code)) return { kind: 'network', message: '' }
   if ((!fromDb && RETRY_STATUS.has(status)) || /^PGRST00[0-3]$/.test(code)) return { kind: 'network', message: '' }
   if ((!fromDb && status === 401) || /^PGRST30[1-3]$/.test(code)) return { kind: 'auth', message: '' }
-  if (code === '23503' || code === 'P0002') return { kind: 'gone', message: goneMessage(what) }
+  if (code === '23503' || code === 'P0002') return { kind: 'gone', message: goneMessage(what, constraintOf(message)) }
   if (code === '23505') {
     const name = constraintOf(message)
     if (name === 'labels_name') return { kind: 'refused', message: MESSAGES.labelName }
     if (name === 'teams_workspace_id_key_key') return { kind: 'refused', message: MESSAGES.teamKey }
   }
-  if (code === '42501') return { kind: 'refused', message: worded(message) ?? MESSAGES.refused }
+  if (code === '42501') return { kind: 'refused', message: ownWords(message) ?? MESSAGES.refused }
   if (['23505', '23514', '23502', 'P0001'].includes(code) || /^(22|SP)/.test(code)) {
-    return { kind: 'refused', message: worded(message) ?? MESSAGES.notSaved }
+    return { kind: 'refused', message: ownWords(message) ?? MESSAGES.notSaved }
   }
   return { kind: 'bug', message: MESSAGES.bug }
 }
