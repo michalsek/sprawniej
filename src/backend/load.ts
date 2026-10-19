@@ -15,7 +15,7 @@ import type { Incoming } from './apply'
 
 type Loose = Record<string, unknown>
 /** a select on a table picked at run time (one row type per table can't be named here) */
-type Query = ReturnType<ReturnType<SupabaseClient['from']>['select']>
+export type Query = ReturnType<ReturnType<SupabaseClient['from']>['select']>
 
 /** rows asked for per request */
 const PAGE = 1000
@@ -48,6 +48,32 @@ const dropIssue = (rows: Loose[]): Loose[] => rows.map(({ issues: _issues, ...ro
 
 const memberIdsOf = (rows: readonly Loose[]) => [...new Set(rows.map((r) => String(r.profile_id)))]
 
+/** every row of a select, page by page in key order, until none are left (the import's small queries use it too) */
+export async function paged(
+  db: Db,
+  table: string,
+  cols: readonly string[],
+  select: string,
+  filter: (q: Query) => Query,
+  { page = PAGE, onPage }: { page?: number; onPage?: (n: number) => void } = {},
+): Promise<Loose[]> {
+  const out: Loose[] = []
+  let last: Loose | undefined
+  for (;;) {
+    let q = filter((db as unknown as SupabaseClient).from(table).select(select, { count: 'exact' }))
+    if (last) q = q.or(after(cols, last))
+    for (const c of cols) q = q.order(c)
+    const { data, error, count } = await q.limit(page)
+    if (error) throw error
+    const rows = data as unknown as Loose[]
+    out.push(...rows)
+    onPage?.(out.length)
+    // `count` is what was left before this page; without it, an empty page says it's over
+    if (!rows.length || (count !== null && rows.length >= count)) return out
+    last = rows[rows.length - 1]
+  }
+}
+
 /** reads one workspace's rows, as one person (your inbox and read marks are yours only) */
 export class Loader {
   private db: Db
@@ -63,27 +89,8 @@ export class Loader {
     this.page = page
   }
 
-  private from(table: string) {
-    return (this.db as unknown as SupabaseClient).from(table)
-  }
-
-  /** every row of a select, page by page in key order, until none are left */
-  private async paged(table: string, cols: readonly string[], select: string, filter: (q: Query) => Query, onPage?: (n: number) => void): Promise<Loose[]> {
-    const out: Loose[] = []
-    let last: Loose | undefined
-    for (;;) {
-      let q = filter(this.from(table).select(select, { count: 'exact' }))
-      if (last) q = q.or(after(cols, last))
-      for (const c of cols) q = q.order(c)
-      const { data, error, count } = await q.limit(this.page)
-      if (error) throw error
-      const rows = data as unknown as Loose[]
-      out.push(...rows)
-      onPage?.(out.length)
-      // `count` is what was left before this page; without it, an empty page says it's over
-      if (!rows.length || (count !== null && rows.length >= count)) return out
-      last = rows[rows.length - 1]
-    }
+  private paged(table: string, cols: readonly string[], select: string, filter: (q: Query) => Query, onPage?: (n: number) => void): Promise<Loose[]> {
+    return paged(this.db, table, cols, select, filter, { page: this.page, onPage })
   }
 
   /** a table's rows that belong to this workspace (and, for your inbox and read marks, to you) */

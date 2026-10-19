@@ -190,7 +190,8 @@ describe('when a copy can be used', () => {
 
   test('another format, app version, database layout, project, person or workspace: not used', () => {
     const want = wanted(ID)
-    expect(check(meta(), want, now)).toEqual({ meta: meta() })
+    const ok = meta()
+    expect(check(ok, want, now)).toEqual({ meta: ok })
     expect(check(meta({ v: 999 }), want, now)).toEqual({ bad: 'format' })
     expect(check(meta({ app: '0.0.1' }), want, now)).toEqual({ bad: 'app' })
     expect(check(meta({ schema: '1' }), want, now)).toEqual({ bad: 'schema' })

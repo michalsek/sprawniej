@@ -1,4 +1,8 @@
-/** A small Linear workspace for import tests (also served by the browser test's pretend Linear). */
+/**
+ * A small Linear workspace for the import tests: tests/linearImport.test.ts and tests/importRows.test.ts work it out,
+ * tests/db/import-linear.test.ts saves it to a real database, and the browser check serves it as a pretend Linear
+ * (page.route on api.linear.app, answering each query by its root field).
+ */
 import type { LinearData } from '@/features/import/linearApi'
 
 const issue = (o: Partial<LinearData['issues'][number]> & { id: string; number: number; title: string }): LinearData['issues'][number] => ({

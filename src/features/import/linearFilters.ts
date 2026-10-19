@@ -12,7 +12,7 @@
  */
 import type { Filters } from '@/model/schema'
 import { STATUSES, type StatusGroup, type StatusId } from '@/model/status'
-import { mapStatus } from './linearMap'
+import { mapStatus } from './linearStatus'
 import type { LLabel, LState } from './linearApi'
 
 export interface FilterContext {

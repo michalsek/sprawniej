@@ -7,8 +7,11 @@ import { create } from 'zustand'
 import { useData } from '@/data/store'
 import { handOver } from '@/lib/beforeHide'
 import { useAuth } from './auth'
+import type { Existing, ImportExtras, ImportResult } from '@/features/import/linearMap'
 import { cacheState } from './cacheStore'
-import { getClient } from './client'
+import { getClient, type Db } from './client'
+import { friendlyDbError } from './problem'
+import { ImportProblem, planImport, readExisting, runImport, type ImportPlan } from './importRows'
 import { watchConnection } from './connection'
 import type { EventRow } from '@/data/history'
 import { fetchIssueEvents } from './history'
@@ -106,6 +109,17 @@ useBackend.subscribe((s, was) => {
 
 const CLOSED_CHANNELS: Record<Topic, ChannelStatus> = { ws: 'CLOSED', me: 'CLOSED' }
 
+const NOT_OPEN = 'Open the workspace to import into first.'
+let importing = false
+
+/** the open workspace and the connection, for the import */
+function openForImport(): { ws: LiveWorkspace; db: Db } {
+  const ws = life.current
+  const db = getClient()
+  if (!ws || ws.closed || !db || useBackend.getState().phase !== 'open') throw new ImportProblem(NOT_OPEN)
+  return { ws, db }
+}
+
 export const backend = {
   open: (workspaceId: string, me: MyProfile): Promise<void> => life.open(workspaceId, me),
   /** closing: what's waiting gets a moment to be sent first */
@@ -122,6 +136,43 @@ export const backend = {
   pending,
   /** how many archived issues a team has */
   countArchived: (teamKey: string): Promise<number> => life.current?.countArchived(teamKey) ?? Promise.resolve(0),
+  /** what the Linear import needs to know that the store doesn't hold (importRows.ts) */
+  readExisting: async (): Promise<ImportExtras> => {
+    const { ws, db } = openForImport()
+    try {
+      return await readExisting(db, ws.workspaceId, registry)
+    } catch (e) {
+      console.error('Sprawniej couldn’t read what the import needs', e)
+      throw new ImportProblem(friendlyDbError(e, "We couldn't check what's here already. Try again in a moment."))
+    }
+  },
+  /** the steps an import takes (pure, apart from the new teams' ids) */
+  planImport: (r: ImportResult, existing: Existing): ImportPlan => {
+    const { ws } = openForImport()
+    return planImport(r, existing, { workspaceId: ws.workspaceId, registry, newTeamId: () => crypto.randomUUID() })
+  },
+  /**
+   * Saves an import. Your own changes are sent first; catching up waits until the end and happens once then (an
+   * import sends one "catch up" per batch), archived issues included. Returns how many rows changed.
+   */
+  importRows: async (plan: ImportPlan, progress: (saved: number, total: number) => void): Promise<number> => {
+    if (importing) throw new ImportProblem('An import is already running.')
+    const { ws, db } = openForImport()
+    if (plan.workspaceId !== ws.workspaceId) throw new ImportProblem(NOT_OPEN)
+    importing = true
+    try {
+      await flush()
+      ws.holdCatchUp()
+      try {
+        return await runImport(db, ws.workspaceId, plan, progress)
+      } finally {
+        // catching up reads every changed row, archived ones too: an archive already read gets them as well
+        await ws.releaseCatchUp()
+      }
+    } finally {
+      importing = false
+    }
+  },
   /** an issue's history events after `afterId`, oldest first (src/data/history.ts reads them) */
   history: (issueId: string, afterId?: number): Promise<EventRow[]> => {
     const ws = life.current
@@ -141,7 +192,7 @@ export const backend = {
       catchUps: ws?.catchUps ?? 0,
       writes: debugWrites(),
       pictures: Object.keys(usePictures.getState().entries).length,
-      cache: { source: ws?.source ?? null, savedAt: ws?.keeper.keptAt ?? null, miss: lastCopyMiss(), ...copyState(ws) },
+      cache: { source: ws?.source ?? null, savedAt: ws?.keeper.keptAt ?? null, saving: ws?.keeper.saving ?? false, miss: lastCopyMiss(), ...copyState(ws) },
     }
   },
   /** keep the copy of the open workspace now (scripted checks) */

@@ -13,6 +13,7 @@ import { ulid } from 'ulid'
 import { localKey } from '@/backend/apply/take'
 import type { AnyChange, Call, Change, Writable } from '@/backend/changes'
 import type { Json } from '@/backend/database.types'
+import { ImportProblem, type ImportPlan } from '@/backend/importRows'
 import type { KeyOf, LiveTable, Row } from '@/backend/tables'
 import { context, tell, write, type NoteRow, type WriteContext } from '@/backend/writes'
 import { MESSAGES } from '@/backend/writes/problems'
@@ -886,6 +887,16 @@ function openHere(): WriteContext {
   const c = context()
   if (!c) throw new Error('Open the workspace first.')
   return c
+}
+
+/**
+ * Save a Linear import (Settings › Import from Linear), worked out by backend.planImport. Admins and owners only.
+ * `progress` hears how much is saved; it throws an ImportProblem, worded to show, when it stops partway (everything
+ * saved until then stays, and running it again goes on from there). Returns how many things changed.
+ */
+export async function importFromLinear(plan: ImportPlan, progress: (saved: number, total: number) => void): Promise<number> {
+  if (!isAdmin(useData.getState())) throw new ImportProblem('Only admins and owners can import from Linear.')
+  return backend.importRows(plan, progress)
 }
 
 function idOf(c: WriteContext, login: string): string {

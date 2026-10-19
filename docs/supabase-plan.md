@@ -1142,7 +1142,10 @@ src/backend/
   load.ts            opening a workspace: cache, catch-up since the mark, archive on demand
   live.ts            channels, reconnects, applyRows (newer only, in-flight fields, per field)
   writes.ts          sending changed columns, join-table inserts and deletes, retries, the save chip's state
-  cache.ts           the read cache in IndexedDB (rows + mark per workspace)
+  cache.ts           the read cache: what a copy of a workspace holds (rows + mark), when it can be used
+  cacheStore.ts      the copies in IndexedDB (one database, `sprawniej-cache`), quota, eviction, sign-out
+  keep.ts            when the open workspace's copy is kept (debounce, page going, closing); debug().cache.source
+                     says 'copy' or 'full'
   pictures.ts        upload, signed URLs
   history.ts         issue_events for one issue
   importRepo.ts      the import from a GitHub workspace, later and only if someone needs it (section 8)
@@ -1217,15 +1220,24 @@ is what `buildImport` returns and how it is saved.
 - **Numbers.** Issues keep their Linear numbers (`ENG-123` stays `ENG-123`). The wizard loads the team's used numbers
   (`issue_numbers`, numbers only) instead of every issue file, and anything already used gets the next free number, as
   today ("ENG-12 came in as ENG-40" in the check step). The database refuses a used number anyway.
-- **Saving.** Rows go through `import_rows` in dependency order (guest profiles, teams and team members, labels,
-  projects and project teams, issues without parent or duplicate, then those two fields, issue labels and followers,
-  comments, views), in batches of 500, with the same progress bar. `import_rows` upserts on the primary key: the
+- **Saving.** Rows go through `import_rows` in dependency order (`src/backend/importRows.ts`): guest profiles;
+  teams that let go of a Linear team (`linear_id` null), new teams, their members, teams that take a Linear team
+  (a release has to land before a new team or another team takes that id, and one statement can't name a key twice);
+  labels; projects and project teams; issues without parent or duplicate, then those two fields (with every required
+  column, so only they change); issue labels; followers; comments; views; then `set_guest_email` and `link_person`.
+  What Linear took off since (an issue's labels, a project's teams, followers not needed any more, views that can't
+  come over) is deleted with plain deletes. Batches of 500 rows (or about 2 MB), with the same progress bar; a
+  dropped connection is tried again after 1, 3 and 9 s, a statement timeout halves the batch. The app holds back
+  catching up while it imports (each batch sends a "catch up" message) and catches up once at the end; everyone
+  else waits 2 s after the last such message, at most 10 s. `import_rows` upserts on the primary key: the
   import reuses the id of each row that came over before (matched by its Linear id, or by name for a label or a team
   taking a Linear team), so running the import again updates what came over and adds what's new, as it does now;
   issues archived here since stay archived. `unique (workspace_id, linear_id)` stays as the guard against a second copy.
 - **Pictures** pasted in Linear stay links to Linear, as today.
-- **Archived issues for matching.** A second import needs to know archived issues too; it asks the database for
-  `id, linear_id` of the workspace's issues with a `linear_id` (a small query) instead of loading the archive.
+- **Archived issues for matching.** A second import needs to know archived issues too; it asks the database (small
+  queries, `readExisting`) for `id, linear_id, team_id, number` of archived issues with a `linear_id`, the
+  `id, issue_id, linear_id` of comments with a `linear_id` on archived issues, every used number (`issue_numbers`)
+  and the workspace's guest profiles, instead of loading the archive.
 
 `docs/linear-import.md` is updated to say "rows" where it says "files" and to drop the part-of-300-files saving.
 

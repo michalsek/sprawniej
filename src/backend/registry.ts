@@ -50,6 +50,14 @@ export class Registry {
     return this.teamOf.get(key)
   }
 
+  /** a new registry with the same ids, so the import can learn its new teams and guests without touching this one */
+  copy(): Registry {
+    const r = new Registry()
+    for (const [id, login] of this.loginOf) r.learnProfile(id, login)
+    for (const [id, key] of this.teamKeyOf) r.learnTeam(id, key)
+    return r
+  }
+
   /** opening another workspace, signing out */
   clear(): void {
     this.loginOf.clear()

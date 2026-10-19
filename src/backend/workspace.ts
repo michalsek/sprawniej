@@ -52,9 +52,24 @@ export interface Delays {
   slept: number
   /** a deleted team or project: catch up this long after, for whatever of its many rows' messages didn't come */
   cascade: number
+  /**
+   * "catch up" messages (an import sends one per batch) wait until none came for `catchUpQuiet`, but no longer than
+   * `catchUpMax` after the first, so a long import doesn't make everyone read everything again per batch
+   */
+  catchUpQuiet: number
+  catchUpMax: number
 }
 
-export const DELAYS: Delays = { flush: 16, fetch: 50, askAgain: 30_000, retry: [2_000, 5_000, 15_000, 30_000], slept: 60_000, cascade: 3_000 }
+export const DELAYS: Delays = {
+  flush: 16,
+  fetch: 50,
+  askAgain: 30_000,
+  retry: [2_000, 5_000, 15_000, 30_000],
+  slept: 60_000,
+  cascade: 3_000,
+  catchUpQuiet: 2_000,
+  catchUpMax: 10_000,
+}
 
 /** what an open workspace needs from the writer (writes.ts) */
 export interface WritesHooks {
@@ -145,6 +160,11 @@ export class LiveWorkspace implements WriteTarget {
   private floor: string | null = null
   private archive: 'none' | 'loading' | 'done' = 'none'
   private archiveTries = 0
+  /** your import is saving: "catch up" messages wait, and it catches up once at the end (releaseCatchUp) */
+  private importing = false
+  /** "catch up" messages wait for this (catchUpSoon) */
+  private debounceTimer: ReturnType<typeof setTimeout> | undefined
+  private debounceFirst: number | null = null
   private archiveTimer: ReturnType<typeof setTimeout> | undefined
   /** rows whose fetch failed: asked for again after the next catch-up */
   private refetch: Asked[] = []
@@ -430,6 +450,7 @@ export class LiveWorkspace implements WriteTarget {
     clearTimeout(this.retryTimer)
     clearTimeout(this.archiveTimer)
     clearTimeout(this.cascadeTimer)
+    this.stopWaiting()
     this.fetcher.stop()
     this.unwatch?.()
     await this.channels?.close()
@@ -518,10 +539,50 @@ export class LiveWorkspace implements WriteTarget {
     if (r.workspaceGone) return this.goneAway('deleted')
     if (env.data.getState().members[this.me.person.login]?.removedAt) return this.goneAway('removed')
     if (r.fetch.length) this.fetcher.request(r.fetch)
-    if (r.catchUp) void this.catchUp()
+    if (r.catchUp) this.catchUpSoon()
   }
 
   // ---------- catching up ----------
+
+  /**
+   * A "catch up" message (an import sends one per batch, a link one in all): soon, once they stop coming, and not
+   * during your own import (it catches up at the end). Catching up reads every changed row, archived ones too, so an
+   * archive already open gets imported archived issues with it.
+   */
+  private catchUpSoon() {
+    if (this.closed || this.importing) return
+    const { catchUpQuiet, catchUpMax } = this.env.delays
+    const now = Date.now()
+    this.debounceFirst ??= now
+    clearTimeout(this.debounceTimer)
+    this.debounceTimer = setTimeout(
+      () => {
+        this.debounceTimer = undefined
+        this.debounceFirst = null
+        void this.catchUp()
+      },
+      Math.max(0, Math.min(catchUpQuiet, this.debounceFirst + catchUpMax - now)),
+    )
+  }
+
+  private stopWaiting() {
+    clearTimeout(this.debounceTimer)
+    this.debounceTimer = undefined
+    this.debounceFirst = null
+  }
+
+  /** your import is saving: its own "catch up" messages are left (releaseCatchUp catches up once, at the end) */
+  holdCatchUp() {
+    this.importing = true
+    this.stopWaiting()
+  }
+
+  /** the import is done (or stopped): catch up once, now */
+  async releaseCatchUp(): Promise<void> {
+    this.importing = false
+    this.stopWaiting()
+    await this.catchUp()
+  }
 
   catchUp(): Promise<void> {
     if (this.closed || this.held) return Promise.resolve()

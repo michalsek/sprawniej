@@ -274,11 +274,12 @@ themselves after a month, and unread ones after three.
 
 ## Moving over from Linear
 
-**Settings › Import from Linear** brings your teams, issues, comments, projects, labels and views over. You'll need a
-Linear personal API key (the first step shows where to make one). Pick the teams, check who's who, and press
-**Import**. Issue numbers stay the same (`ENG-123` is still `ENG-123`), and so do due dates and estimates. Issues
-finished long ago go straight to the archive. Views keep the filters that fit, and the import tells you which views
-lost some, so you can check them.
+**Settings › Import from Linear** brings your teams, issues, comments, projects, labels and views over. Only admins and
+owners can import. You'll need a Linear personal API key (the first step shows where to make one). Pick the teams,
+check who's who, and press **Import**. Issue numbers stay the same (`ENG-123` is still `ENG-123`), and so do due
+dates and estimates. Issues finished long ago go straight to the archive. Views keep the filters that fit, and the
+import tells you which views lost some, so you can check them. If the import stops partway (say, the connection
+dropped), what came over so far stays: press **Try again** to bring over the rest.
 
 People who aren't in Sprawniej yet come over too, listed under **Settings › People from Linear**: their issues,
 comments and views stay theirs. Owners and admins have two ways to hand them their work:
@@ -289,7 +290,7 @@ comments and views stay theirs. Owners and admins have two ways to hand them the
   Linking can't be undone, so check the name first.
 
 You can run the import again later to bring in new changes; nothing is copied twice, and people you linked stay
-linked.
+linked. Picking someone who has joined for a person from Linear on the import's **Who's who** step links them too.
 
 Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish letters: "lukasz" finds Łukasz.
 

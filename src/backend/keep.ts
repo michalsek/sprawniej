@@ -118,6 +118,11 @@ export class Saver {
     this.timer = this.t.setTimeout(() => void this.saveNow(), wait)
   }
 
+  /** a save is under way */
+  get busy(): boolean {
+    return this.running !== null
+  }
+
   /** keep it now; done once kept */
   saveNow(): Promise<void> {
     this.settle()
@@ -175,6 +180,11 @@ export class CopyKeeper {
   /** why no copy is kept for this workspace, if that's about it */
   get reason(): 'too-big' | 'gone' | undefined {
     return this.dropped ? 'gone' : this.tooBig !== null ? 'too-big' : undefined
+  }
+
+  /** a save is under way (scripted checks) */
+  get saving(): boolean {
+    return this.saver.busy
   }
 
   /** the rows changed: kept in a moment */
