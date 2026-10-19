@@ -69,19 +69,20 @@ export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: 
 
   return (
     <div>
-      {github && github !== 'off' && (
-        <>
-          <Button variant="outline" size="lg" className="w-full" disabled={!!busy} onClick={() => void continueWithGitHub()}>
+      {/* while we ask, the button's place is kept (hidden), so the form doesn't jump when GitHub is on */}
+      {github !== 'off' && (
+        <div className={github ? undefined : 'invisible'} aria-hidden={github ? undefined : true}>
+          <Button variant="outline" size="lg" className="w-full" disabled={!!busy || !github} tabIndex={github ? undefined : -1} onClick={() => void continueWithGitHub()}>
             {busy === 'github' ? <Loader2 className="animate-spin" /> : <GitHubMark />} Continue with GitHub
           </Button>
-          <Problem>{githubProblem ?? urlProblem}</Problem>
+          {github && <Problem>{githubProblem ?? urlProblem}</Problem>}
           <div className="my-5 flex items-center gap-3 text-sm text-muted-foreground">
             <Separator className="flex-1" /> or <Separator className="flex-1" />
           </div>
-        </>
+        </div>
       )}
       {/* coming back from a sign-in that didn't work, with GitHub's button hidden */}
-      {(!github || github === 'off') && urlProblem && (
+      {github === 'off' && urlProblem && (
         <div className="-mt-3 mb-5">
           <Problem>{urlProblem}</Problem>
         </div>

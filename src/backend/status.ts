@@ -22,8 +22,6 @@ const START: SaveStatus = { state: 'loading', pending: 0, waiting: false }
 
 export const useSaveStatus = create<SaveStatus>()(() => ({ ...START }))
 
-export const resetStatus = () => useSaveStatus.setState({ ...START, detail: undefined, progress: undefined, synced: undefined, caughtUpAt: undefined })
-
 /**
  * What the chip says about the connection, with nothing of yours waiting (chipState puts your changes first).
  * `channelsUp`: both live channels are joined; `failing`: catching up with teammates' changes keeps failing. Not

@@ -319,5 +319,3 @@ export const CHANGELOG: Release[] = [
     notes: ['A sample workspace to click through: teams, issues in a list or on a board, views, projects and the inbox'],
   },
 ]
-
-export const latestRelease = () => CHANGELOG[0]

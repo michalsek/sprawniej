@@ -43,8 +43,8 @@ Status: `todo`, `doing`, `done`.
 | 7 | History and pictures | done | 773dc82 + fix round, merged in cca59f9 |
 | 8 | Team features: invites, members and roles, people from Linear, ways to sign in | done | 632eef6 + fix round, merged; 82/82 DB tests, browser cases pass |
 | 9 | Read cache and catch-up from IndexedDB | done | 5770657 + fix round, merged in 80b8021; a reload reads 0 issue rows |
-| 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | doing | |
-| 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | todo | last |
+| 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | done | 035d3db + fix round; final full-app QA passed (26 scenarios) |
+| 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | doing | |
 
 ## Two people at once (checked in phase 5, browser)
 
@@ -270,7 +270,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E172 | phase 8 review | Messages and the role type are copied in two places; an import cycle between Gate and JoinFlow | fixed | phase 8 (merged) |
 | E173 | phase 8 QA | Some malformed invite links show the normal welcome instead of "This invite link doesn't work" | fixed | phase 8 (merged) |
 | E174 | phase 8 QA | A different person signing in after a reload inherits the previous person's last workspace | fixed | phase 8 (merged) |
-| E175 | phase 8 review | `ConfirmDialog` always uses the red button, also for "Make owner" | open |  |
+| E175 | phase 8 review | `ConfirmDialog` always uses the red button, also for "Make owner" | fixed | phase 10 (ConfirmDialog `tone`) |
 | E176 | phase 9 implementer | The 10 s look-back re-reads rows changed just before the mark (harmless, some egress) | won't do | small and it makes catching up safe; fine for 8 people |
 | E177 | phase 6 QA | Try again after a partial import loses guests' emails, and after a reload leaves a new team with no members | fixed | phase 6 (merged in 38797db) |
 | E178 | phase 6 QA | After a team swap, re-imports never settle (views re-sent every time) | fixed | phase 6 (merged in 38797db) |
@@ -285,7 +285,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E187 | phase 6 fix round | Leaving the import's done screen through Settings forgets the finished import | won't do | harmless: the import is saved; the done screen is only a summary |
 | E188 | phase 9 fix round | `tests/workspace.test.ts:356` calls `.subscribe` on a store type without it (hidden because tests aren't type-checked) | fixed | phase 10 |
 | E189 | phase 10 planner | Local main was far ahead of the fork's main on GitHub, so the Pages build would publish the old code | open | phase 11 (push main first) |
-| E190 | phase 10 planner | The repo is public, so backup artifacts must be encrypted | fixed | phase 10 (backup.yml encrypts with a passphrase) |
+| E190 | phase 10 planner | The repo is public, so backup artifacts must be encrypted | fixed | phase 10 (backup.yml encrypts, data only) |
 | E191 | phase 10 planner | `pages.yml` builds without the repository variables (the site would say it isn't set up) | open | phase 11 |
 | E192 | phase 10 planner | No password reset without an email sender | won't do | stage B; the guide says what to do meanwhile |
 | E193 | phase 10 code | 31 picture folders belong to workspaces that no longer exist | open | phase 11 (wipe and pictures cleanup) |

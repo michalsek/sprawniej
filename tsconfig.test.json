@@ -4,5 +4,5 @@
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.test.tsbuildinfo",
     "types": ["bun", "vite/client", "vite-plugin-pwa/client"]
   },
-  "include": ["src", "tests"]
+  "include": ["tests"]
 }

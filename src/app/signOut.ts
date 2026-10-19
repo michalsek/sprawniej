@@ -14,11 +14,12 @@ async function deleteOldCopies(): Promise<void> {
   const dbs = (await indexedDB.databases?.()) ?? []
   await Promise.all(
     dbs
-      .filter((d) => d.name?.startsWith('sprawniej:'))
+      .map((d) => d.name)
+      .filter((name): name is string => !!name?.startsWith('sprawniej:'))
       .map(
-        (d) =>
+        (name) =>
           new Promise<void>((resolve) => {
-            const req = indexedDB.deleteDatabase(d.name!)
+            const req = indexedDB.deleteDatabase(name)
             req.onsuccess = req.onerror = req.onblocked = () => resolve()
           }),
       ),

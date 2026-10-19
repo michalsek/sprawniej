@@ -3,7 +3,7 @@
  * they never change it directly. All changes go through `actions.ts` (see CLAUDE.md, golden rules).
  */
 import { create } from 'zustand'
-import type { ArchivedIssue, Comment, InboxItem, Issue, Label, Member, Person, Project, ReadState, Team, View, Workspace } from '@/model/schema'
+import { TEAM_KEY, type ArchivedIssue, type Comment, type InboxItem, type Issue, type Label, type Member, type Person, type Project, type ReadState, type Team, type View, type Workspace } from '@/model/schema'
 
 export interface DataState {
   workspace: Workspace | null
@@ -68,9 +68,12 @@ function refsOf(issues: Record<string, Issue>): Map<string, Issue> {
   return index
 }
 
-/** find an issue by its "ENG-12" reference (the team key rule: TEAM_KEY_PATTERN) */
+/** "ENG-12": a team key, a dash and a number */
+const REF = new RegExp(`^(${TEAM_KEY})-(\\d+)$`)
+
+/** find an issue by its "ENG-12" reference */
 export function findByRef(issues: Record<string, Issue>, ref: string): Issue | undefined {
-  const m = /^([A-Z][A-Z0-9]{0,6})-(\d+)$/.exec(ref.toUpperCase())
+  const m = REF.exec(ref.toUpperCase())
   return m ? refsOf(issues).get(`${m[1]}-${Number(m[2])}`) : undefined
 }
 

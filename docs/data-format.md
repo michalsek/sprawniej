@@ -33,14 +33,17 @@ that needs it is published.
 
 - **Ids.** Issues, comments, labels, projects, views and inbox notes have text ids the app makes:
   [ULIDs](https://github.com/ulid/spec), random and sortable by time, so a new row shows before it is saved. Issues
-  that came from Linear keep Linear's id. Workspaces, profiles, teams and invites have uuids the database makes.
-- **`workspace_id`** on every shared row: the workspace it belongs to. Every policy starts from it.
+  that came from Linear keep Linear's id. Workspaces, profiles, teams and invites have uuids. The database makes
+  them, except team ids, which the app (a new team) and the import may send so the team shows at once.
+- **`workspace_id`** on every shared row: the workspace it belongs to. Most policies start from it; the ones for the
+  inbox, read marks, profiles and workspaces start from you or from the workspace's own id (Rules, below).
 - **`changed_at`**: set by the `a_stamp` trigger on every insert and update (`clock_timestamp()`, to the
   microsecond), whatever the browser sent. Catching up asks for rows changed after a mark, and newer wins per column
   (`src/backend/rows.ts` keeps it exact; it never goes through `toISOString`).
-- **`extra`** (jsonb, `{}` by default): the app's fields that have no column of their own. `rows.ts` puts unknown
-  fields here and reads them back (schemas use `.loose()`), so a field a newer app adds survives an older app's
-  write.
+- **`extra`** (jsonb, `{}` by default): the app's fields that have no column of their own. The app's types come from
+  zod schemas (`src/model/schema.ts`), but nothing parses rows at runtime: `src/backend/rows.ts` puts every field it
+  doesn't know (anything not in its `KNOWN` lists) here and reads it back, so a field a newer app adds survives an
+  older app's write.
 - **`linear_id`**: the row's id in Linear, for rows the Linear import brought (teams, labels, projects, issues,
   comments, views). Unique per workspace, written only by `import_rows`, so a second import updates instead of
   copying (docs/linear-import.md).
@@ -60,18 +63,24 @@ Admins and owners rename it; only owners delete it (everything in it goes with i
 
 ### profiles
 
-A person: someone with an account, or a person from Linear who hasn't joined (a guest).
+A person, one of three kinds:
+
+- someone with an account (`user_id` set);
+- a person from Linear who hasn't joined (a guest: `guest_of` set, no account);
+- a profile with no account yet that waits to be claimed (`user_id` and `guest_of` both null, `github_id` set):
+  the first GitHub sign-in with that GitHub id takes it over (`ensure_profile()`). Sprawniej makes none of these
+  today; they are for people brought from an older workspace.
 
 | Column | Meaning |
 | --- | --- |
 | `id` | uuid |
 | `user_id` | the sign-in account (`auth.users`); null for a guest |
 | `login` (`login`) | the @handle: letters, digits and dashes, up to 39, not starting with a dash (`private.valid_login`). Unique among people with accounts, case aside. A guest's starts with `~` and is unique within its workspace. Never changes. |
-| `github_id` (`githubId`) | set when the profile was made from a GitHub sign-in; unique |
+| `github_id` (`githubId`) | set when the profile was made from (or waits for) a GitHub sign-in; unique |
 | `name`, `avatar_url` (`name`, `avatarUrl`) | what teammates see |
 | `name_set_here` (`nameSetHere`) | they typed their name in Sprawniej, so GitHub's doesn't replace it |
 | `guest_of` | for a guest: their workspace |
-| `linear_ids` (`linearIds`) | the Linear people this profile stands for, so later imports match them |
+| `linear_ids` (`linearId`, `linearIds`) | the Linear people this profile stands for, so later imports match them. A guest has one, shown to the app as `linearId`. An account gets them when a guest is linked to it or joins through a guest's invite (`move_person`); the app shows `linearIds` only when there are any. |
 
 Made by `ensure_profile()` or `create_profile()` (accounts) and `import_rows` (guests). You see yourself, everyone who
 is or was in a workspace you are in now, and those workspaces' guests. You change your own `name`, `avatar_url`,
@@ -86,16 +95,24 @@ name still shows on old work), `changed_at`. Read by the workspace's members (mo
 
 ### invites
 
-`id`, `workspace_id`, `token` (36 random hex digits), `for_login` (no longer written), `for_email` (so the admin
+`id`, `workspace_id`, `token` (36 random hex digits), `for_login` (the app doesn't write it, but people may still
+write it and `invite_info` still returns it), `for_email` (so the admin
 remembers where to send it), `for_profile` (a guest: whoever accepts becomes them; set to null when the guest goes),
 `role` (`admin` or `member`), `invited_by` (set by a trigger), `created_at`, `expires_at` (14 days by default, at most
 30 after `created_at`), `accepted_by`, `accepted_at`. Only the workspace's admins and owners see and change them; an
 invite for a guest must name a guest of that workspace. Never broadcast.
 
+What someone holding the link sees comes from `invite_info(token)`, one row (none for an unknown token):
+`workspace_id` (only to someone already in it), `workspace_name`, `invited_by_name`, `invited_by_login`,
+`invited_by_avatar`, `for_login` and `for_name` (the guest's name, for an invite made for one), `role`, `state`
+(`member`: you're already in, `used`, `expired` or `open`) and `people` (up to 8 names and pictures of members, as
+`[{"name", "avatarUrl"}]`). A used or expired link gives no `people`, `for_login` or `for_name`. Never the token,
+never an email.
+
 ### teams
 
 `id` (uuid), `workspace_id`, `key` (a capital letter, then up to six capitals or digits; unique per workspace; never
-changes), `name`, `emoji`, `last_number` (`lastNumber`: the highest number ever given out, see Issue numbers),
+changes), `name`, `emoji`, `last_number` (`lastNumber`: the highest number ever given out, see "Issue numbers" in docs/architecture.md),
 `auto_archive` (`autoArchive`: months after which finished issues are archived; 0 never; 6 by default), `linear_id`,
 `created_at`, `changed_at`, `extra`. Members add and change teams; only admins and owners delete them (with their
 issues, comments and views).
@@ -140,8 +157,9 @@ must belong to the workspace.
 | `archived_at`, `archived_by` (`archivedAt`, `archivedBy`) | archived: the trigger sets the time and who; null brings it back |
 | `linear_id`, `changed_at`, `extra` | see Common columns |
 
-`updated_at` is "last changed" as people see it: any field above, and a restore. Changing followers or labels doesn't
-touch it. Deleting an issue deletes its labels, followers, comments, inbox notes and history; its sub-issues lose
+`updated_at` is "last changed" as people see it. The trigger moves it only when one of these changes: `title`,
+`description`, `status`, `priority`, `assignee_id`, `project_id`, `parent_id`, `due_date`, `estimate`, `sort_order`,
+`duplicate_of`, `team_id` or `extra`, and on a restore. Archiving, `former_refs`, followers and labels don't touch it. Deleting an issue deletes its labels, followers, comments, inbox notes and history; its sub-issues lose
 their parent.
 
 ### issue_labels
@@ -215,9 +233,12 @@ old and new reference; `archived` or `restored` is `true`. `src/data/history.ts`
 ### deletions
 
 `id`, `workspace_id` (no foreign key: the rows outlive what they describe), `table_name`, `row_key` (the deleted row's
-keys: `{"id": "…"}` or `{"issue_id": "…", "label_id": "…"}`), `deleted_at`. Written by the `forget` trigger for every
-deleted shared row, cascades included, so a browser that catches up drops them too. Kept 45 days. A workspace that is
-deleted leaves none.
+keys: `{"id": "…"}` or `{"issue_id": "…", "label_id": "…"}`), `deleted_at`. Written by the `forget` trigger, cascades
+included, so a browser that catches up drops them too, but only for the tables `private.wiring` marks with
+`forget = true`: workspace members, teams, team members, labels, projects, project teams, issues, issue labels,
+followers, comments and views, plus profiles of guests (a profile with an account belongs to no workspace, so it
+leaves none). Workspaces, invites, inbox notes and read marks leave none; a browser compares its inbox notes instead.
+Nothing is noted while the whole workspace is going. Kept 45 days.
 
 ### private.guest_emails
 
@@ -341,5 +362,5 @@ files.
 | When (UTC) | Job | What it does |
 | --- | --- | --- |
 | 02:17 | `sprawniej-auto-archive` | Archives Done, Canceled and Duplicate issues untouched (the later of `completed_at` and `updated_at`) for longer than their team's `auto_archive` months |
-| 02:27 | `sprawniej-tidy-inboxes` | Deletes read notes older than 30 days and unread ones older than 90 |
+| 02:27 | `sprawniej-tidy-inboxes` | Deletes read notes older than 30 days and unread ones older than 90. Read means `read_at` is set, or the note is no newer than the person's `read_until` ("Mark all as read") |
 | 02:37 | `sprawniej-forget-deletions` | Deletes `deletions` rows older than 45 days |

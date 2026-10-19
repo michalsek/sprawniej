@@ -33,8 +33,9 @@ Read before changing things:
   in the dashboard, the SQL editor or the MCP server's `apply_migration`. With every migration: regenerate
   `src/backend/database.types.ts`, set `SCHEMA_ID` in `src/backend/cache.ts`, run `bun run test:db`, check the
   advisors, update docs/data-format.md (its first section lists every step). A change that older app versions can't
-  live with is a MAJOR release, and the migration goes in before the app that needs it is published. Unknown fields
-  survive a read and write in each row's `extra` (`src/backend/rows.ts`; schemas use `.loose()`).
+  live with is a MAJOR release, and the migration goes in before the app that needs it is published. The app's types
+  come from zod schemas (`src/model/schema.ts`); nothing parses rows at runtime. Unknown fields survive a read and
+  write in each row's `extra` (`src/backend/rows.ts`, `KNOWN`).
 - **Statuses and priorities are fixed** (`src/model/status.ts`). Don't add custom workflows. The SQL checks copy its
   lists, and `tests/statusLists.test.ts` compares them.
 - **Sign in through Supabase Auth only.** No server of our own besides the Supabase project: database rules, a few SQL
@@ -46,8 +47,10 @@ Read before changing things:
 selectors, actions, inbox rules · `src/backend` every call to Supabase (sign-in, opening, the read cache, live changes,
 saving, pictures, history, saving imports) · `src/features/<area>` screens · `src/components` small shared pieces ·
 `src/editor` the description and comment editor · `src/ui` shadcn components (generated with
-`bunx --bun shadcn@latest add <name>`; fix the `cn` import to `@/lib/utils` after adding) · `src/session.ts` which
-workspace is open · `supabase/` config, migrations, test cleanup · `tests/` logic tests, `tests/db` database tests.
+`bunx --bun shadcn@latest add <name>`; fix the `cn` import to `@/lib/utils` after adding) · `src/lib` small helpers
+(search without Polish letters, `cn`, hooks) · `src/config.ts` the public address and where sign-in comes back ·
+`src/version.ts` version and What's new · `src/session.ts` which workspace is open · `scripts/changelog.ts` writes CHANGELOG.md ·
+`supabase/` config, migrations, test cleanup · `tests/` logic tests, `tests/db` database tests.
 
 ## Releasing
 `main` is what GitHub Pages serves, but publishing is **by hand**: push `main`, then run the *Deploy to GitHub Pages*
@@ -85,7 +88,7 @@ Title line only, plain words. No AI attribution trailers.
 - Two people: two browser profiles signed in as two test accounts. Also one person in two tabs, and a dropped
   connection (`context.setOffline(true)`, then back).
 - `window.sprawniej` has `data` (the store), `actions` (everything a person can do) and `backend` (`status`, the save
-  chip's state; `pending()`; `flush()`; `catchUp()`, to fetch what changed at once instead of waiting; `debug`,
+  chip's store: `status.getState()`; `pending()`; `flush()`; `catchUp()`, to fetch what changed at once instead of waiting; `debug`,
   `writes`, `history`, `pictures`, `saveCache` for checks), so a script can drive and check the app without clicking
   through every screen.
 - Never write a Supabase secret key, a database password, a GitHub OAuth secret or a Linear key into a file. Pass it as

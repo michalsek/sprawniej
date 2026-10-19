@@ -3,6 +3,7 @@ import { useHashLocation } from 'wouter/use-hash-location'
 import { isSetUp } from '@/backend/client'
 import { Toaster } from '@/ui/sonner'
 import { TooltipProvider } from '@/ui/tooltip'
+import { myTeamKeys } from '@/data/select'
 import { useData } from '@/data/store'
 import { HelpPage } from '@/features/help/HelpPage'
 import { InboxPage } from '@/features/inbox/InboxPage'
@@ -22,8 +23,9 @@ import { NotSetUp } from './NotSetUp'
 import { Shell } from './Shell'
 
 function Home() {
-  const first = useData((s) => Object.values(s.teams).find((t) => !s.me || t.members.includes(s.me.login)))
-  return <Redirect to={first ? `/team/${first.key}/issues/active` : '/my-issues'} replace />
+  // the first of your teams as the sidebar lists them
+  const first = useData((s) => myTeamKeys(s)[0])
+  return <Redirect to={first ? `/team/${first}/issues/active` : '/my-issues'} replace />
 }
 
 /** Hash routes (#/team/ENG/issues/active) because GitHub Pages serves one static file. */

@@ -4,8 +4,6 @@
  */
 import { KEYS, type Insert, type KeyOf, type LiveTable, type Row, type Update } from './tables'
 
-export type Op = 'insert' | 'update' | 'delete'
-
 /**
  * The columns a signed-in person may write, as the database grants them (supabase/migrations/*_rls.sql). Everything
  * else (changed_at, numbers, authors, times, linear_id) is filled in by the database. Keep in step with the grants.

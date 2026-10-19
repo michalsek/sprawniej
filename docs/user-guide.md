@@ -40,8 +40,9 @@ account**; it saves by itself. Your handle (@you) stays the same.
 - **Email and password.** **Change password** picks a new one. Signed up with GitHub? **Set a password** lets you
   sign in with your email too.
 - **GitHub.** **Add GitHub** takes you to GitHub and back; from then on **Continue with GitHub** signs you in.
-  **Remove** stops it (only while you have another way to sign in). If it says signing in with GitHub isn't switched
-  on yet, use your email and password.
+  **Remove** stops it, when you added GitHub to an account made with your email. An account made with GitHub keeps
+  GitHub, even after you set a password. If it says signing in with GitHub isn't switched on yet, use your email and
+  password.
 
 **Forgot your password?** Sprawniej can't email you a new one yet. If you also added GitHub, sign in with GitHub and
 choose **Change password**. Otherwise, ask whoever looks after Sprawniej for help.
@@ -55,8 +56,9 @@ link**, then **Copy message** gives you a ready-to-send note with the link, **Co
 an email** (when you added their email) opens your own mail app. Sprawniej doesn't send anything itself: you send the
 link.
 
-Each link works once, for 14 days, and stays under **Invite links** until it's used. **Delete link** stops a link
-from working (for example, if you sent it to the wrong person).
+Each link works once, for 14 days, and stays under **Invite links** until it's used; an expired one stays there too,
+greyed out, until you delete it. To stop a link from working (for example, if you sent it to the wrong person), open
+the **⋯** next to it and choose **Delete link**. **Copy message** is in the same menu.
 
 ### Members and roles
 
@@ -117,7 +119,8 @@ An **issue** is one piece of work: a task, a bug, an idea. Each has a short ID l
   Press `⌘` `Enter` (or `Ctrl` `Enter`) to create it. Tick **Create more** to add several, one after another. Closed
   it by accident? What you typed comes back the next time you start a new issue.
 - **Open one:** click it. Change the title, description or any property on the right. It saves by itself.
-- **Labels:** in the labels menu, type a name that doesn't exist yet and choose **Create label**.
+- **Labels:** in the labels menu, type a name that doesn't exist yet and choose **Create label "…"** (with the name
+  you typed).
 - **Move to another team:** change **Team** on the right. The issue gets that team's next number; links and mentions
   of its old number still open it.
 - **Archive:** the `⋯` button next to the title, then **Archive** (see Archive below).
@@ -210,12 +213,14 @@ or deletes them); `S`, `P`, `A`, `L` and `E` do the same. `Esc` lets go of them.
 
 **Display** (next to List / Board) changes how the page looks, just for you:
 
-- **Grouping:** by status, assignee, priority, project, or no groups at all. Dropping an issue into a group gives it
+- **Grouping:** by status, assignee, priority, project, or **No grouping**. Dropping an issue into a group gives it
   that group's assignee, priority or project.
 - **Ordering:** **Manual** is the order you and your teammates arrange by dragging. You can also sort by priority,
   by due date, by last update, or newest first. Dragging to reorder only works in Manual order.
-- **Show finished issues** and **Show sub-issues** hide or show those.
-- **Back to default** undoes your changes.
+- **Show sub-issues** hides or shows them. **Show finished issues** does the same for finished ones, on pages that
+  can have them (not on the Active or Backlog tab, which never show finished issues).
+- **Back to default** undoes your changes. It shows up once you've changed something (a saved view has none: its
+  display is everyone's).
 
 On your team's page, the tabs show:
 
@@ -251,6 +256,8 @@ Point at a team in the sidebar and press **⋯** to:
 ## Filters
 
 **Filter** (above every list) narrows it down: by status, assignee, subscribers, priority, labels, project or team.
+A page leaves out the filter it already is: there's no Team filter on a team's own page (or a team's view), no
+Assignee filter on My issues and no Project filter on a project's page.
 **Subscribers** finds the issues someone follows: ones they made, are assigned to, commented on, were mentioned in or
 subscribed to. Each filter shows as a chip. Click a chip to change it, or its **×** to remove it. Inside one filter,
 any of the chosen values counts ("Todo or In Progress"); several filters must all match ("Todo, and assigned to Ana").

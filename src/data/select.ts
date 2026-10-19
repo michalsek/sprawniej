@@ -2,7 +2,7 @@
  * Pure helpers that turn the store into what a list or board shows: filter, sort, group. No React, no store
  * access, so they are easy to test (tests/select.test.ts).
  */
-import type { Comment, Display, Filters, InboxItem, Issue, Member, Ordering, Person, Project, ReadState } from '@/model/schema'
+import type { Comment, Display, Filters, InboxItem, Issue, Member, Ordering, Person, Project, ReadState, Team } from '@/model/schema'
 import { followers } from './notify'
 import { PRIORITY_NAMES, PRIORITY_ORDER, STATUSES, TAB_GROUPS, statusOf, type IssueTab, type Priority } from '@/model/status'
 
@@ -212,6 +212,17 @@ export function projectProgress(projectId: string, issues: Issue[]): { done: num
 
 /** not marked as read yet: not read on its own (`readAt`) and newer than everything marked read at once */
 export const isUnread = (n: Pick<InboxItem, 'at' | 'readAt'>, r: ReadState) => !n.readAt && (!r.readUntil || n.at > r.readUntil)
+
+/**
+ * The teams you're in, oldest first (then by key), the way the sidebar lists them. Home opens the first one. Without
+ * a fixed order the first team would depend on the order things were loaded in.
+ */
+export function myTeamKeys(s: { teams: Record<string, Team>; me: Person | null }): string[] {
+  return Object.values(s.teams)
+    .filter((t) => !s.me || t.members.includes(s.me.login))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt) || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+    .map((t) => t.key)
+}
 
 type WithMembers = { members: Record<string, Member>; me: Person | null }
 

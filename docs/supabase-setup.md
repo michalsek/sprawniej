@@ -154,10 +154,13 @@ start of the file name).
 
 ## Backups
 
-`.github/workflows/backup.yml` ("Back up the database") dumps the `public`, `private`, `auth` and `storage` schemas
-with `pg_dump`, encrypts the dump with a passphrase (anyone signed in to GitHub can download the artifacts of a public
-repository) and keeps it as an Actions artifact for 30 days. It also makes one request to the project's API, so a
-scheduled run counts as activity (free projects pause after a week without any). **It is not switched on.**
+`.github/workflows/backup.yml` ("Back up the database") makes a **data-only** dump (`pg_dump --data-only`) of the
+`public`, `private`, `auth` and `storage` schemas, leaving out `auth.schema_migrations` and `storage.migrations`
+(they belong to Supabase's own setup, which a new project already has). The tables, functions and rules come from
+`supabase/migrations`, not from the dump. It encrypts the dump with a passphrase (anyone signed in to GitHub can
+download the artifacts of a public repository) and keeps it as an Actions artifact for 30 days. It also makes one
+request to the project's API, so a scheduled run counts as activity (free projects pause after a week without any).
+**It is not switched on.**
 
 To switch it on:
 
@@ -168,6 +171,8 @@ To switch it on:
 2. Run it once by hand (`gh workflow run backup.yml -R <owner>/<repo>`, or Actions, Back up the database, Run
    workflow) and check that the artifact is there.
 3. To run it every night (03:17 UTC, after the nightly jobs), remove the `#` in front of the two `schedule` lines.
+   GitHub turns off scheduled workflows in a public repository after 60 days without activity in it (a commit, say),
+   so look at the Actions tab now and then, and switch it back on there when it says so.
 
 Pictures are not in the dump: they stay in the `pictures` bucket and are not backed up yet.
 
@@ -176,10 +181,20 @@ commands down here. The outline:
 
 1. Download the artifact (`gh run download <run id> -R <owner>/<repo>`) and decrypt it:
    `gpg --decrypt sprawniej-<date>.dump.gpg > sprawniej.dump`.
-2. A new project, set up with steps 1, 2 and 5 above (not `db push`: the dump brings the tables, functions and rules).
-3. `pg_restore --no-owner --no-privileges --dbname "<the new project's session pooler connection string>" sprawniej.dump`.
-   The `auth` and `storage` schemas already exist in a new project, so expect to restore their rows only.
-4. `bunx supabase migration list --linked`, the advisors, sign-in settings (step 4), and the pictures by hand.
+2. A new project, set up with steps 1 to 5 above, **including `db push`**: the migrations make the tables, functions,
+   rules, the bucket and the nightly jobs. Leave `.env.local` and publishing until the data is in.
+3. Put the data back, data only, with triggers off, so nothing rewrites it on the way in (no new `changed_at`, issue
+   numbers, authors or times, no history, no broadcasts). `session_replication_role = replica` does that, and it also
+   lets the tables go in in any order:
+   ```sh
+   PGOPTIONS='-c session_replication_role=replica' pg_restore --data-only --no-owner --no-privileges      --dbname "<the new project's session pooler connection string>" sprawniej.dump
+   ```
+   What matters are `public` and `private` (all of it), `auth.users` and `auth.identities` (the accounts and how they
+   sign in), and `storage.objects` and `storage.buckets`. Rows the migrations already made (`private.wiring`,
+   `private.import_spec`, the `pictures` bucket) are refused as already there; that is expected, they are the same.
+   The `storage.objects` rows only list the pictures: the files themselves aren't in the dump.
+4. `bunx supabase migration list --linked`, the advisors, a sign-in with a test account, then `.env.local` or the
+   repository variables, and publishing.
 
 ## Before the team joins
 

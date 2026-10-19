@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
 import { sampleData } from './fixtures/sample'
-import { childIndex, compareIssues, dueForArchive, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
+import { childIndex, compareIssues, dueForArchive, myTeamKeys, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
 import { findByRef, issueRef } from '@/data/store'
 import { DEFAULT_DISPLAY } from '@/data/displays'
 import type { Issue } from '@/model/schema'
@@ -186,4 +186,17 @@ describe('inbox', () => {
     expect(isUnread({ ...n, readAt: '2026-10-19T12:05:00.000Z' }, r)).toBe(false)
     expect(isUnread({ ...n, readAt: null }, r)).toBe(true)
   })
+})
+
+test('your teams, oldest first, whatever order they were loaded in', () => {
+  const team = (key: string, createdAt: string, members: string[]) => ({ key, name: key, emoji: '', members, createdAt })
+  const teams = {
+    WEB: team('WEB', '2026-10-03T00:00:00.000Z', ['ana']),
+    OPS: team('OPS', '2026-10-01T00:00:00.000Z', ['bob']),
+    ENG: team('ENG', '2026-10-02T00:00:00.000Z', ['ana']),
+    APP: team('APP', '2026-10-02T00:00:00.000Z', ['ana']),
+  }
+  const ana = { login: 'ana', githubId: 0, name: 'Ana', avatarUrl: '' }
+  expect(myTeamKeys({ teams, me: ana })).toEqual(['APP', 'ENG', 'WEB'])
+  expect(myTeamKeys({ teams, me: null })).toEqual(['OPS', 'APP', 'ENG', 'WEB'])
 })

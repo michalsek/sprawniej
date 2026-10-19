@@ -1,4 +1,7 @@
-/** "Are you sure?" for the few things that can't be undone with a click (deleting). */
+/**
+ * "Are you sure?" for the few things that can't be undone with a click (deleting), and for big changes that aren't
+ * deletes (handing someone more rights: `tone="default"`, without the red button).
+ */
 import { useId, useState, type ReactNode } from 'react'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
@@ -14,11 +17,13 @@ interface Props {
   keep?: string
   /** for the biggest deletes: the button only works once this (a team's name) is typed */
   typeToConfirm?: string
+  /** 'destructive' (red, the default) for deletes and removals; 'default' for a change that loses nothing */
+  tone?: 'destructive' | 'default'
 }
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase()
 
-export function ConfirmDialog({ open, onOpenChange, title, children, confirm, onConfirm, keep = 'Keep it', typeToConfirm }: Props) {
+export function ConfirmDialog({ open, onOpenChange, title, children, confirm, onConfirm, keep = 'Keep it', typeToConfirm, tone = 'destructive' }: Props) {
   const [typed, setTyped] = useState('')
   const id = useId()
   const ready = typeToConfirm === undefined || same(typed, typeToConfirm)
@@ -56,7 +61,7 @@ export function ConfirmDialog({ open, onOpenChange, title, children, confirm, on
           <Button variant="outline" onClick={() => change(false)}>
             {keep}
           </Button>
-          <Button variant="destructive" disabled={!ready} onClick={go}>
+          <Button variant={tone} disabled={!ready} onClick={go}>
             {confirm}
           </Button>
         </DialogFooter>

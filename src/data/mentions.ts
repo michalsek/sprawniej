@@ -2,10 +2,10 @@
  * @people in Markdown. They stay plain "@handle" text in descriptions and comments, so they read well anywhere.
  * Only handles of people in the workspace count.
  */
-import type { Person } from '@/model/schema'
+import { TEAM_KEY, type Person } from '@/model/schema'
 
 export const MENTION = /(^|[^\w@/.])@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/g
-export const ISSUE_REF = /\b([A-Z][A-Z0-9]{0,6}-\d+)\b/g
+export const ISSUE_REF = new RegExp(`\\b(${TEAM_KEY}-\\d+)\\b`, 'g')
 
 /** the people (logins) a piece of Markdown mentions, skipping code */
 export function mentionedLogins(markdown: string, people: Record<string, Person>): string[] {

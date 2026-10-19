@@ -3,12 +3,13 @@ import { useState } from 'react'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { suggestKey } from '@/data/actions'
 import { Input } from '@/ui/input'
-import { KEY_PATTERN, type TeamDraft } from '@/model/teamDraft'
+import { TEAM_KEY_PATTERN } from '@/model/schema'
+import type { TeamDraft } from '@/model/teamDraft'
 
 
 export function TeamFields({ value, onChange, takenKeys = [] }: { value: TeamDraft; onChange: (v: TeamDraft) => void; takenKeys?: string[] }) {
   const [keyTouched, setKeyTouched] = useState(false)
-  const keyProblem = !value.key ? undefined : !KEY_PATTERN.test(value.key) ? 'Use 1 to 7 capital letters or digits, starting with a letter.' : takenKeys.includes(value.key) ? 'Another team already uses this key.' : undefined
+  const keyProblem = !value.key ? undefined : !TEAM_KEY_PATTERN.test(value.key) ? 'Use 1 to 7 capital letters or digits, starting with a letter.' : takenKeys.includes(value.key) ? 'Another team already uses this key.' : undefined
   return (
     <div className="flex flex-col gap-4">
       <div>

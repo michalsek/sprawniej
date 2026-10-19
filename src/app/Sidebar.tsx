@@ -6,7 +6,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { Logo } from '@/components/Logo'
 import { PersonAvatar } from '@/components/Avatar'
 import { useSwitchWorkspace } from '@/components/SignOut'
-import { isUnread } from '@/data/select'
+import { isUnread, myTeamKeys } from '@/data/select'
 import { useData } from '@/data/store'
 import { TeamMenu } from '@/features/teams/TeamMenu'
 import { TeamsDialog } from '@/features/teams/TeamsDialog'
@@ -78,7 +78,7 @@ function TeamGroup({ teamKey }: { teamKey: string }) {
 }
 
 function Me() {
-  // your profile in this workspace: it has the name you go by here (it may differ from GitHub's)
+  // your account's name, as teammates see it (it may differ from your name on GitHub)
   const me = useData((s) => (s.me ? (s.people[s.me.login] ?? s.me) : null))
   const workspace = useData((s) => s.workspace)
   const { switchWorkspace, dialog } = useSwitchWorkspace()
@@ -134,7 +134,7 @@ function Me() {
 
 export function Sidebar() {
   const [teamsOpen, setTeamsOpen] = useState(false)
-  const myTeams = useData(useShallow((s) => Object.values(s.teams).filter((t) => !s.me || t.members.includes(s.me.login)).map((t) => t.key)))
+  const myTeams = useData(useShallow(myTeamKeys))
   const unread = useData((s) => s.inbox.filter((n) => isUnread(n, s.readState)).length)
   return (
     <aside className="flex h-full w-full shrink-0 flex-col border-r bg-sidebar md:w-[17.5rem]">

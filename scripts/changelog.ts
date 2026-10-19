@@ -1,6 +1,6 @@
 /** CHANGELOG.md from src/version.ts, so the file on GitHub and the app never disagree. */
 import { writeFileSync } from 'node:fs'
-import { CHANGELOG } from '../src/version'
+import { CHANGELOG } from '../src/version.ts'
 
 const md = [
   '# Changelog',

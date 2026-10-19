@@ -359,10 +359,6 @@ const linearId = (model: object): string | null => {
   return typeof id === 'string' ? id : null
 }
 
-export function workspaceToRow(w: Workspace, workspaceId: string): Insert<'workspaces'> {
-  return { id: workspaceId, name: w.name, created_at: w.createdAt, extra: toExtra(w, KNOWN.workspace) }
-}
-
 export function personToProfile(p: Person, workspaceId: string, reg: Registry): Insert<'profiles'> {
   return {
     id: ownId(p) ?? requiredProfileId(p.login, reg),

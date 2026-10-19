@@ -187,6 +187,7 @@ export function Members() {
         title={`Make ${asking?.row.person.name} an owner?`}
         confirm="Make owner"
         keep="Cancel"
+        tone="default"
         onConfirm={() => asking && void run(asking.row, 'owner')}
       >
         <span>Owners can do everything, including changing other owners. You stay an owner too.</span>
@@ -196,6 +197,7 @@ export function Members() {
         title="Stop being an owner?"
         confirm="Change my role"
         keep="Cancel"
+        tone="default"
         onConfirm={() => asking?.kind === 'step-down' && void run(asking.row, asking.to)}
       >
         <span>You'll be {asking?.kind === 'step-down' ? anA(asking.to) : 'an admin'}. The other owners stay in charge.</span>

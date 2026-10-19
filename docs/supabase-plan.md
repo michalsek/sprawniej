@@ -1,6 +1,6 @@
 # Moving Sprawniej to Supabase: design and plan
 
-Status: **built and released as 2.0.0**. This is the design as planned; the migrations, docs/architecture.md and
+Status: **built for 2.0.0**. This is the design as planned; the migrations, docs/architecture.md and
 docs/data-format.md describe what shipped, and docs/supabase-work.md lists the decisions taken while building.
 
 Today a workspace is a GitHub repo of small files, the browser keeps a copy, saves by committing, checks for news every

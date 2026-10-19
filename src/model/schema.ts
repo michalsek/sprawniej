@@ -83,6 +83,8 @@ export const AUTO_ARCHIVE_MONTHS = 6
 
 /** a team key (ENG): a capital letter, then up to six capitals or digits; the database checks the same */
 export const TEAM_KEY_PATTERN = /^[A-Z][A-Z0-9]{0,6}$/
+/** the same rule without the anchors, for finding team keys inside longer text (ENG-12) */
+export const TEAM_KEY = TEAM_KEY_PATTERN.source.replace(/^\^|\$$/g, '')
 
 /** an @handle: letters, digits and dashes, not starting with a dash, at most 39; the same rule as private.valid_login */
 export const LOGIN_PATTERN = /^[A-Za-z0-9][A-Za-z0-9-]{0,38}$/

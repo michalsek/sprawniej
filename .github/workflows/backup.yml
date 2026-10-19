@@ -8,7 +8,9 @@ name: Back up the database
 #                       postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
 #   BACKUP_PASSPHRASE   a long random passphrase. The dump is encrypted with it, because anyone signed in to GitHub
 #                       can download the artifacts of a public repository. Keep it in a password manager.
-# Pictures are not in the dump: they stay in the "pictures" bucket and are not backed up yet.
+# The dump holds the data only (every row of public, private, auth and storage), not the tables themselves: those come
+# from supabase/migrations and from Supabase. Restoring means a project with the migrations applied first, then the
+# data. Pictures are not in the dump: they stay in the "pictures" bucket and are not backed up yet.
 # Restoring is described in docs/supabase-setup.md (Backups); try it once on a throwaway project before relying on it.
 on:
   workflow_dispatch:
@@ -41,8 +43,10 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
-          pg_dump "$DATABASE_URL" --no-owner --no-privileges \
+          # the migrations' own bookkeeping belongs to the new project, so it stays out
+          pg_dump "$DATABASE_URL" --data-only \
             --schema=public --schema=private --schema=auth --schema=storage \
+            --exclude-table=auth.schema_migrations --exclude-table=storage.migrations \
             --format=custom --file=sprawniej.dump
       - name: Encrypt
         env:
@@ -50,7 +54,8 @@ jobs:
         run: |
           apt-get update -qq && apt-get install -y -qq --no-install-recommends gnupg > /dev/null
           printf '%s' "$PASSPHRASE" | gpg --batch --yes --pinentry-mode loopback --passphrase-fd 0 \
-            --symmetric --cipher-algo AES256 --output "sprawniej-$(date -u +%F).dump.gpg" sprawniej.dump
+            --symmetric --cipher-algo AES256 --s2k-digest-algo SHA512 --s2k-count 65011712 \
+            --output "sprawniej-$(date -u +%F).dump.gpg" sprawniej.dump
           rm sprawniej.dump
       - uses: actions/upload-artifact@v4
         with:
@@ -63,10 +68,15 @@ jobs:
   # (free projects pause after a week without any).
   hello:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Say hello to the project
-        run: |
-          curl -fsS "$URL/auth/v1/settings" -H "apikey: $KEY" -o /dev/null
         env:
           URL: ${{ vars.VITE_SUPABASE_URL }}
           KEY: ${{ vars.VITE_SUPABASE_KEY }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::error::Set the repository variables VITE_SUPABASE_URL and VITE_SUPABASE_KEY first (Settings, Secrets and variables, Actions, Variables)."
+            exit 1
+          fi
+          curl -fsS --max-time 30 "$URL/auth/v1/settings" -H "apikey: $KEY" -o /dev/null

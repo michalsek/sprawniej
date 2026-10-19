@@ -45,16 +45,19 @@ up). Without a copy, it reads everything except the archive.
   from, and comes back to, the page itself (`authRedirectUrl` in `src/config.ts`) with `?code`. Before leaving, the
   route you were on goes to sessionStorage (`sprawniej:return-to`); `takeReturnedUrl` puts it back first thing and
   turns a sign-in that didn't finish into a message.
-- After sign-in, `ensure_profile()` finds your profile. A GitHub sign-in gets one made from its GitHub login when that
-  handle is free. Otherwise you pick a name and an @handle once (`PickLogin.tsx`, `create_profile()`). Handles follow
+- After sign-in, `ensure_profile()` finds your profile. For a GitHub sign-in with no profile yet, it first claims a
+  profile with the same GitHub id that has no account (one brought from an older workspace), and otherwise makes one
+  from the GitHub login when that handle is free. Otherwise you pick a name and an @handle once (`PickLogin.tsx`, `create_profile()`). Handles follow
   GitHub's rule (letters, digits and dashes, up to 39, not starting with a dash) and never change.
 - The sign-in stays in this browser (the Supabase client keeps it and renews it). If it runs out while you work,
   everything stays on screen and "Please sign in again" shows on top (`Gate.tsx`).
 - **Signing out** (`src/app/signOut.ts`) first gives waiting changes a moment to go (the dialog has already asked about
   anything that can't), ends the sign-in in this browser, deletes the copies of your workspaces
   (`sprawniej-cache`), and forgets what the browser remembers for you (the tour, skipped teams, comment drafts, display
-  choices). Only `sprawniej-chrome` (whether the sidebar is open) stays. A mark in localStorage
-  (`sprawniej:signing-out`) tells the other tabs it was on purpose, so they start over too.
+  choices). What stays says nothing about the person or the work: `sprawniej-chrome` (whether the sidebar is open),
+  `sprawniej-session-v2` (emptied: no workspace open, none remembered), `sprawniej:old-copies-gone` (the earlier
+  version's leftovers are already removed) and `sprawniej:signing-out`, the mark that tells the other tabs it was on
+  purpose, so they start over too.
 - At start, `forgetOldVersion()` removes once what the earlier version kept in this browser (its session with a
   GitHub key, and its copies of workspaces).
 
@@ -257,7 +260,8 @@ The database checks them (`c_check_note`): a note for someone who isn't a member
 who left, yourself) is dropped quietly, and the same note about the same issue from the same person isn't sent again
 within ten minutes (notes about a comment always are). Read marks are `inbox.read_at` (one by one) and
 `read_state.read_until` ("Mark all as read").
-Every night read notes older than 30 days and unread ones older than 90 go.
+Every night read notes older than 30 days and unread ones older than 90 go; a note counts as read when its `read_at`
+is set or it is no newer than `read_until`.
 
 ## Archive
 
@@ -309,8 +313,8 @@ pg_cron runs three jobs (`supabase/migrations/20261019000008_cron.sql`), each wi
 
 ## Backups
 
-`.github/workflows/backup.yml` dumps the database with `pg_dump` (schemas `public`, `private`, `auth`, `storage`),
-encrypts the dump with a passphrase (the repository is public, so anyone signed in to GitHub could download a plain
+`.github/workflows/backup.yml` makes a data-only dump with `pg_dump` (the rows of `public`, `private`, `auth` and
+`storage`; the tables themselves come from the migrations), encrypts the dump with a passphrase (the repository is public, so anyone signed in to GitHub could download a plain
 one) and keeps it as an Actions artifact. It is **not switched on**: it runs only when started by hand, and it needs
 two repository secrets first, `SUPABASE_DB_URL` and `BACKUP_PASSPHRASE`. docs/supabase-setup.md (Backups) says how to
 switch it on and how a restore would go. Pictures aren't in the dump, and a restore hasn't been tried yet.
@@ -330,9 +334,12 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | `src/features/*` | Screens, one folder per area (issues, views, projects, inbox, settings, import, help…) |
 | `src/components` | Small shared pieces (avatar, empty state, segmented switch) |
 | `src/ui` | shadcn/ui components |
+| `src/lib` | Small helpers with no app knowledge (search that ignores Polish letters, `cn`, hooks) |
+| `src/config.ts` | The app's public address (invite links) and where sign-in comes back to |
+| `src/version.ts` | The version and the What's new notes (`CHANGELOG`) |
 | `src/session.ts` | Which workspace is open and the ones you opened before (localStorage) |
 | `supabase/` | `config.toml` (sign-in settings), `migrations/` (the database), `dev/cleanup-tests.sql` |
-| `tests` | `bun test` for the pure logic, with a pretend backend and database (`tests/support`) |
+| `tests` | `bun test` for the pure logic, with a pretend backend and database (`tests/support`) and test data (`tests/fixtures`: a sample workspace, pretend Linear answers) |
 | `tests/db` | Database tests against a real project (`bun run test:db`) |
 
 ## Keeping it fast and on the free tier
@@ -351,9 +358,11 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 
 ## Main libraries
 
-React 19, Vite, Tailwind v4, shadcn/ui (Radix), lucide icons, zustand, zod, supabase-js, node-diff3 (the editor's
-line merge), sonner (messages), TipTap (descriptions and comments, stored as Markdown), dnd-kit (drag-n-drop),
-frimousse (emoji picker), cmdk (the ⌘K palette), wouter (routes).
+React 19, Vite, vite-plugin-pwa (the service worker), Tailwind v4, shadcn/ui (Radix), lucide icons, zustand, zod
+(types only), supabase-js, ulid (ids), fractional-indexing (manual order), node-diff3 (the editor's line merge),
+sonner (messages), TipTap (descriptions and comments, stored as Markdown), react-markdown (showing them),
+highlight.js and lowlight (code blocks), react-day-picker (due dates), dnd-kit (drag-n-drop), frimousse (emoji
+picker), cmdk (the ⌘K palette), wouter (routes).
 
 ## New versions
 

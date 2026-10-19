@@ -2,7 +2,8 @@
 -- Only for a development or throwaway project. Run it with
 --   bunx supabase db query --linked -f supabase/dev/cleanup-tests.sql
 -- (or paste it into the SQL editor).
--- Their pictures stay in the "pictures" bucket; they are tiny, delete them in Storage if you like.
+-- Their pictures stay in the "pictures" bucket (the database can't delete files): remove them afterwards with the
+-- recipe in docs/supabase-setup.md (Database tests, Clean up), which lists the folders of workspaces that are gone.
 
 -- the test workspaces, with everything in them (their people from Linear too)
 delete from public.workspaces where name like 'dbtest %';
