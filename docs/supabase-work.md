@@ -16,6 +16,9 @@ with a reason.
   decides later whether to switch it on.
 - 2026-10-19: Invites are links people send themselves; everyone picks their own @handle (a GitHub sign-in gets its
   GitHub login when free).
+- 2026-10-19: The schema is applied with the CLI (`bunx supabase db reset --linked` while developing, `db push` later); the Supabase MCP refuses SQL with `delete`/`drop` without a confirmation this app can't show. `db reset --linked` replaced `wipe.sql`, and SQL for cleanup runs with `bunx supabase db query --linked`.
+- 2026-10-19: `import_rows` matches rows on the primary key (`unique (workspace_id, linear_id)` stays as a guard); `views` got `linear_id`; `invites.for_profile` is `on delete set null`; `ensure_profile`/`create_profile` return a set (no rows = pick a name); one catch-up message per import batch; workspaces leave no deletion notes.
+- 2026-10-19: Accepted advisor warnings: "signed-in users can execute SECURITY DEFINER function" for the 11 public functions (they are the API, each checks the caller, `anon` can't run them); leaked-password protection (paid plan); "insufficient MFA options" (no MFA in stage A).
 - 2026-10-19: Work happens in the session's worktree; `main` is fast-forwarded to it after each step (the session
   can't write in the main checkout directly).
 
@@ -26,10 +29,10 @@ Status: `todo`, `doing`, `done`.
 | # | Phase | Status | Notes |
 | --- | --- | --- | --- |
 | 0 | Plan merged into `main`, Supabase CLI as a dev dependency | done | |
-| 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | doing | parallel with 2 |
+| 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | doing | built in 95beeff, 47/47 DB tests pass; QA and code review running |
 | 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | done | 70b978b, be04249 and a last fix; QA and code review passed |
-| 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | todo | after 1 |
-| 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | todo | after 3 |
+| 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | doing | being built |
+| 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | todo | being planned |
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | todo | after 4 |
 | 6 | Linear import end to end (`import_rows`) | todo | after 2 and 5; parallel with 7, 8, 9 |
 | 7 | History and pictures | todo | after 5 |
@@ -44,30 +47,30 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 
 | # | Found by | What | Status | Reason / where fixed |
 | --- | --- | --- | --- | --- |
-| P1 | roadmap planner | Definition order: `private.my_profile_id()` is used as a column default and reads `profiles`, so helpers must come right after `workspace_members`, before the other tables | open | phase 1 unless noted |
-| P2 | roadmap planner | Function permissions: grant on `private` functions only covers existing ones; public security-definer RPCs are callable by `anon` unless revoked | open | phase 1 unless noted |
-| P3 | roadmap planner | Upsert vs number trigger: BEFORE INSERT fires on `on conflict do update`, so a re-import collides in `issue_numbers`; a second run must touch nothing (`is distinct from excluded`) | open | phase 1 unless noted |
-| P4 | roadmap planner | `import_rows` is security definer and generic: must pin `workspace_id`, whitelist tables/columns, only insert/update guest profiles of that workspace | open | phase 1 unless noted |
-| P5 | roadmap planner | Guest logins unique across all workspaces would collide on a second workspace; use partial unique indexes and forbid `~` for real accounts | open | phase 1 unless noted |
-| P6 | roadmap planner | Clients can set server-only columns (`changed_at`, `last_number`, `linear_id`, `created_by`) on tables without column grants; force `changed_at` by trigger everywhere and add column grants | open | phase 1 unless noted |
-| P7 | roadmap planner | Owners: admins can make themselves owner or demote the owner; the last-owner trigger isn't written | open | phase 1 unless noted |
-| P8 | roadmap planner | Casts in realtime and storage policies throw on bad input instead of denying; compare as text | open | phase 1 unless noted |
-| P9 | roadmap planner | `invites` must not be broadcast (tokens would reach every member) | open | phase 1 unless noted |
-| P10 | roadmap planner | Turning a guest into a member must also move `issue_events.actor_id`, ids inside `changes`, and logins in `views.filters`; guest deletion tombstone uses `guest_of` | open | phase 1 unless noted |
-| P11 | roadmap planner | Removed members can still edit their comments; add the membership check to comment update/delete | open | phase 1 unless noted |
-| P12 | roadmap planner | One non-member recipient fails a whole inbox insert; filter in the trigger, restrict insert columns | open | phase 1 unless noted |
-| P13 | roadmap planner | The update-times trigger must skip its logic during imports, or re-imports overwrite Linear's times | open | phase 1 unless noted |
-| P14 | roadmap planner | `move_issue_to_team`: use `if not found`, grant to `authenticated` only | open | phase 1 unless noted |
-| P15 | roadmap planner | Imports are silent (no broadcast); send one catch-up message at the end | open | phase 1 unless noted |
-| P16 | roadmap planner | `remember_deletion` on `workspaces` must use `id`, not `workspace_id`; pass the column as an argument | open | phase 1 unless noted |
-| P17 | roadmap planner | Nightly auto-archive must match `tidyArchive` (greatest(completed_at, updated_at), skip 0) | open | phase 1 unless noted |
-| P18 | roadmap planner | Catch-up must include archived rows; index `(workspace_id, changed_at)` without the `archived_at is null` predicate | open | phase 1 unless noted |
-| P19 | roadmap planner | Newer-only comparisons must keep microsecond precision of `changed_at`, not `toISOString()` | open | phase 1 unless noted |
-| P20 | roadmap planner | Redirect URLs need `http://localhost:4173` and the Pages URL with `/**`; `publicAppUrl()` is null on localhost so sign-in needs its own redirect helper | open | phase 1 unless noted |
-| P21 | roadmap planner | Bucket insert needs `on conflict do nothing`; storage objects can't be deleted with plain SQL (wipe through the Storage API) | open | phase 1 unless noted |
-| P22 | roadmap planner | Per-table policies and triggers the plan shows once: generate them in one loop, with a test that every table has them (except `issue_events`, `issue_numbers`) | open | phase 1 unless noted |
-| P23 | roadmap planner | Realtime checks access at join: a removed member keeps receiving until they rejoin; acceptable for 8 people, document it | open | phase 1 unless noted |
-| P24 | roadmap planner | The plan text still mentions pgTAP, `seed.sql`, the local stack and `importRepo.ts`; update it for the no-Docker decision | open | phase 1 unless noted |
+| P1 | roadmap planner | Definition order: `private.my_profile_id()` is used as a column default and reads `profiles`, so helpers must come right after `workspace_members`, before the other tables | fixed | 95beeff: tables.sql, triggers.sql (authors stamped by triggers) |
+| P2 | roadmap planner | Function permissions: grant on `private` functions only covers existing ones; public security-definer RPCs are callable by `anon` unless revoked | fixed | 95beeff: helpers.sql and each file's closing revokes |
+| P3 | roadmap planner | Upsert vs number trigger: BEFORE INSERT fires on `on conflict do update`, so a re-import collides in `issue_numbers`; a second run must touch nothing (`is distinct from excluded`) | fixed | 95beeff: triggers.sql `next_issue_number`; functions.sql `import_rows` |
+| P4 | roadmap planner | `import_rows` is security definer and generic: must pin `workspace_id`, whitelist tables/columns, only insert/update guest profiles of that workspace | fixed | 95beeff: functions.sql `import_rows`, `import_spec` |
+| P5 | roadmap planner | Guest logins unique across all workspaces would collide on a second workspace; use partial unique indexes and forbid `~` for real accounts | fixed | 95beeff: tables.sql (login check, partial unique indexes) |
+| P6 | roadmap planner | Clients can set server-only columns (`changed_at`, `last_number`, `linear_id`, `created_by`) on tables without column grants; force `changed_at` by trigger everywhere and add column grants | fixed | 95beeff: rls.sql column grants; triggers.sql `a_stamp` |
+| P7 | roadmap planner | Owners: admins can make themselves owner or demote the owner; the last-owner trigger isn't written | fixed | 95beeff: triggers.sql `guard_members`, `keep_an_owner` |
+| P8 | roadmap planner | Casts in realtime and storage policies throw on bad input instead of denying; compare as text | fixed | 95beeff: realtime.sql, storage.sql (text comparison) |
+| P9 | roadmap planner | `invites` must not be broadcast (tokens would reach every member) | fixed | 95beeff: helpers.sql wiring (no topic for invites) |
+| P10 | roadmap planner | Turning a guest into a member must also move `issue_events.actor_id`, ids inside `changes`, and logins in `views.filters`; guest deletion tombstone uses `guest_of` | fixed | 95beeff: functions.sql `move_person`, `swap_login` |
+| P11 | roadmap planner | Removed members can still edit their comments; add the membership check to comment update/delete | fixed | 95beeff: rls.sql comment policies |
+| P12 | roadmap planner | One non-member recipient fails a whole inbox insert; filter in the trigger, restrict insert columns | fixed | 95beeff: triggers.sql `check_note` |
+| P13 | roadmap planner | The update-times trigger must skip its logic during imports, or re-imports overwrite Linear's times | fixed | 95beeff: triggers.sql `issue_times`, `comment_times` |
+| P14 | roadmap planner | `move_issue_to_team`: use `if not found`, grant to `authenticated` only | fixed | 95beeff: functions.sql `move_issue_to_team` |
+| P15 | roadmap planner | Imports are silent (no broadcast); send one catch-up message at the end | fixed | 95beeff: functions.sql (one catch-up message) |
+| P16 | roadmap planner | `remember_deletion` on `workspaces` must use `id`, not `workspace_id`; pass the column as an argument | fixed | 95beeff: triggers.sql `remember_deletion` (workspaces leave no notes) |
+| P17 | roadmap planner | Nightly auto-archive must match `tidyArchive` (greatest(completed_at, updated_at), skip 0) | fixed | 95beeff: cron.sql `auto_archive` |
+| P18 | roadmap planner | Catch-up must include archived rows; index `(workspace_id, changed_at)` without the `archived_at is null` predicate | fixed | 95beeff: tables.sql catch-up indexes |
+| P19 | roadmap planner | Newer-only comparisons must keep microsecond precision of `changed_at`, not `toISOString()` | open | database keeps microseconds (95beeff); client side in phase 3 (`rows.ts`) |
+| P20 | roadmap planner | Redirect URLs need `http://localhost:4173` and the Pages URL with `/**`; `publicAppUrl()` is null on localhost so sign-in needs its own redirect helper | open | redirect URLs in config.toml (95beeff); sign-in redirect helper in phase 4; Pages URL in phase 11 |
+| P21 | roadmap planner | Bucket insert needs `on conflict do nothing`; storage objects can't be deleted with plain SQL (wipe through the Storage API) | fixed | 95beeff: storage.sql; `db reset --linked` replaces wipe.sql |
+| P22 | roadmap planner | Per-table policies and triggers the plan shows once: generate them in one loop, with a test that every table has them (except `issue_events`, `issue_numbers`) | fixed | 95beeff: helpers.sql `private.wiring` loops; tests/db/wiring.test.ts |
+| P23 | roadmap planner | Realtime checks access at join: a removed member keeps receiving until they rejoin; acceptable for 8 people, document it | fixed | 95beeff: realtime.sql comment, supabase-setup.md |
+| P24 | roadmap planner | The plan text still mentions pgTAP, `seed.sql`, the local stack and `importRepo.ts`; update it for the no-Docker decision | fixed | 95beeff: docs/supabase-plan.md updated |
 | E1 | roadmap planner | `tsconfig.app.json:28` only includes `src`, so `tests/` are never type-checked by `tsc -b` | open | |
 | E2 | roadmap planner | `package.json`: the `cn` package is unused (`src/lib/utils.ts` defines its own `cn`) | open | |
 | E3 | roadmap planner | `ImportPage.tsx:78` subscribes to the whole store (`useData((s) => s)`), redrawing the wizard on every change | open | |
@@ -111,7 +114,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E41 | phase 2 QA | A new Linear issue sorting first makes every issue of its team come back as changed (sort keys rebuilt per run) | fixed | phase 2 fix round (F4) |
 | E42 | phase 2 QA | Guest rows carry `githubId: 0` but `profiles.github_id` is unique; the client mapping must send null | open | phase 3 (`rows.ts`) |
 | E43 | phase 2 QA | A team row can take a Linear id another team still holds (unique per workspace) | fixed | phase 2 fix round (F1) |
-| E44 | phase 2 QA | `docs/supabase-plan.md` says `import_rows` upserts on `(workspace_id, linear_id)`; it must be the primary key | open | phase 1 (P24 edits) |
+| E44 | phase 2 QA | `docs/supabase-plan.md` says `import_rows` upserts on `(workspace_id, linear_id)`; it must be the primary key | fixed | 95beeff (plan says primary key) |
 | E45 | phase 2 QA | Change detection on re-import needs `rows.ts` to return the same text the import writes (times as `.000Z`) | open | phase 3 |
 | E46 | phase 2 QA | `setMonth` rolls past month end (Aug 31 minus 6 months is Mar 3), in both the import and `tidyArchive` | fixed | phase 2 fix round (F5, UTC with day clamp) |
 | E47 | phase 2 QA | The renumbered note shows the key here, not Linear's identifier | fixed | phase 2 fix round (F7) |
@@ -121,13 +124,22 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E51 | phase 2 implementer | `monthsBefore` now uses UTC; the nightly cut-off moves by a few hours at most | won't do | a few hours either way is harmless, and UTC matches the database job |
 | E52 | phase 2 QA re-check | Two teams here swapping their Linear teams emitted two non-null links, colliding on the unique Linear id | fixed | phase 2 last fix (release first) |
 | E53 | phase 2 QA re-check | An invalid sort key in a team made the import wizard's Continue button silently do nothing | fixed | phase 2 last fix (error shown on the people step) |
+| E54 | phase 1 implementer | Inbox notes must be inserted without asking for the rows back (`.select()` fails: the sender can't read others' notes) | open | phase 5 |
+| E55 | phase 1 implementer | The realtime sign-in token must be set before joining a private channel, or the join is refused | open | phase 4 |
+| E56 | phase 1 implementer | `db reset --linked` also deletes sign-in accounts: fine in development, a hazard anywhere else | open | phase 11 runbook |
+| E57 | phase 1 implementer | Deletion notes of a deleted workspace stay until the 45-day job | won't do | harmless, nobody can read them, the job removes them |
+| E58 | phase 3 planner | `project.ts:127` sorts comments by `createdAt` with no tiebreak | open | phase 3 reducer tiebreaks by id; project.ts goes in phase 10 |
+| E59 | phase 3 planner | `select.ts` `isUnread` does `read.includes` per note (quadratic for unread counts) | open |  |
+| E60 | phase 3 planner | `schema.ts:14` `iso = z.string()` checks nothing, so a `+00:00` time passes silently | open |  |
+| E61 | phase 3 planner | `actions.ts` `markAllRead` takes the newest `at` by string compare; right only while all times are in Z form | open | phase 3 (`iso()` everywhere) |
+| E62 | phase 3 planner | `docs/supabase-plan.md` `broadcast()` text differs from the shipped one (keys in updates, `last_number` skipped, profiles loop) | open | phase 10 docs |
 
 ## Waiting on the user
 
 | What | Status |
 | --- | --- |
 | GitHub OAuth app for sign-in (homepage `https://michalsek.github.io/sprawniej/`, callback `https://wkqofiacqfuxowavuqxj.supabase.co/auth/v1/callback`); id and secret stay in the user's shell | asked 2026-10-19 |
-| `bunx supabase login` once, so the CLI can push the schema and auth settings | asked 2026-10-19 |
+| `bunx supabase login` once, so the CLI can push the schema and auth settings | done 2026-10-19 |
 | Run the Linear import with your own Linear key (phase 6) | later |
 | Database password for `db push`, approve the final wipe (phase 11) | later |
 | Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | later |
