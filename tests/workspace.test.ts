@@ -259,6 +259,23 @@ describe('keeping up', () => {
     expect(s.env.backend.getState()).toMatchObject({ phase: 'gone', gone: 'deleted' })
     expect(s.env.status.getState().state).toBe('closed')
   })
+
+  const removed = (): Message => ({ table: 'workspace_members', op: 'UPDATE', row: { workspace_id: WS, profile_id: ME, role: 'owner', removed_at: T(9), changed_at: T(9) } })
+
+  test('removed by someone else: "You\'re no longer in this workspace"', async () => {
+    const s = await opened()
+    s.channels[0].on.message(removed())
+    await sleep(5)
+    expect(s.env.backend.getState()).toMatchObject({ phase: 'gone', gone: 'removed' })
+  })
+
+  test('leaving yourself: nothing to say (it closes next)', async () => {
+    const s = await opened()
+    s.ws.leaving = true
+    s.channels[0].on.message(removed())
+    await sleep(5)
+    expect(s.env.backend.getState().phase).toBe('open')
+  })
 })
 
 describe('one workspace at a time', () => {

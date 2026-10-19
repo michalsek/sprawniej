@@ -56,6 +56,8 @@ export function takeReturnedUrl(
   const params = new URLSearchParams(loc.search)
   const hashParams = /^#[^/]/.test(loc.hash) ? new URLSearchParams(loc.hash.slice(1)) : null
   const failed = ERROR_PARAMS.some((p) => params.has(p) || hashParams?.has(p))
+  // what went wrong, when it's something we can say better (a GitHub account that belongs to someone else)
+  const code = params.get('error_code') ?? hashParams?.get('error_code')
   const saved = store.getItem(RETURN_KEY)
   if (saved === null && !failed) return undefined
   store.removeItem(RETURN_KEY)
@@ -65,7 +67,8 @@ export function takeReturnedUrl(
   const hash = blank ? (saved?.startsWith('#/') ? saved : '#/') : loc.hash
   const search = params.toString()
   replace(`${loc.pathname}${search ? `?${search}` : ''}${hash}`)
-  return failed ? GITHUB_UNFINISHED : undefined
+  if (!failed) return undefined
+  return (code && MESSAGES[code]) || GITHUB_UNFINISHED
 }
 
 const MESSAGES: Record<string, string> = {
@@ -79,6 +82,11 @@ const MESSAGES: Record<string, string> = {
   over_request_rate_limit: 'Too many tries in a short time. Wait a minute and try again.',
   over_email_send_rate_limit: 'Too many tries in a short time. Wait a minute and try again.',
   signup_disabled: "New accounts can't be created right now. Ask whoever looks after Sprawniej.",
+  same_password: "That's the password you have now. Pick a new one.",
+  identity_already_exists:
+    'This GitHub account already belongs to another Sprawniej account. Sign in with GitHub to use that one, or add a different GitHub account.',
+  single_identity_not_deletable: "It's your only way to sign in, so it can't be removed.",
+  manual_linking_disabled: "Adding another way to sign in isn't switched on yet. Ask whoever looks after Sprawniej.",
 }
 
 /** what to say when signing in or up fails */
@@ -191,20 +199,30 @@ export async function signUpWithPassword(email: string, password: string): Promi
   return data.session ? 'signed-in' : 'check-email'
 }
 
-let github: Promise<'on' | 'off' | 'unknown'> | undefined
+export interface Providers {
+  github: boolean
+  google: boolean
+}
+
+let settings: Promise<Providers | 'unknown'> | undefined
+
+/** which ways to sign in whoever looks after Sprawniej has switched on ('unknown': Sprawniej can't be reached to ask) */
+export function providersOn(): Promise<Providers | 'unknown'> {
+  const config = backendConfig()
+  if (!config) return Promise.resolve({ github: false, google: false })
+  settings ??= fetch(`${config.url}/auth/v1/settings`, { headers: { apikey: config.key } })
+    .then((r) => (r.ok ? (r.json() as Promise<{ external?: Record<string, unknown> }>) : Promise.reject(new Error(String(r.status)))))
+    .then((s): Providers => ({ github: s.external?.github === true, google: s.external?.google === true }))
+    .catch(() => {
+      settings = undefined // not known: ask again next time
+      return 'unknown' as const
+    })
+  return settings
+}
 
 /** whoever looks after Sprawniej has switched GitHub sign-in on ('unknown': Sprawniej can't be reached to ask) */
 export function githubAvailable(): Promise<'on' | 'off' | 'unknown'> {
-  const config = backendConfig()
-  if (!config) return Promise.resolve('off')
-  github ??= fetch(`${config.url}/auth/v1/settings`, { headers: { apikey: config.key } })
-    .then((r) => (r.ok ? (r.json() as Promise<{ external?: Record<string, unknown> }>) : Promise.reject(new Error(String(r.status)))))
-    .then((s) => (s.external?.github === true ? 'on' : 'off'))
-    .catch(() => {
-      github = undefined // not known: ask again next time
-      return 'unknown'
-    })
-  return github
+  return providersOn().then((p) => (p === 'unknown' ? 'unknown' : p.github ? 'on' : 'off'))
 }
 
 /** leaves for GitHub and comes back signed in */
@@ -217,6 +235,100 @@ export async function signInWithGitHub(): Promise<void> {
     sessionStorage.removeItem(RETURN_KEY)
     throw new AuthProblem(friendlyAuthError(error))
   }
+}
+
+// ---------- ways to sign in (Settings › Your account) ----------
+
+/** set while you're away at GitHub to add it as a way to sign in; Settings reads it when you come back */
+export const ADDING_KEY = 'sprawniej:adding-way'
+
+export interface IdentityIn {
+  identity_id: string
+  provider: string
+  identity_data?: Record<string, unknown>
+}
+
+export interface WayRow {
+  kind: 'password' | 'github' | 'google'
+  on: boolean
+  /** the email, "@octocat", or "" */
+  detail: string
+  action: 'set-password' | 'change-password' | 'add' | 'remove' | null
+  /** shown when there's nothing to do with it */
+  why?: string
+  identityId?: string
+}
+
+const ONLY_WAY = "It's your only way to sign in."
+const OFF: Record<'github' | 'google', string> = {
+  github: "Signing in with GitHub isn't switched on yet.",
+  google: "Signing in with Google isn't switched on yet.",
+}
+
+/** which ways to sign in you have, and what you can do with each (pure, tested) */
+export function signInWays(u: { email: string | null; identities: IdentityIn[]; passwordSet: boolean }, p: Providers): WayRow[] {
+  const has = (provider: string) => u.identities.find((i) => i.provider === provider)
+  const password: WayRow = !u.email
+    ? { kind: 'password', on: false, detail: '', action: null, why: "Your account has no email address, so a password can't be added." }
+    : has('email') || u.passwordSet
+      ? { kind: 'password', on: true, detail: u.email, action: 'change-password' }
+      : { kind: 'password', on: false, detail: u.email, action: 'set-password' }
+  const other = (kind: 'github' | 'google'): WayRow => {
+    const i = has(kind)
+    if (i) {
+      const handle = kind === 'github' ? i.identity_data?.user_name : i.identity_data?.email
+      const detail = typeof handle === 'string' ? (kind === 'github' ? `@${handle}` : handle) : ''
+      // the email identity is never offered for removal; GitHub or Google only when there is another way left
+      return u.identities.length >= 2
+        ? { kind, on: true, detail, action: 'remove', identityId: i.identity_id }
+        : { kind, on: true, detail, action: null, why: ONLY_WAY, identityId: i.identity_id }
+    }
+    return p[kind] ? { kind, on: false, detail: '', action: 'add' } : { kind, on: false, detail: '', action: null, why: OFF[kind] }
+  }
+  return [password, other('github'), ...(p.google || has('google') ? [other('google')] : [])]
+}
+
+/** your ways to sign in, fresh from Sprawniej */
+export async function waysToSignIn(): Promise<WayRow[]> {
+  const [{ data, error }, providers] = await Promise.all([requireClient().auth.getUser(), providersOn()])
+  if (error) throw new AuthProblem(friendlyAuthError(error))
+  if (providers === 'unknown') throw new AuthProblem(UNREACHABLE)
+  const u = data.user
+  return signInWays(
+    { email: u.email || null, identities: (u.identities ?? []) as IdentityIn[], passwordSet: u.user_metadata?.password_set === true },
+    providers,
+  )
+}
+
+/** sets or changes your password (no Save button: it's the dialog's own form) */
+export async function setPassword(password: string): Promise<void> {
+  const { error } = await requireClient().auth.updateUser({ password, data: { password_set: true } })
+  if (error) throw new AuthProblem(friendlyAuthError(error))
+}
+
+/** leaves for GitHub and comes back with it added as a way to sign in */
+export async function addGitHub(): Promise<void> {
+  const p = await providersOn()
+  if (p === 'unknown') throw new AuthProblem(UNREACHABLE)
+  if (!p.github) throw new AuthProblem(GITHUB_OFF)
+  sessionStorage.setItem(RETURN_KEY, location.hash || '#/settings')
+  sessionStorage.setItem(ADDING_KEY, 'github')
+  const { error } = await requireClient().auth.linkIdentity({ provider: 'github', options: { redirectTo: authRedirectUrl() } })
+  if (error) {
+    sessionStorage.removeItem(RETURN_KEY)
+    sessionStorage.removeItem(ADDING_KEY)
+    throw new AuthProblem(friendlyAuthError(error))
+  }
+}
+
+export async function removeWay(identityId: string): Promise<void> {
+  const db = requireClient()
+  const { data, error } = await db.auth.getUserIdentities()
+  if (error) throw new AuthProblem(friendlyAuthError(error))
+  const identity = data.identities.find((i) => i.identity_id === identityId)
+  if (!identity) return
+  const { error: unlinkError } = await db.auth.unlinkIdentity(identity)
+  if (unlinkError) throw new AuthProblem(friendlyAuthError(unlinkError))
 }
 
 /**

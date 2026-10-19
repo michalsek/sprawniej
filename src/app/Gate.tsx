@@ -8,11 +8,12 @@ import { useLocation } from 'wouter'
 import { Loader2 } from 'lucide-react'
 import { backend, useBackend } from '@/backend'
 import { useAuth } from '@/backend/auth'
-import { friendlyDbError } from '@/backend/problem'
-import { ensureProfile, type MyProfile } from '@/backend/profiles'
+import type { MyProfile } from '@/backend/profiles'
 import { useSaveStatus } from '@/backend/status'
 import { useSignOut } from '@/components/SignOut'
 import { useData } from '@/data/store'
+import { readInvitePath } from '@/features/onboarding/invite'
+import { JoinFlow } from '@/features/onboarding/JoinFlow'
 import { PickLogin } from '@/features/onboarding/PickLogin'
 import { PickWorkspace } from '@/features/onboarding/PickWorkspace'
 import { Problem, Step } from '@/features/onboarding/Step'
@@ -20,9 +21,10 @@ import { SignIn, SignInForm } from '@/features/onboarding/Welcome'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog'
+import { useMyProfile } from './useMyProfile'
 
 /** a title and a spinner; `line`: how far it got, when there's something to say */
-function Waiting({ title, line }: { title: string; line?: string }) {
+export function Waiting({ title, line }: { title: string; line?: string }) {
   return (
     <Step title={title}>
       <p className="flex items-center gap-2 text-muted-foreground" role="status">
@@ -45,17 +47,7 @@ function Blocking({ title, text, children }: { title: string; text: string; chil
   )
 }
 
-/** invite links come with phase 8 */
-function JoinLater() {
-  const [, navigate] = useLocation()
-  return (
-    <Step title="Invite links don't work yet" footer={<Button onClick={() => navigate('/', { replace: true })}>Go to Sprawniej</Button>}>
-      <p>Sprawniej can't open invite links yet. Ask your teammate again in a few days.</p>
-    </Step>
-  )
-}
-
-function ProfileFailed({ problem, onRetry }: { problem: string; onRetry: () => void }) {
+export function ProfileFailed({ problem, onRetry }: { problem: string; onRetry: () => void }) {
   const { signOut, dialog } = useSignOut()
   return (
     <Step
@@ -164,43 +156,19 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
   )
 }
 
-type ProfileLoad = { uid: string; state: 'ready' | 'none' } | { uid: string; state: 'failed'; problem: string }
-
 export function Gate({ children }: { children: ReactNode }) {
   const [loc] = useLocation()
   const ready = useAuth((s) => s.ready)
   const authUser = useAuth((s) => s.user)
   const lost = useAuth((s) => s.lost)
   const workspaceId = useSession((s) => s.workspaceId)
-  const profileId = useSession((s) => s.profileId)
-  const user = useSession((s) => s.user)
-  const [load, setLoad] = useState<ProfileLoad>()
-  const [attempt, setAttempt] = useState(0)
-  const uid = authUser?.id
-
-  // who you are here: your profile, found again on every start
-  useEffect(() => {
-    if (!uid) return
-    let stop = false
-    ensureProfile().then(
-      (p) => {
-        if (stop) return
-        if (p) useSession.getState().setProfile(p.id, p.person)
-        setLoad({ uid, state: p ? 'ready' : 'none' })
-      },
-      (e: unknown) => {
-        console.warn('Sprawniej couldn’t find your profile', e)
-        if (!stop) setLoad({ uid, state: 'failed', problem: friendlyDbError(e, 'Something went wrong while signing you in. Try again in a moment.') })
-      },
-    )
-    return () => {
-      stop = true
-    }
-  }, [uid, attempt])
+  const profile = useMyProfile(authUser?.id)
+  const { mine } = profile
 
   if (!ready) return <Waiting title="Just a moment…" />
-  if (loc.startsWith('/join/')) return <JoinLater />
-  const mine = user && profileId ? { id: profileId, person: user } : null
+  // an invite link comes before an open workspace (which closes meanwhile, and opens again back at the start)
+  const invite = readInvitePath(loc)
+  if (invite) return <JoinFlow link={invite} profile={profile} />
   // signed out while working (it ran out): everything stays on screen, with "Please sign in again" on top
   if (workspaceId && mine && (authUser || lost)) {
     return (
@@ -210,18 +178,8 @@ export function Gate({ children }: { children: ReactNode }) {
     )
   }
   if (!authUser) return <SignIn />
-  const state = load?.uid === authUser.id ? load : undefined
-  if (!state) return <Waiting title="Signing you in…" />
-  if (state.state === 'failed') return <ProfileFailed problem={state.problem} onRetry={() => setAttempt((n) => n + 1)} />
-  if (state.state === 'none' || !mine) {
-    return (
-      <PickLogin
-        onDone={(p) => {
-          useSession.getState().setProfile(p.id, p.person)
-          setLoad({ uid: authUser.id, state: 'ready' })
-        }}
-      />
-    )
-  }
+  if (profile.state === 'loading') return <Waiting title="Signing you in…" />
+  if (profile.state === 'failed') return <ProfileFailed problem={profile.problem ?? ''} onRetry={profile.retry} />
+  if (profile.state === 'none') return <PickLogin onDone={profile.picked} />
   return <PickWorkspace />
 }

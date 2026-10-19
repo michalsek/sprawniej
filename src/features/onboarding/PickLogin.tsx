@@ -10,10 +10,12 @@ import { Problem, Step } from './Step'
 
 const BAD_HANDLE = 'Use up to 39 letters, digits and dashes, starting with a letter or a digit.'
 
-export function PickLogin({ onDone }: { onDone: (p: MyProfile) => void }) {
+/** `initialName`: the name to start from when the sign-in has none (an invite for someone from Linear has theirs) */
+export function PickLogin({ onDone, initialName }: { onDone: (p: MyProfile) => void; initialName?: string }) {
   const user = useAuth((s) => s.user)
-  const { signOut, dialog: signOutDialog } = useSignOut()
-  const [name, setName] = useState(user?.name ?? '')
+  // signing out on the way in through an invite comes back to the invite
+  const { signOut, dialog: signOutDialog } = useSignOut(location.hash.startsWith('#/join/') ? location.hash : undefined)
+  const [name, setName] = useState(user?.name || initialName || '')
   const [login, setLogin] = useState(() => suggestLogin(user?.email ?? null, user?.name))
   const [busy, setBusy] = useState(false)
   const [problem, setProblem] = useState<string>()

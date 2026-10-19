@@ -16,15 +16,29 @@ import type { Json } from '@/backend/database.types'
 import type { KeyOf, LiveTable, Row } from '@/backend/tables'
 import { context, tell, write, type NoteRow, type WriteContext } from '@/backend/writes'
 import { MESSAGES } from '@/backend/writes/problems'
-import { createWorkspace } from '@/backend/workspaces'
-import type { Comment, Display, Filters, Issue, Label, Person, Project, Team, View } from '@/model/schema'
+import { backend } from '@/backend'
+import {
+  acceptInvite,
+  createInvite as makeInvite,
+  createWorkspace,
+  deleteInvite as removeInvite,
+  linkPerson as linkGuest,
+  removeMember,
+  setMemberRole,
+  type Invite,
+  type InviteRole,
+  type Role,
+} from '@/backend/workspaces'
+import { useSession } from '@/session'
+import { canLeave, ruleFor, type Who } from './roles'
+import type { Comment, Display, Filters, Issue, Label, Project, Team, View } from '@/model/schema'
 import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
 import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
-import { isUnread } from './select'
+import { isAdmin, isUnread, ownerCount } from './select'
 import { issueRef, useData } from './store'
 
 const now = () => new Date().toISOString()
@@ -778,8 +792,6 @@ export function teamContents(key: string): { issues: number; archived: number; c
   }
 }
 
-const isAdmin = (s: ReturnType<typeof useData.getState>) => !!s.me && ['owner', 'admin'].includes(s.members[s.me.login]?.role ?? '')
-
 /**
  * Delete a team for everyone: its issues, comments, archive and its own views go. Sub-issues in other teams lose their
  * parent, projects stop listing the team, and inbox notes about its issues go away. Only admins and owners may: for
@@ -863,14 +875,84 @@ export function renameMe(name: string) {
   write({ changes: [upd('profiles', { id: c.meId }, { name: typed, name_set_here: true })] })
 }
 
-/**
- * Someone from the Linear import who hadn't joined is this person. Not here yet: the screen that offers it is hidden
- * until linking comes back. Returns whether it was done (never, for now).
- */
-export function linkPerson(_guest: string, _to: Person): boolean {
-  tell("Linking people from Linear isn't available yet.")
-  return false
+// ---------- members, roles and invites ----------
+// Awaited, not handed to the writer: the database rules word their refusals precisely, and nothing should flicker
+// back. Each throws an Error whose message can be shown as it is; the store follows from the database's echo.
+
+const whoIs = (s: ReturnType<typeof useData.getState>, login: string | undefined): Who | null => {
+  const m = login ? s.members[login] : undefined
+  return login && m && !m.removedAt ? { login, role: m.role } : null
 }
+
+function openHere(): WriteContext {
+  const c = context()
+  if (!c) throw new Error('Open the workspace first.')
+  return c
+}
+
+function idOf(c: WriteContext, login: string): string {
+  const id = c.registry.profileId(login)
+  if (!id) throw new Error(`Sprawniej doesn't know @${login} here.`)
+  return id
+}
+
+async function changeMember(login: string, to: Role | 'removed') {
+  const c = openHere()
+  const s = useData.getState()
+  const target = whoIs(s, login)
+  if (!target) throw new Error("They're not in this workspace any more.")
+  if (to === target.role) return
+  const why = ruleFor(whoIs(s, s.me?.login), target, to, ownerCount(s))
+  if (why) throw new Error(why)
+  if (to === 'removed') await removeMember(c.workspaceId, idOf(c, login))
+  else await setMemberRole(c.workspaceId, idOf(c, login), to)
+  void backend.catchUp()
+}
+
+/** admins and owners; only owners make or change owners */
+export const setRole = (login: string, role: Role): Promise<void> => changeMember(login, role)
+
+/** they can't open the workspace any more; their work keeps their name */
+export const removeFromWorkspace = (login: string): Promise<void> => changeMember(login, 'removed')
+
+/** you leave the open workspace (the last owner can't), and land on the list of workspaces */
+export async function leaveWorkspace(): Promise<void> {
+  const c = openHere()
+  const s = useData.getState()
+  const can = canLeave(whoIs(s, s.me?.login), ownerCount(s))
+  if (!can.ok) throw new Error(can.why ?? "You're not in this workspace any more.")
+  // what you changed last is saved before you go
+  await backend.flush(3_000)
+  await backend.leave()
+  useSession.getState().forget(c.workspaceId)
+  location.hash = '#/'
+}
+
+const NOT_INVITER = 'Only admins and owners can invite people.'
+
+/** a link for one person (for someone from Linear: they become that person when they join) */
+export async function createInvite(o: { role: InviteRole; forGuest?: string; forEmail?: string }): Promise<Invite> {
+  const c = openHere()
+  if (!isAdmin(useData.getState())) throw new Error(NOT_INVITER)
+  return makeInvite(c.workspaceId, { role: o.role, forEmail: o.forEmail, ...(o.forGuest && { forProfile: idOf(c, o.forGuest) }) })
+}
+
+export async function deleteInvite(id: string): Promise<void> {
+  openHere()
+  if (!isAdmin(useData.getState())) throw new Error(NOT_INVITER)
+  await removeInvite(id)
+}
+
+/** Someone from the Linear import who hadn't joined is this member: their issues, comments and views move over. */
+export async function linkPerson(guest: string, to: string): Promise<void> {
+  const c = openHere()
+  if (!isAdmin(useData.getState())) throw new Error('Only admins and owners can link people.')
+  await linkGuest(c.workspaceId, idOf(c, guest), idOf(c, to))
+  void backend.catchUp()
+}
+
+/** joins with an invite link (no workspace needs to be open); returns the workspace's id. Throws an InviteError. */
+export const joinWorkspace = (token: string): Promise<string> => acceptInvite(token)
 
 /** A brand-new workspace with you as its owner and its first team. Returns its id. */
 export function startWorkspace(name: string, firstTeam: TeamDraft): Promise<string> {

@@ -8,6 +8,7 @@ import { Box, CircleHelp, Download, Inbox, Layers, PanelLeft, Settings, Sparkles
 import { useShallow } from 'zustand/react/shallow'
 import { loadArchive } from '@/backend'
 import { searchIssues } from '@/data/search'
+import { isAdmin } from '@/data/select'
 import { findByRef, issueRef, useData } from '@/data/store'
 import { openComposer } from '@/features/issues/composer'
 import { StatusIcon } from '@/features/issues/icons'
@@ -37,6 +38,7 @@ function Palette() {
   const teams = useData(useShallow((s) => Object.values(s.teams)))
   const views = useData(useShallow((s) => Object.values(s.views)))
   const projects = useData(useShallow((s) => Object.values(s.projects)))
+  const admin = useData(isAdmin)
   const go = (href: string) => () => navigate(href)
 
   const pages: Entry[] = useMemo(
@@ -65,7 +67,8 @@ function Palette() {
   const actions: Entry[] = [
     { id: 'new', label: 'New issue', icon: <SquarePen />, run: () => openComposer(), shortcut: 'C' },
     { id: 'sidebar', label: 'Show or hide the sidebar', icon: <PanelLeft />, run: () => useChrome.getState().toggleSidebar() },
-    { id: 'import', label: 'Import from Linear', icon: <Download />, run: go('/settings/import') },
+    // only admins and owners import
+    ...(admin ? [{ id: 'import', label: 'Import from Linear', icon: <Download />, run: go('/settings/import') }] : []),
   ]
 
   const q = query.trim().toLowerCase()
