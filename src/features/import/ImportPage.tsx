@@ -1,7 +1,8 @@
 /**
  * Settings › Import from Linear: a short wizard. Key → teams → people → check → import → done.
- * Reading happens straight from Linear. Saving the import is switched off until it moves to the database
- * (docs/supabase-work.md, phase 6): the check step shows what would come over.
+ * Reading happens straight from Linear; the check step works out what is new or changed (linearMap.ts) and the steps
+ * that save it (src/backend/importRows.ts); Import saves them (actions.importFromLinear), with a progress bar. An
+ * import that stops partway says so and can be tried again: nothing comes over twice.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'wouter'
@@ -9,9 +10,10 @@ import { ulid } from 'ulid'
 import { CheckCircle2, ExternalLink, Loader2 } from 'lucide-react'
 import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
-import { loadArchive } from '@/backend'
+import { backend } from '@/backend'
+import { ImportProblem, type ImportPlan } from '@/backend/importRows'
+import { importFromLinear } from '@/data/actions'
 import { useData } from '@/data/store'
-import { useSync } from '@/sync/engine'
 import { Problem } from '@/features/onboarding/Step'
 import { cn } from '@/lib/utils'
 import { Button } from '@/ui/button'
@@ -19,15 +21,22 @@ import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { LinearError, readBasics, readTeams, type LinearData } from './linearApi'
 import { buildImport, emojiFor, existingFrom, guessPerson, guestLogins, involvedUsers, linearName, type ImportResult } from './linearMap'
-import { isGuest } from '@/model/schema'
+import { isGuest, type Member, type Person } from '@/model/schema'
 
 type Stage =
   | { at: 'key' }
   | { at: 'teams'; basics: Pick<LinearData, 'org' | 'teams' | 'users'> }
   | { at: 'people'; data: LinearData }
-  | { at: 'check'; data: LinearData; plan: ImportResult }
+  | { at: 'check'; data: LinearData; result: ImportResult; plan: ImportPlan }
   | { at: 'saving'; saved: number; total: number }
-  | { at: 'done'; result: ImportResult; keys: string[] }
+  | { at: 'failed'; data: LinearData; message: string; plan: ImportPlan }
+  | { at: 'done'; counts: ImportResult['counts']; keys: string[]; nothing: boolean }
+
+const canImport = (me: Person | null, members: Record<string, Member>) => !!me && ['owner', 'admin'].includes(members[me.login]?.role ?? '')
+
+/** the people a Linear person can be matched to: members now (a link to someone who left is refused) */
+const hereNow = (people: Record<string, Person>, members: Record<string, Member>) =>
+  Object.values(people).filter((p) => !isGuest(p.login) && members[p.login] && !members[p.login].removedAt)
 
 const STEPS = ['Key', 'Teams', 'People', 'Import']
 const NOBODY = '__nobody'
@@ -69,15 +78,54 @@ function doneText(c: ImportResult['counts']): string {
 export function ImportPage() {
   useCrumbs([{ label: 'Settings', href: '/settings' }, { label: 'Import from Linear' }])
   const [stage, setStage] = useState<Stage>({ at: 'key' })
-  const saveState = useSync((s) => s.state)
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [problem, setProblem] = useState<string | null>(null)
   const [picked, setPicked] = useState<Record<string, string>>({})
   const [people, setPeople] = useState<Record<string, string | null>>({})
-  const ws = useData((s) => s)
-  // a second import has to know the issues archived since the first
-  useEffect(() => loadArchive(), [])
+  // a try that stopped partway: Try again (or going back and on again) brings what it didn't finish
+  const [stopped, setStopped] = useState<ImportPlan>()
+  const everyone = useData((s) => s.people)
+  const teams = useData((s) => s.teams)
+  const me = useData((s) => s.me)
+  const members = useData((s) => s.members)
+  const allowed = canImport(me, members)
+
+  // closing the tab while it saves stops the import partway: ask first
+  const saving = stage.at === 'saving'
+  useEffect(() => {
+    if (!saving) return
+    const hold = (e: BeforeUnloadEvent) => e.preventDefault()
+    window.addEventListener('beforeunload', hold)
+    return () => window.removeEventListener('beforeunload', hold)
+  }, [saving])
+
+  /** what comes over and the steps that save it, from what's here now; `carry`: a try that stopped partway */
+  async function prepare(data: LinearData, carry = stopped) {
+    // what an earlier try saved (and teammates' changes) is here first, so it isn't brought again as new
+    await backend.catchUp()
+    const extras = await backend.readExisting()
+    const s = useData.getState()
+    if (!s.me) throw new Error('Sign in first.')
+    const existing = existingFrom(s, extras, s.me.login)
+    const result = buildImport(data, { teamKeys: picked, people }, existing, { newId: ulid, newGuestId: () => crypto.randomUUID(), now: new Date().toISOString() })
+    const plan = backend.planImport(result, existing, carry)
+    setStage({ at: 'check', data, result, plan })
+  }
+
+  async function save(stage: Extract<Stage, { at: 'check' }>) {
+    const keys = [...new Set(Object.values(picked))]
+    setStage({ at: 'saving', saved: 0, total: stage.plan.total })
+    try {
+      const changed = await importFromLinear(stage.plan, (saved, total) => setStage({ at: 'saving', saved, total }))
+      setStopped(undefined)
+      setStage({ at: 'done', counts: stage.result.counts, keys, nothing: changed === 0 && stage.plan.steps.every((s) => s.kind === 'rows') })
+    } catch (e) {
+      const message = e instanceof ImportProblem ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`
+      setStopped(stage.plan)
+      setStage({ at: 'failed', data: stage.data, message, plan: stage.plan })
+    }
+  }
 
   async function run(what: string, fn: () => Promise<void>) {
     setBusy(what)
@@ -85,7 +133,7 @@ export function ImportPage() {
     try {
       await fn()
     } catch (e) {
-      setProblem(e instanceof LinearError ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`)
+      setProblem(e instanceof LinearError || e instanceof ImportProblem ? e.message : `Something went wrong: ${e instanceof Error ? e.message : String(e)}`)
     } finally {
       setBusy(null)
     }
@@ -98,11 +146,11 @@ export function ImportPage() {
         title="Import from Linear"
         footer={
           <Button
-            disabled={!key.trim() || !!busy}
+            disabled={!key.trim() || !!busy || !allowed}
             onClick={() =>
               run('Checking the key…', async () => {
                 const basics = await readBasics(key)
-                const linked = new Map(Object.values(ws.teams).flatMap((t) => (typeof t.linearId === 'string' ? [[t.linearId, t.key] as const] : [])))
+                const linked = new Map(Object.values(teams).flatMap((t) => (typeof t.linearId === 'string' ? [[t.linearId, t.key] as const] : [])))
                 setPicked(Object.fromEntries(basics.teams.filter((t) => linked.has(t.id)).map((t) => [t.id, linked.get(t.id)!])))
                 setStage({ at: 'teams', basics })
               })
@@ -134,7 +182,7 @@ export function ImportPage() {
           value={key}
           onChange={(e) => setKey(e.target.value)}
         />
-        <Problem>{problem}</Problem>
+        <Problem>{allowed ? problem : 'Only admins and owners can import from Linear. Ask one of them to do it.'}</Problem>
       </Panel>
     )
   }
@@ -158,9 +206,9 @@ export function ImportPage() {
                 run('Reading…', async () => {
                   const rest = await readTeams(key, Object.keys(picked), setBusy)
                   const data: LinearData = { ...basics, ...rest }
-                  const here = Object.values(ws.people).filter((p) => !isGuest(p.login))
+                  const here = hereNow(everyone, members)
                   const users = involvedUsers(data)
-                  const guests = guestLogins(users, ws.people)
+                  const guests = guestLogins(users, everyone)
                   // nobody here by that name: they come as someone who hasn't joined, so their work stays theirs
                   setPeople(Object.fromEntries(users.map((u) => [u.id, people[u.id] !== undefined ? people[u.id] : (guessPerson(u, here) ?? guests.get(u.id)!)])))
                   setStage({ at: 'people', data })
@@ -176,7 +224,7 @@ export function ImportPage() {
         <ul className="mt-5 flex flex-col gap-2">
           {basics.teams.map((t) => {
             const on = picked[t.id] !== undefined
-            const target = on ? ws.teams[picked[t.id]] : undefined
+            const target = on ? teams[picked[t.id]] : undefined
             return (
               <li key={t.id} className="flex items-center gap-3 rounded-lg border px-4 py-3">
                 <input
@@ -216,10 +264,8 @@ export function ImportPage() {
 
   if (stage.at === 'people') {
     const users = involvedUsers(stage.data)
-    const guests = guestLogins(users, ws.people)
-    const here = Object.values(ws.people)
-      .filter((p) => !isGuest(p.login))
-      .sort((a, b) => (a.name || a.login).localeCompare(b.name || b.login))
+    const guests = guestLogins(users, everyone)
+    const here = hereNow(everyone, members).sort((a, b) => (a.name || a.login).localeCompare(b.name || b.login))
     return (
       <Panel
         step={2}
@@ -230,31 +276,18 @@ export function ImportPage() {
               Back
             </Button>
             <Button
-              disabled={!ws.me}
-              onClick={() => {
-                if (!ws.me) return
-                // what would come over is worked out once, when you go on to the check step
-                try {
-                  const plan = buildImport(stage.data, { teamKeys: picked, people }, existingFrom(ws, ws.me.login), {
-                    newId: ulid,
-                    newGuestId: () => crypto.randomUUID(),
-                    now: new Date().toISOString(),
-                  })
-                  setProblem(null)
-                  setStage({ at: 'check', data: stage.data, plan })
-                } catch (e) {
-                  setProblem(`Something went wrong: ${e instanceof Error ? e.message : String(e)}`)
-                }
-              }}
+              disabled={!me || !!busy}
+              // what comes over is worked out once, when you go on to the check step
+              onClick={() => run('Checking what’s here already…', () => prepare(stage.data))}
             >
-              Continue
+              {busy ? <Loader2 className="animate-spin" /> : null} {busy ?? 'Continue'}
             </Button>
           </>
         }
       >
         <p className="text-muted-foreground">
           We matched people by name. Fix anyone we got wrong. Someone who isn't here yet still comes over with their name, so their issues, comments
-          and views stay theirs. Once you invite them, link them in Settings and everything moves to their account.
+          and views stay theirs. Once they join, run the import again and match them to themselves: everything moves to their account.
         </p>
         <Problem>{problem}</Problem>
         <ul className="mt-5 flex flex-col divide-y rounded-lg border">
@@ -289,7 +322,7 @@ export function ImportPage() {
   }
 
   if (stage.at === 'check') {
-    const { plan } = stage
+    const { result: plan } = stage
     const c = plan.counts
     const rows: [string, string, number][] = [
       ['new team', 'new teams', c.teams],
@@ -302,19 +335,20 @@ export function ImportPage() {
     return (
       <Panel
         step={3}
-        title="What would come over"
+        title="Ready to import"
         footer={
           <>
             <Button variant="outline" onClick={() => setStage({ at: 'people', data: stage.data })}>
               Back
             </Button>
-            <Button disabled>Import</Button>
+            <Button disabled={!allowed} onClick={() => void save(stage)}>
+              Import
+            </Button>
           </>
         }
       >
-        <p className="mb-5 text-sm text-muted-foreground">
-          Importing is switched off for now, while Sprawniej moves to its new home. This page shows what would come over, but nothing is saved yet.
-        </p>
+        <p className="mb-5 text-muted-foreground">This is what comes over from Linear. Nothing changes in Linear.</p>
+        {stage.plan.total === 0 && <p className="mb-5 text-sm text-muted-foreground">Everything is already here: nothing changed in Linear since the last import.</p>}
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {rows.map(([one, many, n]) => (
             <li key={many} className="rounded-lg border px-4 py-3">
@@ -356,7 +390,7 @@ export function ImportPage() {
             {plan.renumbered.length > 5 ? '…' : '.'}
           </p>
         )}
-        <p className="mt-5 text-sm text-muted-foreground">Images uploaded to Linear would stay as links to Linear.</p>
+        <p className="mt-5 text-sm text-muted-foreground">Images uploaded to Linear stay as links to Linear, so they open only for people signed in there.</p>
       </Panel>
     )
   }
@@ -369,28 +403,47 @@ export function ImportPage() {
           <div className="h-full bg-foreground transition-[width]" style={{ width: `${(100 * stage.saved) / Math.max(1, stage.total)}%` }} />
         </div>
         <p className="mt-2 text-sm text-muted-foreground tabular-nums">
-          Saved {stage.saved.toLocaleString()} of {stage.total.toLocaleString()} files
+          {stage.saved.toLocaleString()} of {stage.total.toLocaleString()} saved
         </p>
+      </Panel>
+    )
+  }
+
+  if (stage.at === 'failed') {
+    const { data } = stage
+    return (
+      <Panel
+        step={3}
+        title="The import stopped partway"
+        footer={
+          <>
+            <Button disabled={!!busy} onClick={() => run('Checking what’s here already…', () => prepare(data, stage.plan))}>
+              {busy ? <Loader2 className="animate-spin" /> : null} {busy ?? 'Try again'}
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/settings">Back to Settings</Link>
+            </Button>
+          </>
+        }
+      >
+        <Problem>{stage.message}</Problem>
+        <p className="mt-4 text-muted-foreground">Everything saved so far stays here. Try again to bring over the rest: nothing comes over twice.</p>
+        <Problem>{problem}</Problem>
       </Panel>
     )
   }
 
   if (stage.at === 'done') {
     return (
-      <Panel step={4} title={saveState === 'saved' ? 'All done' : 'Imported, still saving'}>
+      <Panel step={4} title="All done">
         <p className="flex items-center gap-2">
-          <CheckCircle2 className="size-5 text-status-review" /> {doneText(stage.result.counts)}
+          <CheckCircle2 className="size-5 text-status-review" /> {stage.nothing ? 'Everything was already here.' : doneText(stage.counts)}
         </p>
-        {saveState !== 'saved' && (
-          <p className="mt-3 text-sm text-muted-foreground">
-            It's all kept on this device and reaches GitHub by itself as soon as it can. Keep Sprawniej open until the sign at the top says Saved.
-          </p>
-        )}
         <div className="mt-6 flex flex-wrap gap-3">
           {stage.keys.map((k) => (
             <Button key={k} asChild variant="outline">
               <Link href={`/team/${k}/issues/all`}>
-                {ws.teams[k]?.emoji} {ws.teams[k]?.name ?? k}
+                {teams[k]?.emoji} {teams[k]?.name ?? k}
               </Link>
             </Button>
           ))}

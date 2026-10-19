@@ -46,9 +46,24 @@ export interface Delays {
   slept: number
   /** a deleted team or project: catch up this long after, for whatever of its many rows' messages didn't come */
   cascade: number
+  /**
+   * "catch up" messages (an import sends one per batch) wait until none came for `catchUpQuiet`, but no longer than
+   * `catchUpMax` after the first, so a long import doesn't make everyone read everything again per batch
+   */
+  catchUpQuiet: number
+  catchUpMax: number
 }
 
-export const DELAYS: Delays = { flush: 16, fetch: 50, askAgain: 30_000, retry: [2_000, 5_000, 15_000, 30_000], slept: 60_000, cascade: 3_000 }
+export const DELAYS: Delays = {
+  flush: 16,
+  fetch: 50,
+  askAgain: 30_000,
+  retry: [2_000, 5_000, 15_000, 30_000],
+  slept: 60_000,
+  cascade: 3_000,
+  catchUpQuiet: 2_000,
+  catchUpMax: 10_000,
+}
 
 /** what an open workspace needs from the writer (writes.ts) */
 export interface WritesHooks {
@@ -132,7 +147,14 @@ export class LiveWorkspace implements WriteTarget {
   /** the mark from which messages may have been missed (null: none missed) */
   private floor: string | null = null
   private archive: 'none' | 'loading' | 'done' = 'none'
+  /** read the archive again once the read under way is done (an import added to it meanwhile) */
+  private archiveAgain = false
   private archiveTries = 0
+  /** while above 0 (your import is saving), "catch up" messages only mark that one is due */
+  private holding = 0
+  private deferred = false
+  private debounceTimer: ReturnType<typeof setTimeout> | undefined
+  private debounceFirst: number | null = null
   private archiveTimer: ReturnType<typeof setTimeout> | undefined
   /** rows whose fetch failed: asked for again after the next catch-up */
   private refetch: Asked[] = []
@@ -250,6 +272,7 @@ export class LiveWorkspace implements WriteTarget {
     clearTimeout(this.retryTimer)
     clearTimeout(this.archiveTimer)
     clearTimeout(this.cascadeTimer)
+    clearTimeout(this.debounceTimer)
     this.fetcher.stop()
     this.unwatch?.()
     await this.channels?.close()
@@ -325,10 +348,52 @@ export class LiveWorkspace implements WriteTarget {
     if (r.workspaceGone) return this.goneAway('deleted')
     if (env.data.getState().members[this.me.person.login]?.removedAt) return this.goneAway('removed')
     if (r.fetch.length) this.fetcher.request(r.fetch)
-    if (r.catchUp) void this.catchUp()
+    if (r.catchUp) this.catchUpSoon()
   }
 
   // ---------- catching up ----------
+
+  /** a "catch up" message: soon, once they stop coming (or once your import is saved) */
+  private catchUpSoon() {
+    if (this.closed) return
+    if (this.holding > 0) {
+      this.deferred = true
+      return
+    }
+    const { catchUpQuiet, catchUpMax } = this.env.delays
+    const now = Date.now()
+    this.debounceFirst ??= now
+    clearTimeout(this.debounceTimer)
+    this.debounceTimer = setTimeout(
+      () => {
+        this.debounceTimer = undefined
+        this.debounceFirst = null
+        void this.catchUp()
+      },
+      Math.max(0, Math.min(catchUpQuiet, this.debounceFirst + catchUpMax - now)),
+    )
+  }
+
+  /** your import is saving: its own "catch up" messages wait (releaseCatchUp catches up once, at the end) */
+  holdCatchUp() {
+    this.holding++
+  }
+
+  /** the import is done (or stopped): catch up once, now */
+  async releaseCatchUp(): Promise<void> {
+    this.holding = Math.max(0, this.holding - 1)
+    if (this.holding > 0) return
+    this.deferred = false
+    clearTimeout(this.debounceTimer)
+    this.debounceTimer = undefined
+    this.debounceFirst = null
+    await this.catchUp()
+  }
+
+  /** a catch-up message came while held, and is still due (for tests) */
+  get catchUpDue(): boolean {
+    return this.deferred || this.debounceTimer !== undefined
+  }
 
   catchUp(): Promise<void> {
     if (this.closed || this.held) return Promise.resolve()
@@ -431,6 +496,7 @@ export class LiveWorkspace implements WriteTarget {
         this.apply(inputs)
         this.env.data.setState({ archiveLoaded: true })
         this.archive = 'done'
+        if (this.archiveAgain) this.reloadArchive()
       },
       (e: unknown) => {
         console.warn('Sprawniej couldn’t read the archive', e)
@@ -440,6 +506,20 @@ export class LiveWorkspace implements WriteTarget {
         this.archiveTimer = setTimeout(() => this.loadArchive(), retry[Math.min(this.archiveTries++, retry.length - 1)])
       },
     )
+  }
+
+  /**
+   * An import brought archived issues: an archive already read (or being read) is read again, since catching up
+   * after many changes reads only the open issues again. One not read yet is read in full when it's needed.
+   */
+  reloadArchive() {
+    if (this.closed) return
+    this.archiveAgain = false
+    if (this.archive === 'loading') this.archiveAgain = true
+    else if (this.archive === 'done') {
+      this.archive = 'none'
+      this.loadArchive()
+    }
   }
 
   /** how many archived issues a team has (deleting it says so); 0 when it can't be told */

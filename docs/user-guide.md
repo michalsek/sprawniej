@@ -250,11 +250,12 @@ themselves after a month, and unread ones after three.
 
 ## Moving over from Linear
 
-**Settings › Import from Linear** brings your teams, issues, comments, projects, labels and views over. You'll need a
-Linear personal API key (the first step shows where to make one). Pick the teams, check who's who, and press
-**Import**. Issue numbers stay the same (`ENG-123` is still `ENG-123`), and so do due dates and estimates. Issues
-finished long ago go straight to the archive. Views keep the filters that fit, and the import tells you which views
-lost some, so you can check them.
+**Settings › Import from Linear** brings your teams, issues, comments, projects, labels and views over. Only admins and
+owners can import. You'll need a Linear personal API key (the first step shows where to make one). Pick the teams,
+check who's who, and press **Import**. Issue numbers stay the same (`ENG-123` is still `ENG-123`), and so do due
+dates and estimates. Issues finished long ago go straight to the archive. Views keep the filters that fit, and the
+import tells you which views lost some, so you can check them. If the import stops partway (say, the connection
+dropped), what came over so far stays: press **Try again** to bring over the rest.
 
 People who aren't in Sprawniej yet come over too, marked "hasn't joined": their issues, comments and views stay
 theirs. To give them their work, link them to their GitHub account: right after you invite them, or later in

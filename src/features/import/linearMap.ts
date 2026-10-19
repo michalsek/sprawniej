@@ -10,10 +10,11 @@ import { generateNKeysBetween } from 'fractional-indexing'
 import { plainName as plain } from '@/data/relink'
 import { dueForArchive } from '@/data/select'
 import type { DataState } from '@/data/store'
-import { STATUSES, type Priority, type StatusId } from '@/model/status'
+import type { Priority } from '@/model/status'
 import { AUTO_ARCHIVE_MONTHS, isGuest, linearIdsOf, type Comment, type Issue, type Known, type Label, type Person, type Project, type Team, type View } from '@/model/schema'
 import { SUBSCRIBERS_READ, type LIssue, type LinearData, type LLabel, type LTeam, type LUser } from './linearApi'
 import { mapViewFilter, type FilterContext } from './linearFilters'
+import { mapStatus } from './linearStatus'
 
 // ---------- people ----------
 
@@ -86,20 +87,7 @@ export function guestLogins(users: LUser[], people: Record<string, Person>): Map
 
 // ---------- statuses, teams, emoji ----------
 
-const STATE_TYPES: Record<string, StatusId> = {
-  triage: 'backlog',
-  backlog: 'backlog',
-  unstarted: 'todo',
-  started: 'in_progress',
-  completed: 'done',
-  canceled: 'canceled',
-}
-
-/** by name first ("In Review"), then by Linear's kind of state */
-export function mapStatus(state: { name: string; type: string }): StatusId {
-  const name = plain(state.name.replace(/cancelled/i, 'canceled'))
-  return STATUSES.find((s) => plain(s.name) === name)?.id ?? STATE_TYPES[state.type] ?? 'backlog'
-}
+export { mapStatus }
 
 const PROJECT_STATES: Record<string, Project['status']> = {
   backlog: 'backlog',
@@ -136,9 +124,12 @@ export function freeKey(key: string, taken: Set<string>): string {
 
 // ---------- descriptions ----------
 
-/** links to Linear issues that came over become plain references (ENG-12), which open here */
-export function rewriteLinks(md: string, imported: Set<string>): string {
-  const ref = (r: string, whole: string) => (imported.has(r) ? r : whole)
+/**
+ * Links to Linear issues that came over become plain references, which open here. `refs` maps the Linear reference
+ * (ENG-12) to the one here, which differs when the issue got another number or its team another key (DES-1 → DSN-4).
+ */
+export function rewriteLinks(md: string, refs: ReadonlyMap<string, string>): string {
+  const ref = (r: string, whole: string) => refs.get(r) ?? whole
   return md
     .replace(/\[([^\]\n]*)\]\(https:\/\/linear\.app\/[^/\s)]+\/issue\/([A-Z][A-Z0-9]*-\d+)[^)\s]*\)/g, (whole, _text: string, r: string) => ref(r, whole))
     .replace(/<?https:\/\/linear\.app\/[^/\s)]+\/issue\/([A-Z][A-Z0-9]*-\d+)[^\s)>]*>?/g, (whole, r: string) => ref(r, whole))
@@ -164,11 +155,13 @@ export interface Existing {
   issues: Record<string, Issue>
   labels: Record<string, Label>
   projects: Record<string, Project>
-  /** by issue id, including the comments of archived issues that came from Linear */
+  /** by issue id, the comments of issues that aren't archived */
   comments: Record<string, Comment[]>
   views?: Record<string, View>
   /** archived issues that came from Linear, by Linear id: they stay archived */
   archivedByLinear: Record<string, { id: string; team: string; number: number }>
+  /** comments with a Linear id on archived issues, by Linear id: they stay as they are */
+  archivedComments: Record<string, { id: string; issue: string }>
   /**
    * every number each team (by key) has used: its issues', its archived issues' and deleted ones'. The only place the
    * import looks for numbers that are taken, so none is given out twice (`existingFrom` fills it)
@@ -176,36 +169,49 @@ export interface Existing {
   usedNumbers: Record<string, number[]>
 }
 
-/** the workspace as the import needs it, from what the app holds */
-export function existingFrom(ws: Pick<DataState, 'people' | 'teams' | 'issues' | 'archive' | 'labels' | 'projects' | 'views' | 'comments'>, me: string): Existing {
-  const archivedByLinear: Existing['archivedByLinear'] = {}
-  const usedNumbers: Record<string, number[]> = {}
-  const mark = (team: string, n: number) => (usedNumbers[team] ??= []).push(n)
-  const archived = Object.values(ws.archive).filter((a) => !ws.issues[a.id])
-  for (const a of archived) {
-    mark(a.team, a.number)
-    if (typeof a.linearId === 'string') archivedByLinear[a.linearId] = { id: a.id, team: a.team, number: a.number }
-  }
+/** what the import reads on top of what the app holds (src/backend/importRows.ts, readExisting) */
+export interface ImportExtras {
+  /** archived issues that came from Linear */
+  archived: { id: string; linearId: string; team: string; number: number }[]
+  /** comments with a Linear id on archived issues */
+  archivedComments: { id: string; issue: string; linearId: string }[]
+  /** every number each team (by key) ever used */
+  usedNumbers: Record<string, number[]>
+  /** this workspace's people from Linear who haven't joined, as they are now, with their Linear ids */
+  guests: Person[]
+}
+
+/** the workspace as the import needs it: what the app holds, and what was read for the import */
+export function existingFrom(
+  ws: Pick<DataState, 'people' | 'teams' | 'issues' | 'labels' | 'projects' | 'views' | 'comments'>,
+  more: ImportExtras,
+  me: string,
+): Existing {
+  const used = new Map<string, Set<number>>()
+  const mark = (team: string, n: number) => used.set(team, (used.get(team) ?? new Set()).add(n))
+  for (const [team, ns] of Object.entries(more.usedNumbers)) for (const n of ns) mark(team, n)
   for (const i of Object.values(ws.issues)) mark(i.team, i.number)
-  // for now every number up to lastNumber counts as used (lastNumber remembers deleted issues); the database keeps
-  // the numbers really used instead (docs/supabase-work.md, phase 6)
-  for (const t of Object.values(ws.teams)) for (let n = 1; n <= (t.lastNumber ?? 0); n++) mark(t.key, n)
+  // restored since it was read: it's an issue again, not an archived one
+  const archived = more.archived.filter((a) => !ws.issues[a.id])
   return {
     me,
-    people: ws.people,
+    people: { ...ws.people, ...Object.fromEntries(more.guests.map((g) => [g.login, g])) },
     teams: ws.teams,
     issues: ws.issues,
     labels: ws.labels,
     projects: ws.projects,
     views: ws.views,
-    comments: { ...ws.comments, ...Object.fromEntries(archived.map((a) => [a.id, a.comments])) },
-    archivedByLinear,
-    usedNumbers,
+    comments: ws.comments,
+    archivedByLinear: Object.fromEntries(archived.map((a) => [a.linearId, { id: a.id, team: a.team, number: a.number }])),
+    archivedComments: Object.fromEntries(more.archivedComments.filter((c) => !ws.issues[c.issue]).map((c) => [c.linearId, { id: c.id, issue: c.issue }])),
+    usedNumbers: Object.fromEntries([...used].map(([team, ns]) => [team, [...ns]])),
   }
 }
 
 /** someone who hasn't joined: made once, so their name and picture show */
 export type GuestRow = Person & { id: string; linearId: string }
+/** with an id: someone new; without: someone an earlier import made whose name or picture changed in Linear */
+export type GuestUpdate = Person & { id?: string; linearId: string }
 export type TeamRow = Team & { linearId: string }
 export type LabelRow = Label & { linearId: string }
 export type ProjectRow = Project & { linearId: string }
@@ -217,7 +223,7 @@ export type ViewRow = View & { linearId: string }
 
 /** what to write: only rows that are new or changed since an earlier import */
 export interface ImportResult {
-  guests: GuestRow[]
+  guests: GuestUpdate[]
   /** a guest's e-mail address, when Linear knows it, by guest id */
   guestEmails: { id: string; email: string }[]
   /** new teams */
@@ -237,6 +243,12 @@ export interface ImportResult {
   links: { guest: string; to: string }[]
   /** views an earlier import made that can't come over any more */
   removedViews: string[]
+  /** labels taken off an issue in Linear since an earlier import */
+  removedLabels: { issue: string; label: string }[]
+  /** teams taken off a project in Linear since an earlier import (team by key) */
+  removedProjectTeams: { project: string; team: string }[]
+  /** follower rows not needed any more: these people follow the issue anyway now */
+  removedFollowers: { issue: string; login: string }[]
   /**
    * what the import covers, changed or not. `archived`: of the issues, how many are in the archive (finished long ago,
    * or archived here since)
@@ -310,6 +322,9 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     views: [],
     links: [],
     removedViews: [],
+    removedLabels: [],
+    removedProjectTeams: [],
+    removedFollowers: [],
     counts,
     renumbered,
     inexactViews: [],
@@ -321,12 +336,22 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   const issues = linear.issues.filter((i) => teamIds.has(i.team.id))
   const keyOf = (t: { id: string }) => choices.teamKeys[t.id]
   const linearKey = new Map(linear.teams.map((t) => [t.id, t.key]))
+  /** the teams here this import brings things into */
+  const covered = new Set(teams.map(keyOf))
 
   // people who haven't joined: a row each, so their name and picture show (made once; later imports leave it)
   const people = ws.people ?? {}
   for (const u of linear.users) {
     const l = choices.people[u.id]
-    if (!l || !isGuest(l) || people[l] || out.guests.some((g) => g.login === l)) continue
+    if (!l || !isGuest(l) || out.guests.some((g) => g.login === l)) continue
+    const have = people[l]
+    if (have) {
+      // brought by an earlier import: their name and picture follow Linear's (not counted, nothing new)
+      const name = linearName(u)
+      const avatarUrl = u.avatarUrl ?? ''
+      if (linearIdsOf(have).includes(u.id) && (have.name !== name || have.avatarUrl !== avatarUrl)) out.guests.push({ ...have, name, avatarUrl, linearId: u.id })
+      continue
+    }
     const guest = { id: newGuestId(), login: l, githubId: 0, name: linearName(u), avatarUrl: u.avatarUrl ?? '', linearId: u.id } satisfies Known<GuestRow>
     out.guests.push(guest)
     if (u.email) out.guestEmails.push({ id: guest.id, email: u.email })
@@ -418,6 +443,11 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     if (!usedProjects.has(p.id) && !p.teams.nodes.some((t) => teamIds.has(t.id))) continue
     const old = projectsByLinear.get(p.id)
     const state = p.status?.type ?? p.state ?? 'planned'
+    // teams not picked this time stay on it; picked ones follow Linear (taken off there, taken off here)
+    const theirs = [...new Set(p.teams.nodes.filter((t) => teamIds.has(t.id)).map(keyOf))]
+    const kept = (old?.teams ?? []).filter((k) => !covered.has(k) || theirs.includes(k))
+    const projectTeams = [...new Set([...kept, ...theirs])]
+    if (old) for (const k of old.teams) if (!projectTeams.includes(k)) out.removedProjectTeams.push({ project: old.id, team: k })
     const project = {
       ...old,
       id: old?.id ?? newId(),
@@ -426,7 +456,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       description: p.description ?? '',
       status: PROJECT_STATES[state] ?? 'planned',
       lead: login(p.lead),
-      teams: [...new Set(p.teams.nodes.filter((t) => teamIds.has(t.id)).map(keyOf))],
+      teams: projectTeams,
       targetDate: p.targetDate,
       createdAt: old?.createdAt ?? p.createdAt,
       linearId: p.id,
@@ -441,7 +471,6 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   /** an issue archived here since an earlier import: it stays as it is */
   const archivedHere = (linearId: string) => (issuesByLinear.has(linearId) ? undefined : ws.archivedByLinear[linearId])
   const idOf = new Map(issues.map((i) => [i.id, issuesByLinear.get(i.id)?.id ?? archivedHere(i.id)?.id ?? newId()]))
-  const refs = new Set(issues.map((i) => `${keyOf(i.team)}-${i.number}`))
   const taken = new Map(Object.entries(ws.usedNumbers).map(([team, ns]) => [team, new Set(ns)]))
   const highest = new Map<string, number>()
   const raise = (team: string, n: number) => highest.set(team, Math.max(highest.get(team) ?? 0, n))
@@ -449,9 +478,14 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   // a moved number also goes past the ones new issues bring, so it never lands on a later one
   for (const li of issues) if (!issuesByLinear.has(li.id) && !archivedHere(li.id)) raise(keyOf(li.team), li.number)
   const plan: { li: LIssue; team: string; number: number }[] = []
+  /** Linear's reference (ENG-12) → the one here, for links in descriptions and comments */
+  const refs = new Map<string, string>()
+  const linearRef = (li: LIssue) => `${linearKey.get(li.team.id)}-${li.number}`
   for (const li of [...issues].sort((a, b) => a.number - b.number)) {
-    if (archivedHere(li.id)) {
+    const kept = archivedHere(li.id)
+    if (kept) {
       // archived here since: it stays as it is, and counts as in the archive
+      refs.set(linearRef(li), `${kept.team}-${kept.number}`)
       counts.issues++
       counts.archived++
       continue
@@ -468,6 +502,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       number = n
     }
     used.add(number)
+    refs.set(linearRef(li), `${team}-${number}`)
     plan.push({ li, team, number })
   }
   // order: issues here keep their place; new ones go on top of their team here, in Linear's order, like a new issue
@@ -496,7 +531,8 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   for (const { li, team, number } of plan) {
     const old = issuesByLinear.get(li.id)
     const assignee = login(li.assignee)
-    const createdBy = login(li.creator) ?? (old?.createdBy && relink(old.createdBy)) ?? ws.me
+    // who made it is kept from the first import (the links move it to someone's account): it's never changed after
+    const createdBy = old ? relink(old.createdBy) : (login(li.creator) ?? ws.me)
     const implicit = new Set([assignee, createdBy, ...(commenters.get(li.id) ?? [])])
     // Linear's subscribers, plus anyone who subscribed here since an earlier import
     const theirs = new Set((li.subscribers?.nodes ?? []).map((u) => login(u)).filter((l): l is string => !!l))
@@ -506,6 +542,17 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     const whole = !!li.subscribers && li.subscribers.nodes.length < SUBSCRIBERS_READ
     const left = whole ? [...implicit].filter((l): l is string => !!l && !theirs.has(l)) : []
     const unsubscribed = [...new Set([...(old?.unsubscribed ?? []).map(relink), ...left])].filter((l) => !theirs.has(l)).sort()
+    // labels still wanted keep their order here, new ones follow in Linear's order (the order they are added in)
+    const wanted = [...new Set(li.labels.nodes.map((l) => labelId.get(l.id)).filter((x): x is string => !!x))]
+    const labels = [...new Set([...(old?.labels ?? []).filter((l) => wanted.includes(l)), ...wanted])]
+    if (old) {
+      for (const l of old.labels) if (!labels.includes(l)) out.removedLabels.push({ issue: old.id, label: l })
+      const still = new Set([...subscribers, ...unsubscribed])
+      // what the links move isn't removed: the guest's rows go with them
+      for (const l of new Set([...(old.subscribers ?? []), ...(old.unsubscribed ?? [])])) {
+        if (!relinked.has(l) && !still.has(l)) out.removedFollowers.push({ issue: old.id, login: l })
+      }
+    }
     const fields = {
       ...old,
       id: idOf.get(li.id)!,
@@ -516,7 +563,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       status: mapStatus(li.state),
       priority: (li.priority >= 0 && li.priority <= 4 ? li.priority : 0) as Priority,
       assignee,
-      labels: [...new Set(li.labels.nodes.map((l) => labelId.get(l.id)).filter((x): x is string => !!x))],
+      labels,
       project: li.project ? (projectId.get(li.project.id) ?? null) : null,
       // a parent in a team not picked this time may have come over before
       parent: li.parent ? (idOf.get(li.parent.id) ?? issuesByLinear.get(li.parent.id)?.id ?? ws.archivedByLinear[li.parent.id]?.id ?? null) : null,
@@ -550,16 +597,19 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     const target = issue ?? kept
     if (!target) continue
     const old = commentsByLinear.get(c.id)
-    if (kept && old) continue
-    const author = login(c.user)
+    if (kept && (old || ws.archivedComments[c.id])) continue
+    const theirs = login(c.user)
+    // who wrote it is kept from the first import (the links move it to someone's account): it's never changed after
+    const author = old ? relink(old.author) : (theirs ?? ws.me)
     const body = rewriteLinks(c.body, refs).replace(/\s+$/, '')
     const comment = {
       ...old,
       id: old?.id ?? newId(),
       issue: target.id,
-      author: author ?? ws.me,
+      author,
       createdAt: c.createdAt,
-      body: author ? body : `*From Linear: ${c.user?.name ?? 'someone'}*\n\n${body}`,
+      // written here by someone else than who wrote it in Linear: it says who did
+      body: author === theirs ? body : `*From Linear: ${c.user?.name ?? 'someone'}*\n\n${body}`,
       linearId: c.id,
     } satisfies Known<CommentRow>
     counts.comments++
@@ -598,7 +648,8 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       name: v.name,
       emoji: emojiFor(v.icon, old?.emoji ?? '🔎'),
       description: v.description ?? '',
-      owner: (v.owner && choices.people[v.owner.id]) || (old && relink(old.owner)) || ws.me,
+      // kept from the first import (the links move it to someone's account): it's never changed after
+      owner: old ? relink(old.owner) : (v.owner && choices.people[v.owner.id]) || ws.me,
       team: v.team ? keyOf(v.team) : null,
       filters,
       // how it looks is chosen here (a later import keeps it)

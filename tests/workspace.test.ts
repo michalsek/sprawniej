@@ -16,7 +16,7 @@ const ME = 'p-ana'
 const ANA: Person = { login: 'ana', githubId: 0, name: 'Ana', avatarUrl: '' }
 const T = (s: number) => `2026-10-19T12:00:${String(s).padStart(2, '0')}.000000+00:00`
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-const DELAYS: Delays = { flush: 1, fetch: 1, askAgain: 10_000, retry: [5], slept: 60_000, cascade: 10 }
+const DELAYS: Delays = { flush: 1, fetch: 1, askAgain: 10_000, retry: [5], slept: 60_000, cascade: 10, catchUpQuiet: 5, catchUpMax: 20 }
 
 // failures are told with console.warn; the tests make them on purpose
 let warn: ReturnType<typeof spyOn>
@@ -209,23 +209,73 @@ describe('keeping up', () => {
     expect(s.env.status.getState().caughtUpAt).toBeNumber()
   })
 
-  test('catch-up messages that come together make one catch-up (and one more if more come meanwhile)', async () => {
-    const gate = deferred<void>()
-    let n = 0
-    const s = await opened({
-      changed: async () => {
-        n++
-        await gate.promise
-        return { inputs: [], full: [], gone: false }
-      },
-    })
+  test('catch-up messages that come together make one catch-up, a moment after the last', async () => {
+    const changed = mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false }))
+    const s = await opened({ changed })
+    s.env.delays = { ...DELAYS, catchUpQuiet: 40, catchUpMax: 1_000 }
     for (let k = 0; k < 5; k++) s.channels[0].on.message({ op: 'catch_up' })
+    await sleep(20)
+    for (let k = 0; k < 5; k++) s.channels[0].on.message({ op: 'catch_up', table: 'issues' })
+    await sleep(25)
+    // the second burst started the wait again
+    expect(changed).toHaveBeenCalledTimes(0)
+    await sleep(40)
+    expect(changed).toHaveBeenCalledTimes(1)
+  })
+
+  test('catch-up messages that keep coming still catch up, no later than a while after the first', async () => {
+    const changed = mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false }))
+    const s = await opened({ changed })
+    s.env.delays = { ...DELAYS, catchUpQuiet: 50, catchUpMax: 100 }
+    const started = Date.now()
+    const at: number[] = []
+    for (let k = 0; k < 6; k++) {
+      s.channels[0].on.message({ op: 'catch_up', table: 'issues' })
+      at.push(changed.mock.calls.length)
+      await sleep(30)
+    }
+    // one catch-up about 100 ms in, though a message came every 30 ms
+    expect(at[0]).toBe(0)
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(Date.now() - started).toBeGreaterThanOrEqual(150)
+    await sleep(80)
+    expect(changed).toHaveBeenCalledTimes(2)
+  })
+
+  test('while your import saves, its catch-up messages wait; when it is done it catches up once', async () => {
+    const changed = mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false }))
+    const s = await opened({ changed })
+    s.ws.holdCatchUp()
+    for (let k = 0; k < 5; k++) s.channels[0].on.message({ op: 'catch_up', table: 'issues' })
+    await sleep(40)
+    expect(changed).toHaveBeenCalledTimes(0)
+    expect(s.ws.catchUpDue).toBe(true)
+    await s.ws.releaseCatchUp()
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(s.ws.catchUpDue).toBe(false)
+    await sleep(40)
+    expect(changed).toHaveBeenCalledTimes(1)
+    // with nothing held back it still catches up once: what the import saved comes in
+    s.ws.holdCatchUp()
+    await s.ws.releaseCatchUp()
+    expect(changed).toHaveBeenCalledTimes(2)
+  })
+
+  test('an import that brought archived issues reads an archive already read again, and not one never read', async () => {
+    const archived = mock(async () => [] as Incoming[])
+    const s = await opened({ archived })
+    s.ws.reloadArchive()
     await sleep(5)
-    for (let k = 0; k < 5; k++) s.channels[0].on.message({ op: 'catch_up' })
+    expect(archived).toHaveBeenCalledTimes(0)
+    s.ws.loadArchive()
+    // still reading: once it's in, it's read once more
+    s.ws.reloadArchive()
     await sleep(5)
-    gate.resolve()
+    expect(archived).toHaveBeenCalledTimes(2)
+    s.ws.reloadArchive()
     await sleep(5)
-    expect(n).toBe(2)
+    expect(archived).toHaveBeenCalledTimes(3)
+    expect(s.env.data.getState().archiveLoaded).toBe(true)
   })
 
   test('a row asked for is asked once in a while; a failed ask is asked again after catching up', async () => {

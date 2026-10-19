@@ -6,7 +6,9 @@ import { toast } from 'sonner'
 import { create } from 'zustand'
 import { useData } from '@/data/store'
 import { useAuth } from './auth'
+import type { Existing, ImportExtras, ImportResult } from '@/features/import/linearMap'
 import { getClient } from './client'
+import { ImportProblem, planImport, readExisting, runImport, type ImportPlan } from './importRows'
 import { watchConnection } from './connection'
 import { Channels, type ChannelStatus, type Topic } from './live'
 import { Loader } from './load'
@@ -69,6 +71,17 @@ const life: Lifecycle = new Lifecycle(
 
 const CLOSED_CHANNELS: Record<Topic, ChannelStatus> = { ws: 'CLOSED', me: 'CLOSED' }
 
+const NOT_OPEN = 'Open the workspace to import into first.'
+let importing = false
+
+/** the open workspace and the connection, for the import */
+function openForImport(): { ws: LiveWorkspace; db: NonNullable<ReturnType<typeof getClient>> } {
+  const ws = life.current
+  const db = getClient()
+  if (!ws || ws.closed || !db || useBackend.getState().phase !== 'open') throw new ImportProblem(NOT_OPEN)
+  return { ws, db }
+}
+
 export const backend = {
   open: (workspaceId: string, me: MyProfile): Promise<void> => life.open(workspaceId, me),
   /** closing: what's waiting gets a moment to be sent first */
@@ -83,6 +96,38 @@ export const backend = {
   pending,
   /** how many archived issues a team has */
   countArchived: (teamKey: string): Promise<number> => life.current?.countArchived(teamKey) ?? Promise.resolve(0),
+  /** what the Linear import needs to know that the store doesn't hold (importRows.ts) */
+  readExisting: (): Promise<ImportExtras> => {
+    const { ws, db } = openForImport()
+    return readExisting(db, ws.workspaceId, registry)
+  },
+  /** the steps an import takes (pure, apart from the new teams' ids); `carry`: an earlier try that stopped partway */
+  planImport: (r: ImportResult, existing: Existing, carry?: ImportPlan): ImportPlan => {
+    const { ws } = openForImport()
+    return planImport(r, existing, { workspaceId: ws.workspaceId, registry, newTeamId: () => crypto.randomUUID(), carry })
+  },
+  /**
+   * Saves an import. Your own changes are sent first; catching up waits until the end and happens once then (an
+   * import sends one "catch up" per batch), and an archive already read is read again. Returns how many rows changed.
+   */
+  importRows: async (plan: ImportPlan, progress: (saved: number, total: number) => void): Promise<number> => {
+    if (importing) throw new ImportProblem('An import is already running.')
+    const { ws, db } = openForImport()
+    if (plan.workspaceId !== ws.workspaceId) throw new ImportProblem(NOT_OPEN)
+    importing = true
+    try {
+      await flush()
+      ws.holdCatchUp()
+      try {
+        return await runImport(db, ws.workspaceId, plan, progress)
+      } finally {
+        await ws.releaseCatchUp()
+        if (plan.archived > 0) ws.reloadArchive()
+      }
+    } finally {
+      importing = false
+    }
+  },
   /** for scripted checks */
   debug: () => {
     const ws = life.current
