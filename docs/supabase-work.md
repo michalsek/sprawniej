@@ -34,13 +34,33 @@ Status: `todo`, `doing`, `done`.
 | 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | done | 70b978b, be04249 and a last fix; QA and code review passed |
 | 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | done | 2b367bd + fix round; QA probes re-run |
 | 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | done | 537747e + fix round; 23/23 browser scenarios, 59/59 DB tests |
-| 5 | Saving: `writes.ts` and `actions.ts` on rows | doing | |
+| 5 | Saving: `writes.ts` and `actions.ts` on rows | doing | built; 22/22 browser cases, 71/71 DB tests; QA and review running |
 | 6 | Linear import end to end (`import_rows`) | todo | after 2 and 5; parallel with 7, 8, 9 |
 | 7 | History and pictures | todo | after 5 |
 | 8 | Team features: invites, members and roles, people from Linear, ways to sign in | todo | after 5 |
 | 9 | Read cache and catch-up from IndexedDB | todo | after 5 |
 | 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | todo | after 6 to 9 |
 | 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | todo | last |
+
+## Two people at once (checked in phase 5, browser)
+
+| What two people do at the same time | What happens now |
+| --- | --- |
+| Comment on the same issue | Both comments appear |
+| Edit different fields of one issue | Both stay |
+| Change the same field | The later save wins |
+| Add or remove labels on one issue | Both apply (one row each) |
+| Edit a description at the same moment | Merged in the editor while you type; if both saves cross, the later whole text wins |
+| Edit one view | Field by field; the later save wins for the whole filters |
+| Edit one project, team, label or the workspace name | Field by field; the same field: later save wins |
+| Join or leave the same team | Both kept (one row each) |
+| Create issues in one team | Different numbers; each person's page follows their own issue |
+| One deletes an issue, the other edits it | The delete wins; the other is told it was deleted meanwhile |
+| One moves an issue to another team, the other edits it | One issue, in the new team, with the edit |
+| Mark inbox notes as read on two devices | Both stick |
+| One archives an issue, the other edits it | The edit lands; the issue stays archived |
+| Delete, archive or move issues away from one team | Numbers are never given out twice |
+| Drag issues around | Only the moved issue changes; the same issue: later drop wins |
 
 ## Findings
 
@@ -76,7 +96,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E2 | roadmap planner | `package.json`: the `cn` package is unused (`src/lib/utils.ts` defines its own `cn`) | open | |
 | E3 | roadmap planner | `ImportPage.tsx:78` subscribes to the whole store (`useData((s) => s)`), redrawing the wizard on every change | open | |
 | E4 | roadmap planner | `ImportPage.tsx:304-306` a failed import still shows "done" with only a console warning | open | |
-| E5 | roadmap planner | `actions.ts` `createLabel` accepts a duplicate name while `updateLabel` refuses it | open | |
+| E5 | roadmap planner | `actions.ts` `createLabel` accepts a duplicate name while `updateLabel` refuses it | fixed | phase 5: returns the existing same-name label |
 | E6 | roadmap planner | `Markdown.tsx:24` runs `linkReferences`/`findByRef` (a scan of all issues per reference) in a store selector on every change | open | |
 | E7 | roadmap planner | `linearMap.ts:74` the accent-stripping regex uses invisible literal combining characters instead of `\u0300-\u036f` | fixed | 70b978b (amendment A4) |
 | E8 | roadmap planner | `joinLink.ts:17` + `config.ts:14`: no join link at all on localhost, so stage A can't make invite links | open | |
@@ -94,8 +114,8 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E20 | phase 2 planner | `tests/linearImport.test.ts:123,274,283,295,302` invalid `now` values silently switch the archive rule off | fixed | 70b978b (amendment A5) |
 | E21 | phase 1 planner | `vite.config.ts:20` the app's install description still says the workspace is kept in a GitHub repo | open | phase 10 |
 | E22 | phase 1 planner | `src/data/select.ts:192` `isUnread` compares ISO strings, so database times must come in `toISOString` form (P19) | fixed | 2b367bd: `iso()` on every model time |
-| E23 | phase 1 planner | `actions.ts` `createIssue`: an issue created as Done gets `completedAt: null`; the new trigger sets it (small behaviour change) | open | phase 5 |
-| E24 | phase 1 planner | `actions.ts` `toldRecently` moves to the database (`check_note` trigger); delete it | open | phase 5 |
+| E23 | phase 1 planner | `actions.ts` `createIssue`: an issue created as Done gets `completedAt: null`; the new trigger sets it (small behaviour change) | fixed | phase 5 |
+| E24 | phase 1 planner | `actions.ts` `toldRecently` moves to the database (`check_note` trigger); delete it | fixed | phase 5 (the `check_note` trigger) |
 | E25 | phase 1 planner | `.github/workflows/pages.yml` runs `bun test`; safe only while `tests/db` stays gated on `SPRAWNIEJ_DB_TESTS` | open | document in supabase-setup.md |
 | E26 | phase 1 planner | Labels added right after an issue is created will write history rows (today none); history folding or one-call create should hide them | open | phase 7 |
 | E27 | phase 1 planner | Someone with a fresh profile who later links GitHub should have their old imported profile merged into theirs (needs a cross-workspace move) | open | phase 8 |
@@ -125,7 +145,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E51 | phase 2 implementer | `monthsBefore` now uses UTC; the nightly cut-off moves by a few hours at most | won't do | a few hours either way is harmless, and UTC matches the database job |
 | E52 | phase 2 QA re-check | Two teams here swapping their Linear teams emitted two non-null links, colliding on the unique Linear id | fixed | phase 2 last fix (release first) |
 | E53 | phase 2 QA re-check | An invalid sort key in a team made the import wizard's Continue button silently do nothing | fixed | phase 2 last fix (error shown on the people step) |
-| E54 | phase 1 implementer | Inbox notes must be inserted without asking for the rows back (`.select()` fails: the sender can't read others' notes) | open | phase 5 |
+| E54 | phase 1 implementer | Inbox notes must be inserted without asking for the rows back (`.select()` fails: the sender can't read others' notes) | fixed | phase 5 (notes sent without `.select()`) |
 | E55 | phase 1 implementer | The realtime sign-in token must be set before joining a private channel, or the join is refused | open | phase 4 |
 | E56 | phase 1 implementer | `db reset --linked` also deletes sign-in accounts: fine in development, a hazard anywhere else | open | phase 11 runbook |
 | E57 | phase 1 implementer | Deletion notes of a deleted workspace stay until the 45-day job | won't do | harmless, nobody can read them, the job removes them |
@@ -158,7 +178,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E84 | phase 1 review | `src/data/store.ts:61` issue references match `[A-Z][A-Z0-9]*`, looser than team keys | open |  |
 | E85 | phase 4 planner | Sign-out leaves other `sprawniej:` keys and comment drafts on a shared computer | fixed | phase 4 fix round |
 | E86 | phase 4 planner | `session.toured` is never read (the tour uses its own key) | fixed | phase 4 fix round |
-| E87 | phase 4 planner | `Crash.tsx:37` and docs/design.md promise changes are kept on this device | open | phase 5 / 10 |
+| E87 | phase 4 planner | `Crash.tsx:37` and docs/design.md promise changes are kept on this device | fixed | phase 5 (Crash, chip tips, user guide) |
 | E88 | phase 4 planner | `Step.tsx:33` `Problem` uses a raw red instead of a theme colour | open |  |
 | E89 | phase 4 planner | `Tour.tsx:28-33` queries the page on every animation frame while a tip is open | open |  |
 | E90 | phase 4 planner | `updates.ts:50-52` adds an interval and listeners on every registration and never removes them | open |  |
@@ -187,9 +207,9 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E113 | phase 4 implementer | After a workspace goes away while open, the chip keeps saying Saved behind the dialog | fixed | phase 4 fix round |
 | E114 | phase 5 planner | Settings: "Your GitHub profile stays as it is" / "Use your GitHub name" mean nothing now | open | phase 8 |
 | E115 | phase 5 planner | TeamMenu offers "Delete team" and Settings an editable workspace name to members who can't | open | phase 8 |
-| E116 | phase 5 planner | `Editor.tsx:26` imports `mergeText` from `src/sync/merge.ts` (deleted in phase 10) | open | phase 5 |
+| E116 | phase 5 planner | `Editor.tsx:26` imports `mergeText` from `src/sync/merge.ts` (deleted in phase 10) | fixed | phase 5 (`src/editor/mergeText.ts`) |
 | E117 | phase 5 planner | `last_number` is never broadcast, so `team.lastNumber` goes stale (number guesses corrected by the saved row) | won't do | the saved row corrects the number; broadcasting every counter change is noise |
-| E118 | phase 5 planner | Switching workspace has no "not saved yet" warning like signing out | open | phase 5 |
+| E118 | phase 5 planner | Switching workspace has no "not saved yet" warning like signing out | fixed | phase 5 (`useSwitchWorkspace` asks) |
 | E119 | phase 5 planner | docs/architecture.md and docs/design.md still describe file merging and changes kept on the device | open | phase 10 |
 | E120 | phase 6 planner | Views can't change `team_id` through `import_rows` | won't do | a Linear view moving teams is rare; recreate it by hand |
 | E121 | phase 6 planner | `loadTable` reloads only active issues, so a big catch-up misses archived rows | open | phase 9 (catch-up pages every changed row) |
@@ -212,6 +232,10 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E138 | phase 4 QA | An issue page stays blank if loading the archive fails once | fixed | phase 4 fix round |
 | E139 | phase 4 QA | Sidebar "Your GitHub profile" links to github.com/<handle>, but handles are free now | fixed | phase 4 fix round |
 | E140 | phase 4 QA | `cleanup-tests.sql` wipes every dbtest workspace, also another run's in progress | won't do | test runs happen one at a time; documented in the briefs |
+| E141 | phase 5 implementer | supabase-js writes had no timeout: a dead connection hung saving for good | fixed | phase 5 (`send.ts`, 30 s) |
+| E142 | phase 5 implementer | PostgREST answers P0002 with HTTP 500, so retrying by status alone would retry a missing row forever | fixed | phase 5 (`problems.ts` reads the code first) |
+| E143 | phase 5 implementer | `SetupWorkspace.tsx:29` dead GitHub-era screen ignores `startWorkspace`'s promise | open | phase 10 |
+| E144 | phase 5 implementer | `select.ts:214` `isUnread` still checks `read.includes` though `read` is always empty | open | phase 10 |
 
 ## Waiting on the user
 

@@ -23,7 +23,7 @@ import { References } from './references'
 import { LANGUAGES } from './languages'
 import { tidyMarkdown } from './tidy'
 import { onBeforeHide } from '@/lib/beforeHide'
-import { mergeText } from '@/sync/merge'
+import { mergeText } from './mergeText'
 
 const lowlight = createLowlight(LANGUAGES)
 

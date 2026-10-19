@@ -2,10 +2,11 @@
  * ⋯ next to a team in the sidebar: edit its emoji and name (they save as you change them), leave it, or delete it.
  * Deleting takes the team's issues with it, so it says what goes and asks for the team's name first.
  */
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocation } from 'wouter'
 import { LogOut, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { backend } from '@/backend'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { InlineText } from '@/components/InlineText'
@@ -22,6 +23,16 @@ export function TeamMenu({ teamKey, className }: { teamKey: string; className?: 
   const [, navigate] = useLocation()
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  // archived issues may not be read yet: the database counts them
+  const [archived, setArchived] = useState<number | null>(null)
+  useEffect(() => {
+    if (!deleting) return
+    let stop = false
+    void backend.countArchived(teamKey).then((n) => !stop && setArchived(n))
+    return () => {
+      stop = true
+    }
+  }, [deleting, teamKey])
   if (!team) return null
 
   const leave = () => {
@@ -29,11 +40,12 @@ export function TeamMenu({ teamKey, className }: { teamKey: string; className?: 
     toast(`You left ${team.emoji} ${team.name}`, { description: 'Join again any time with + next to Your teams.' })
   }
   const contents = deleting ? teamContents(team.key) : null
+  const archivedCount = Math.max(archived ?? 0, contents?.archived ?? 0)
   // only what there is: "3 issues and 2 comments", not "0 views"
   const goes = contents
     ? [
         contents.issues && count(contents.issues, 'issue', 'issues'),
-        contents.archived && count(contents.archived, 'archived issue', 'archived issues'),
+        archivedCount && count(archivedCount, 'archived issue', 'archived issues'),
         contents.comments && count(contents.comments, 'comment', 'comments'),
         contents.views && count(contents.views, 'view', 'views'),
       ].filter((x): x is string => !!x)
@@ -107,7 +119,8 @@ export function TeamMenu({ teamKey, className }: { teamKey: string; className?: 
         typeToConfirm={team.name}
         onConfirm={() => {
           const name = `${team.emoji} ${team.name}`
-          deleteTeam(team.key)
+          // only admins and owners may: anyone else is told so
+          if (!deleteTeam(team.key)) return
           navigate('/', { replace: true })
           toast(`Deleted ${name}`)
         }}

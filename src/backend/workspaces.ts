@@ -1,6 +1,6 @@
 /** The workspaces you are in, and making a new one. */
 import type { TeamDraft } from '@/model/teamDraft'
-import { requireClient } from './client'
+import { requireClient, type Db } from './client'
 
 export interface WorkspaceInfo {
   id: string
@@ -15,9 +15,9 @@ export async function myWorkspaces(): Promise<WorkspaceInfo[]> {
   return data.map((w) => ({ id: w.id, name: w.name, createdAt: w.created_at }))
 }
 
-/** a new workspace with you as its owner and its first team; returns its id */
-export async function createWorkspace(name: string, team: TeamDraft): Promise<string> {
-  const { data, error } = await requireClient().rpc('create_workspace', {
+/** a new workspace with you as its owner and its first team; returns its id (`db`: the database tests' own) */
+export async function createWorkspace(name: string, team: TeamDraft, db: Db = requireClient()): Promise<string> {
+  const { data, error } = await db.rpc('create_workspace', {
     p_name: name.trim(),
     p_team_key: team.key,
     p_team_name: team.name.trim(),

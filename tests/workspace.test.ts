@@ -7,7 +7,7 @@ import { sinceMark, type Reader } from '@/backend/load'
 import { Registry } from '@/backend/registry'
 import type { SaveStatus } from '@/backend/status'
 import type { Message } from '@/backend/tables'
-import { Lifecycle, LiveWorkspace, type BackendState, type Delays, type WorkspaceEnv } from '@/backend/workspace'
+import { Lifecycle, LiveWorkspace, NO_WRITES, type BackendState, type Delays, type WorkspaceEnv, type WritesHooks } from '@/backend/workspace'
 import { EMPTY, type DataState } from '@/data/store'
 import type { Person } from '@/model/schema'
 
@@ -16,7 +16,7 @@ const ME = 'p-ana'
 const ANA: Person = { login: 'ana', githubId: 0, name: 'Ana', avatarUrl: '' }
 const T = (s: number) => `2026-10-19T12:00:${String(s).padStart(2, '0')}.000000+00:00`
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
-const DELAYS: Delays = { flush: 1, fetch: 1, askAgain: 10_000, retry: [5], slept: 60_000 }
+const DELAYS: Delays = { flush: 1, fetch: 1, askAgain: 10_000, retry: [5], slept: 60_000, cascade: 10 }
 
 // failures are told with console.warn; the tests make them on purpose
 let warn: ReturnType<typeof spyOn>
@@ -77,7 +77,7 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function setup(reader: Partial<Reader> = {}, joined: Promise<'up' | 'slow' | 'denied'> = Promise.resolve('up')) {
+function setup(reader: Partial<Reader> = {}, joined: Promise<'up' | 'slow' | 'denied'> = Promise.resolve('up'), writes: WritesHooks = NO_WRITES) {
   const channels: FakeChannels[] = []
   let events: ConnectionEvents | undefined
   const r: Reader = {
@@ -88,6 +88,7 @@ function setup(reader: Partial<Reader> = {}, joined: Promise<'up' | 'slow' | 'de
     byKeys: mock(async () => [] as Incoming[]),
     partsOf: async () => [],
     exists: async () => true,
+    countArchived: async () => 0,
     ...reader,
   }
   const env: WorkspaceEnv = {
@@ -109,6 +110,7 @@ function setup(reader: Partial<Reader> = {}, joined: Promise<'up' | 'slow' | 'de
     },
     reopen: () => {},
     delays: DELAYS,
+    writes,
   }
   const ws = new LiveWorkspace(env, WS, { id: ME, person: ANA })
   return { ws, env, reader: r, channels, events: () => events }
@@ -233,6 +235,8 @@ describe('keeping up', () => {
       return [] as Incoming[]
     })
     const s = await opened({ byKeys })
+    // long enough that the try again can't come within the first look below
+    s.env.delays = { ...DELAYS, retry: [25] }
     // an update for an issue we don't have: it is asked for
     s.channels[0].on.message(update('i-9', 'Unknown', 9))
     s.channels[0].on.message(update('i-9', 'Unknown', 9))
@@ -282,5 +286,74 @@ describe('one workspace at a time', () => {
     await life.open(WS, me)
     await sleep(5)
     expect(made[2].env.backend.getState().phase).toBe('open')
+  })
+})
+
+describe('the writer and the open workspace', () => {
+  /** writer hooks that write down what was asked of them */
+  function recording(status = { pending: 0, waiting: false }) {
+    const calls: string[] = []
+    const hooks: WritesHooks = {
+      attach: (t) => calls.push(`attach ${t instanceof LiveWorkspace ? t.workspaceId : '?'}`),
+      detach: () => calls.push('detach'),
+      finish: async (ms) => {
+        calls.push(`finish ${ms}`)
+      },
+      stop: () => calls.push('stop'),
+      status: () => status,
+    }
+    return { calls, hooks, status }
+  }
+
+  test('attached once open; the chip counts what is waiting', async () => {
+    const r = recording({ pending: 2, waiting: false })
+    const s = setup({}, Promise.resolve('up'), r.hooks)
+    await s.ws.open()
+    expect(r.calls).toEqual([`attach ${WS}`])
+    expect(s.env.status.getState()).toMatchObject({ state: 'saving', pending: 2, waiting: false })
+    r.status.waiting = true
+    s.ws.refresh()
+    expect(s.env.status.getState().state).toBe('error')
+  })
+
+  test('read again from the start: detached and attached to the new copy; closing sends what waits, then stops', async () => {
+    const r = recording()
+    const made: ReturnType<typeof setup>[] = []
+    const life = new Lifecycle(
+      () => {
+        const s = setup({}, Promise.resolve('up'), r.hooks)
+        made.push(s)
+        return s.ws
+      },
+      createStore<BackendState>()(() => ({ phase: 'closed' })),
+      new Registry(),
+      r.hooks,
+    )
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    life.reopen(made[0].ws)
+    await sleep(5)
+    expect(made).toHaveLength(2)
+    expect(r.calls).toEqual([`attach ${WS}`, 'detach', `attach ${WS}`])
+    await life.close()
+    expect(r.calls.slice(3)).toEqual(['finish 3000'])
+  })
+
+  test('the workspace going away stops the writer at once', async () => {
+    const r = recording()
+    const s = setup({}, Promise.resolve('up'), r.hooks)
+    await s.ws.open()
+    s.channels[0].on.message({ table: 'workspaces', op: 'DELETE', row: { id: WS } })
+    await sleep(5)
+    expect(r.calls).toEqual([`attach ${WS}`, 'stop'])
+  })
+
+  test('a deleted team catches up a moment later, for the messages its many rows may have missed', async () => {
+    const changed = mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false }))
+    const s = setup({ changed })
+    await s.ws.open()
+    s.channels[0].on.message({ table: 'teams', op: 'DELETE', row: { id: 't-eng' } })
+    await sleep(30)
+    expect(changed).toHaveBeenCalledTimes(1)
   })
 })

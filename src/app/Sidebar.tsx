@@ -5,13 +5,13 @@ import { SquarePen, ChevronDown, ChevronsUpDown, CircleHelp, CircleUser, Inbox, 
 import { useShallow } from 'zustand/react/shallow'
 import { Logo } from '@/components/Logo'
 import { PersonAvatar } from '@/components/Avatar'
+import { useSwitchWorkspace } from '@/components/SignOut'
 import { isUnread } from '@/data/select'
 import { useData } from '@/data/store'
 import { TeamMenu } from '@/features/teams/TeamMenu'
 import { TeamsDialog } from '@/features/teams/TeamsDialog'
 import { openComposer } from '@/features/issues/composer'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
-import { switchWorkspace } from '@/app/signOut'
 import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 
@@ -81,50 +81,54 @@ function Me() {
   // your people/ file: it has the name you go by here (it may differ from GitHub's)
   const me = useData((s) => (s.me ? (s.people[s.me.login] ?? s.me) : null))
   const workspace = useData((s) => s.workspace)
+  const { switchWorkspace, dialog } = useSwitchWorkspace()
   if (!me) return null
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg p-2 text-left outline-none hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50">
-        <PersonAvatar person={me} className="size-10 text-sm" />
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-[15px] font-semibold">{me.name}</span>
-          <span className="block truncate text-[13px] text-muted-foreground">@{me.login}</span>
-        </span>
-        <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
-      </DropdownMenuTrigger>
-      <DropdownMenuContent side="top" align="start" className="w-60">
-        <div className="px-2 py-1.5 text-xs text-muted-foreground">Workspace: {workspace?.name}</div>
-        <DropdownMenuItem asChild>
-          <Link href="/settings">
-            <Settings /> Settings and people
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/help">
-            <CircleHelp /> Help
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/whats-new">
-            <Sparkles /> What’s new
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => void switchWorkspace()}>
-          <Repeat /> Switch workspace
-        </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <Link href="/settings">
-            <CircleUser /> Your account
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem asChild>
-          <Link href="/settings">
-            <LogOut /> Sign out…
-          </Link>
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg p-2 text-left outline-none hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50">
+          <PersonAvatar person={me} className="size-10 text-sm" />
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[15px] font-semibold">{me.name}</span>
+            <span className="block truncate text-[13px] text-muted-foreground">@{me.login}</span>
+          </span>
+          <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="start" className="w-60">
+          <div className="px-2 py-1.5 text-xs text-muted-foreground">Workspace: {workspace?.name}</div>
+          <DropdownMenuItem asChild>
+            <Link href="/settings">
+              <Settings /> Settings and people
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/help">
+              <CircleHelp /> Help
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/whats-new">
+              <Sparkles /> What’s new
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={switchWorkspace}>
+            <Repeat /> Switch workspace
+          </DropdownMenuItem>
+          <DropdownMenuItem asChild>
+            <Link href="/settings">
+              <CircleUser /> Your account
+            </Link>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem asChild>
+            <Link href="/settings">
+              <LogOut /> Sign out…
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {dialog}
+    </>
   )
 }
 

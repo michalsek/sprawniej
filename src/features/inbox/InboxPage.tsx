@@ -1,6 +1,6 @@
 /**
  * Things that happened to you: assigned, mentioned, a comment or a status change on an issue you follow. Opening a note (or
- * its issue) marks it read. Old notes tidy themselves away (actions.tidyInbox).
+ * its issue) marks it read. Old notes tidy themselves away (the database's nightly job).
  */
 import { useEffect } from 'react'
 import { useLocation } from 'wouter'

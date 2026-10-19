@@ -5,7 +5,7 @@
  */
 const WORDED = new Set(['SP001', 'SP002', 'SP003', 'SP010', '42501', '22023', '23505', '23503', '23514', 'P0002'])
 /** the database's own wording and inner names (private.wiring, table names), never shown */
-const TECHNICAL = /violates|permission denied|constraint|relation|column|syntax|function|row-level|private\.|public\.|wiring|\btable\b|jsonb?\b|uuid/i
+export const TECHNICAL = /violates|permission denied|constraint|relation|column|syntax|function|row-level|private\.|public\.|wiring|\btable\b|jsonb?\b|uuid/i
 
 /** the one wording for "no connection" */
 export const UNREACHABLE = "Can't reach Sprawniej. Check your internet connection and try again."

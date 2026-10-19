@@ -1,24 +1,21 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
-import { createComment, createIssue, deleteComment, setFollowers, subscribe, deleteInboxItems, markAllRead, markRead, tidyInbox, updateComment, updateIssue, INBOX_KEEP } from '@/data/actions'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { stopWrites } from '@/backend/writes'
+import { MESSAGES } from '@/backend/writes/problems'
+import { createComment, createIssue, deleteComment, setFollowers, subscribe, deleteInboxItems, markAllRead, markRead, updateComment, updateIssue } from '@/data/actions'
 import { linkReferences, mentionedLogins, newMentions } from '@/data/mentions'
 import { followLists, followers, issueNotes } from '@/data/notify'
-import { applyFiles, parsedFiles, resetProjection } from '@/data/project'
-import { jsonToFile, paths } from '@/data/files'
 import { isUnread } from '@/data/select'
-import { EMPTY, useData } from '@/data/store'
-import type { InboxItem, Issue, Person } from '@/model/schema'
+import { useData } from '@/data/store'
+import type { Issue, Person } from '@/model/schema'
+import { person, profileIdOf, seed, WS, type World } from './support/fakeBackend'
 
-const person = (login: string): Person => ({ login, githubId: login.length, name: login.toUpperCase(), avatarUrl: '' })
 const people = { ana: person('ana'), bob: person('bob'), cy: person('cy') }
 
-/** every inbox note in the workspace, as [recipient, item] */
-const notes = () => [...parsedFiles()].flatMap(([, p]) => (p.kind === 'inbox' ? [[p.login, p.value] as const] : []))
-const notesFor = (login: string) => notes().filter(([to]) => to === login).map(([, n]) => n)
-
+let w: World
 beforeEach(() => {
-  resetProjection()
-  useData.setState({ ...EMPTY, me: people.ana, people })
+  w = seed({ me: 'ana', people: ['bob', 'cy'], teams: [{ key: 'ENG', name: 'Engineering', members: ['ana'] }] })
 })
+afterEach(() => stopWrites())
 
 describe('people from Linear who haven’t joined', () => {
   test('follow and can be assigned, but get no inbox notes', () => {
@@ -70,101 +67,106 @@ describe('notes', () => {
 })
 
 describe('inbox', () => {
-  test('a comment tells the creator, the assignee and earlier commenters, and mentions come first', () => {
+  const types = (login: string) => w.db.notesFor(login).map((n) => n.type)
+
+  test('a comment tells the creator, the assignee and earlier commenters, and mentions come first', async () => {
     const i = createIssue({ team: 'ENG', title: 'Bug', assignee: 'bob' })
-    expect(notesFor('bob').map((n) => n.type)).toEqual(['assigned'])
+    await w.settle()
+    expect(types('bob')).toEqual(['assigned'])
     useData.setState({ me: people.cy })
     createComment(i.id, 'Seen it, @bob')
+    await w.settle()
     useData.setState({ me: people.ana })
     createComment(i.id, 'Thanks')
-    expect(notesFor('cy').map((n) => n.type)).toEqual(['commented'])
-    expect(notesFor('bob').map((n) => n.type).sort()).toEqual(['assigned', 'commented', 'mentioned'])
-    expect(notesFor('ana').map((n) => n.type)).toEqual(['commented']) // cy's comment on ana's issue
+    await w.settle()
+    expect(types('cy')).toEqual(['commented'])
+    expect(types('bob').sort()).toEqual(['assigned', 'commented', 'mentioned'])
+    expect(types('ana')).toEqual(['commented']) // cy's comment on ana's issue
   })
 
-  test('unsubscribing stops comment and status notes; subscribing starts them', () => {
+  test('unsubscribing stops comment and status notes; subscribing starts them', async () => {
     const i = createIssue({ team: 'ENG', title: 'Bug', assignee: 'bob' })
+    await w.settle()
     useData.setState({ me: people.bob })
     subscribe(i.id, false)
+    await w.settle()
     expect(useData.getState().issues[i.id].unsubscribed).toEqual(['bob'])
     useData.setState({ me: people.cy })
     subscribe(i.id, true)
+    await w.settle()
     useData.setState({ me: people.ana })
     createComment(i.id, 'Any news?')
     updateIssue(i.id, { status: 'in_progress' })
-    expect(notesFor('bob').map((n) => n.type)).toEqual(['assigned'])
-    expect(notesFor('cy').map((n) => n.type).sort()).toEqual(['commented', 'status'])
-    // the same status again within minutes: one note
-    updateIssue(i.id, { status: 'todo' })
-    updateIssue(i.id, { status: 'in_progress' })
-    expect(notesFor('cy').filter((n) => n.type === 'status').map((n) => n.status)).toEqual(['in_progress', 'todo'])
+    await w.settle()
+    expect(types('bob')).toEqual(['assigned'])
+    expect(types('cy').sort()).toEqual(['commented', 'status'])
     const before = useData.getState().issues[i.id].updatedAt
     setFollowers(i.id, ['ana'])
+    await w.settle()
     const after = useData.getState().issues[i.id]
     expect(after.updatedAt).toBe(before)
     expect(after.unsubscribed).toEqual(['bob'])
     expect(after.subscribers).toBeUndefined()
   })
 
-  test('typing the same mention again in a few minutes tells them once', () => {
+  test('the same mention again sends another note: the database drops repeats within ten minutes', async () => {
     const i = createIssue({ team: 'ENG', title: 'Bug' })
     updateIssue(i.id, { description: 'ask @bob' })
+    await w.settle()
     updateIssue(i.id, { description: 'ask' })
+    await w.settle()
     updateIssue(i.id, { description: 'ask @bob' })
-    expect(notesFor('bob')).toHaveLength(1)
+    await w.settle()
+    // tests/db/comments-inbox.test.ts checks that only one of these arrives
+    expect(types('bob')).toEqual(['mentioned', 'mentioned'])
   })
 
-  test('editing a comment tells only newly mentioned people; deleting it takes its notes away', () => {
+  test('editing a comment tells only newly mentioned people; deleting it takes its notes away', async () => {
     const i = createIssue({ team: 'ENG', title: 'Bug' })
     const c = createComment(i.id, 'hi @bob')!
+    await w.settle()
     updateComment(i.id, c.id, 'hi @bob and @cy')
-    expect(notesFor('bob')).toHaveLength(1)
-    expect(notesFor('cy')).toHaveLength(1)
+    await w.settle()
+    expect(w.db.notesFor('bob')).toHaveLength(1)
+    expect(w.db.notesFor('cy')).toHaveLength(1)
     expect(useData.getState().comments[i.id][0].editedAt).toBeTruthy()
     deleteComment(i.id, c.id)
-    expect(notes()).toHaveLength(0)
     expect(useData.getState().comments[i.id]).toBeUndefined()
+    await w.settle()
+    expect(w.db.rows('inbox')).toHaveLength(0)
   })
 
-  test("you can't edit someone else's comment", () => {
+  test("you can't edit someone else's comment: it comes back, and you're told why", async () => {
     const i = createIssue({ team: 'ENG', title: 'Bug' })
+    await w.settle()
     useData.setState({ me: people.bob })
     const c = createComment(i.id, 'mine')!
+    await w.settle()
     useData.setState({ me: people.ana })
     updateComment(i.id, c.id, 'yours now')
-    deleteComment(i.id, c.id)
+    await w.settle()
     expect(useData.getState().comments[i.id][0].body).toBe('mine')
+    expect(w.told).toEqual([MESSAGES.comment])
   })
 
-  const put = (to: string, item: InboxItem) => applyFiles(new Map([[paths.inbox(to, item.id), jsonToFile(item)]]), 'ana')
-  const item = (id: string, at: string): InboxItem => ({ id, type: 'assigned', issue: 'x', actor: 'bob', at })
+  const note = (id: string, at: string) => ({ id, workspace_id: WS, recipient_id: profileIdOf('ana'), actor_id: profileIdOf('bob'), type: 'assigned', issue_id: 'x', comment_id: null, status: null, at, read_at: null, extra: {} })
 
-  test('read marks: one at a time, all at once, and deleting read notes', () => {
-    put('ana', item('n1', '2026-10-01T00:00:00.000Z'))
-    put('ana', item('n2', '2026-10-02T00:00:00.000Z'))
-    markRead(['n1'])
+  test('read marks: one at a time, all at once, and deleting read notes', async () => {
+    for (const n of [note('n1', '2026-10-01T00:00:00.000Z'), note('n2', '2026-10-02T00:00:00.000Z')]) w.db.put('inbox', n)
+    w.target.apply([{ from: 'fetch', table: 'inbox', rows: w.db.rows('inbox') }])
     const unread = () => useData.getState().inbox.filter((n) => isUnread(n, useData.getState().readState)).map((n) => n.id)
+    markRead(['n1'])
     expect(unread()).toEqual(['n2'])
+    await w.settle()
+    expect(w.db.get('inbox', { id: 'n1' })?.read_at).toBeTruthy()
     deleteInboxItems(undefined, { readOnly: true })
     expect(useData.getState().inbox.map((n) => n.id)).toEqual(['n2'])
-    expect(useData.getState().readState.read).toEqual([])
+    await w.settle()
+    expect(w.db.get('inbox', { id: 'n1' })).toBeUndefined()
     markAllRead()
     expect(unread()).toEqual([])
-  })
-
-  test('tidying removes old notes and nothing else', () => {
-    const now = Date.parse('2026-10-06T00:00:00.000Z')
-    const ago = (ms: number) => new Date(now - ms).toISOString()
-    put('ana', item('fresh', ago(INBOX_KEEP.read / 2)))
-    put('ana', item('read-old', ago(INBOX_KEEP.read + 1000)))
-    put('ana', item('unread-old', ago(INBOX_KEEP.read + 1000)))
-    put('ana', item('ancient', ago(INBOX_KEEP.unread + 1000)))
-    put('bob', item('bobs', ago(INBOX_KEEP.unread + 1000)))
-    put('bob', item('bobs-ancient', ago(INBOX_KEEP.anyone + 1000)))
-    markRead(['read-old'])
-    tidyInbox(now)
-    expect(useData.getState().inbox.map((n) => n.id).sort()).toEqual(['fresh', 'unread-old'])
-    expect(notesFor('bob').map((n) => n.id)).toEqual(['bobs'])
+    await w.settle()
+    expect(w.db.get('read_state', { profile_id: profileIdOf('ana'), workspace_id: WS })?.read_until).toBe('2026-10-02T00:00:00.000Z')
     expect(useData.getState().readState.read).toEqual([])
   })
 })

@@ -5,8 +5,7 @@ import { toast } from 'sonner'
 import { Link } from 'wouter'
 import { useShallow } from 'zustand/react/shallow'
 import { useCrumbs } from '@/app/chrome'
-import { switchWorkspace } from '@/app/signOut'
-import { useSignOut } from '@/components/SignOut'
+import { useSignOut, useSwitchWorkspace } from '@/components/SignOut'
 import { PersonAvatar } from '@/components/Avatar'
 import { PagedList } from '@/components/PagedList'
 import { fuzzy } from '@/lib/fuzzy'
@@ -312,6 +311,7 @@ function Account() {
   const user = useSession((s) => s.user)
   const mine = useData((s) => (user ? s.people[user.login] : undefined))
   const { signOut, busy, dialog } = useSignOut()
+  const switching = useSwitchWorkspace()
   const me = mine ?? user
 
   return (
@@ -322,7 +322,7 @@ function Account() {
         {me && <MyName key={me.name} me={me} github={user?.name ?? me.login} />}
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="lg" onClick={() => void switchWorkspace()}>
+        <Button variant="outline" size="lg" disabled={switching.busy} onClick={switching.switchWorkspace}>
           <Repeat /> Switch workspace
         </Button>
         <Button variant="outline" size="lg" disabled={busy} onClick={signOut}>
@@ -331,6 +331,7 @@ function Account() {
       </div>
       <p className="text-sm text-muted-foreground">Signing out forgets you in this browser, in every tab. Do it on shared computers.</p>
       {dialog}
+      {switching.dialog}
     </div>
   )
 }

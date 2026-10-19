@@ -7,7 +7,7 @@
  *  - an edit beats a delete
  * `null` = the file doesn't exist (deleted, or never was).
  */
-import { diff3Merge } from 'node-diff3'
+import { mergeText } from '@/editor/mergeText'
 import { classify, joinFrontMatter, splitFrontMatter } from '@/data/files'
 
 export interface MergeResult {
@@ -55,21 +55,8 @@ export function mergeValue(base: unknown, ours: unknown, theirs: unknown, ctx: C
   return ours
 }
 
-/** line-by-line merge; overlapping changes keep our lines */
-export function mergeText(base: string, ours: string, theirs: string, ctx: Ctx = { conflicts: 0 }): string {
-  if (ours === theirs || theirs === base) return ours
-  if (ours === base) return theirs
-  const lines = (s: string) => s.split('\n')
-  const out: string[] = []
-  for (const region of diff3Merge(lines(ours), lines(base), lines(theirs))) {
-    if (region.ok) out.push(...region.ok)
-    else if (region.conflict) {
-      ctx.textConflicts = (ctx.textConflicts ?? 0) + 1
-      out.push(...region.conflict.a)
-    }
-  }
-  return out.join('\n')
-}
+/** line-by-line merge; overlapping changes keep our lines (moved to the editor, which keeps it after this file goes) */
+export { mergeText }
 
 function mergeFrontMatterFile(base: string | null, ours: string, theirs: string, ctx: Ctx, isIssue: boolean): string {
   const b = base === null ? null : splitFrontMatter(base)

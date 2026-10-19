@@ -1,9 +1,6 @@
-import { beforeEach, describe, expect, test } from 'bun:test'
-import { linkPerson } from '@/data/actions'
+import { describe, expect, test } from 'bun:test'
 import { issueToFile, commentToFile, jsonToFile, parseFile, type Parsed } from '@/data/files'
-import { applyFiles, archiveFiles, parsedFiles, resetProjection } from '@/data/project'
 import { linkedPerson, relinkArchiveLine, relinkFiles, sameName } from '@/data/relink'
-import { EMPTY, useData } from '@/data/store'
 import type { Comment, Issue, Person, Project, Team, View } from '@/model/schema'
 
 const me = { login: 'ana', githubId: 1, name: 'Ana', avatarUrl: '' }
@@ -105,33 +102,5 @@ describe('linking someone from Linear to a GitHub account', () => {
     expect(sameName('Łukasz Bąk', { login: 'lb', name: 'Lukasz Bak' })).toBe(true)
     expect(sameName('Darek', { login: 'darek' })).toBe(true)
     expect(sameName('Darek Smith', { login: 'darekk', name: null })).toBe(false)
-  })
-})
-
-describe('linkPerson', () => {
-  beforeEach(() => {
-    resetProjection()
-    useData.setState({ ...EMPTY, me })
-  })
-
-  test('the screen shows the account everywhere at once', () => {
-    applyFiles(workspaceFiles(), 'ana')
-    linkPerson('~darek-smith', darek)
-    const s = useData.getState()
-    expect(s.people['~darek-smith']).toBeUndefined()
-    expect(s.people.darekk.name).toBe('Darek Smith')
-    expect(s.issues.i1.assignee).toBe('darekk')
-    expect(s.comments.i1[0].author).toBe('darekk')
-    expect(s.views.v1.owner).toBe('darekk')
-    expect(s.teams.ENG.members).toContain('darekk')
-    expect([...archiveFiles().values()][0]).toContain('"assignee":"darekk"')
-    expect([...parsedFiles()].some(([, p]) => p.kind === 'person' && p.value.login === '~darek-smith')).toBe(false)
-  })
-
-  test('only someone from Linear, and only to a GitHub account', () => {
-    applyFiles(workspaceFiles(), 'ana')
-    linkPerson('ana', darek)
-    linkPerson('~darek-smith', { ...darek, login: '~someone' })
-    expect(useData.getState().issues.i1.assignee).toBe('~darek-smith')
   })
 })

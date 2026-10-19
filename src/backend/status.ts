@@ -6,8 +6,10 @@ export type SaveState = 'loading' | 'saved' | 'saving' | 'offline' | 'reconnecti
 export interface SaveStatus {
   state: SaveState
   detail?: string
-  /** changes still on their way (phase 5; always 0 until then) */
+  /** your changes still on their way */
   pending: number
+  /** some of them failed to go and are being tried again */
+  waiting?: boolean
   /** while opening: how far it got */
   progress?: string
   /** the first load is in (JoinTeams waits for it, so the teams it offers are current) */
@@ -16,7 +18,7 @@ export interface SaveStatus {
   caughtUpAt?: number
 }
 
-const START: SaveStatus = { state: 'loading', pending: 0 }
+const START: SaveStatus = { state: 'loading', pending: 0, waiting: false }
 
 export const useSaveStatus = create<SaveStatus>()(() => ({ ...START }))
 
@@ -24,7 +26,7 @@ export const resetStatus = () => useSaveStatus.setState({ ...START, detail: unde
 
 /**
  * What the chip says once a workspace is open. `channelsUp`: both live channels are joined; `failing`: catching up
- * with teammates' changes keeps failing; `pending`: your changes still on their way (phase 5). Not reaching
+ * with teammates' changes keeps failing; `pending`: your changes still on their way. Not reaching
  * Sprawniej is only worth a warning when something of yours is waiting; otherwise it's a calm "Reconnecting…".
  */
 export function connectionState(online: boolean, channelsUp: boolean, signedIn: boolean, failing: boolean, pending = 0): SaveState {
@@ -32,4 +34,18 @@ export function connectionState(online: boolean, channelsUp: boolean, signedIn: 
   if (!online) return 'offline'
   if (failing || !channelsUp) return pending > 0 ? 'error' : 'reconnecting'
   return pending > 0 ? 'saving' : 'saved'
+}
+
+/**
+ * What the chip says, your changes first: something that failed to go and waits for another try is "Not saved yet"
+ * (or "Offline"), something on its way is "Saving…". With nothing of yours waiting it is about the connection.
+ */
+export function chipState(
+  c: { online: boolean; channelsUp: boolean; signedIn: boolean; failing: boolean },
+  w: { pending: number; waiting: boolean },
+): SaveState {
+  if (!c.signedIn) return 'signed-out'
+  if (w.pending && w.waiting) return c.online ? 'error' : 'offline'
+  if (w.pending) return c.online ? 'saving' : 'offline'
+  return connectionState(c.online, c.channelsUp, c.signedIn, c.failing)
 }

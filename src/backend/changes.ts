@@ -1,6 +1,6 @@
 /**
  * One change to one row, as an action makes it. The app shows it at once (apply.ts, `local`) and sends it to the
- * database (phase 5, writes.ts).
+ * database (writes.ts).
  */
 import { KEYS, type Insert, type KeyOf, type LiveTable, type Row, type Update } from './tables'
 
@@ -46,11 +46,19 @@ export type Writable<N extends LiveTable, O extends 'insert' | 'update'> = Parti
   O extends 'insert' ? Pick<Insert<N>, Grants[N]['insert'] & keyof Insert<N>> : Pick<Update<N>, Grants[N]['update'] & keyof Update<N>>
 >
 
+/** a change the database makes through one of its functions, not a plain update (writes.ts sends it as a call) */
+export interface Call {
+  fn: 'move_issue_to_team'
+  args: { p_issue: string; p_team: string }
+}
+
 interface Base<N extends LiveTable> {
   table: N
   key: KeyOf<N>
   /** shown at once, never sent: what the database fills in (issues.number, created_at, created_by, updated_at…) */
   guess?: Partial<Row<N>>
+  /** sent as this call instead of the fields (applying ignores it: the guess shows what it does) */
+  call?: Call
 }
 export type Change<N extends LiveTable = LiveTable> =
   /** the new row, only the columns people may write */

@@ -206,6 +206,18 @@ export class Loader {
     )
   }
 
+  /** how many archived issues a team has (the archive may not be read yet) */
+  async countArchived(teamId: string): Promise<number> {
+    const { count, error } = await this.db
+      .from('issues')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', this.ws)
+      .eq('team_id', teamId)
+      .not('archived_at', 'is', null)
+    if (error) throw error
+    return count ?? 0
+  }
+
   /** the workspace is there for you */
   async exists(): Promise<boolean> {
     const { data, error } = await this.db.from('workspaces').select('id').eq('id', this.ws)
@@ -215,7 +227,7 @@ export class Loader {
 }
 
 /** what a Loader reads with (LiveWorkspace's tests give it a pretend one) */
-export type Reader = Pick<Loader, 'all' | 'table' | 'archived' | 'changed' | 'byKeys' | 'partsOf' | 'exists'>
+export type Reader = Pick<Loader, 'all' | 'table' | 'archived' | 'changed' | 'byKeys' | 'partsOf' | 'exists' | 'countArchived'>
 
 /** rows asked for by key, grouped so each group is one request */
 export interface FetchGroup {

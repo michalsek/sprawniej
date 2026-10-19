@@ -1,70 +1,80 @@
 /**
- * The ONLY place that changes workspace data (CLAUDE.md, golden rules). Every action works out which files
- * change and hands them to the open workspace, which:
- *   1. updates the store (the screen changes at once),
- *   2. keeps the files in this browser (survives a crash),
- *   3. saves them to GitHub a moment later.
- * Each action also says in a few words what happened; that becomes the commit message on GitHub.
+ * The ONLY place that changes workspace data (CLAUDE.md, golden rules). Every action works out which rows change and
+ * hands them to the writer (src/backend/writes.ts), which:
+ *   1. shows them at once (the screen changes before anything is sent),
+ *   2. saves them a moment later, and puts back what couldn't be saved, saying why.
+ * Each change carries only the columns that changed; what the database fills in by itself (issue numbers, authors,
+ * times) is guessed, so it shows at once too, and the saved row puts it right.
+ *
+ * While no workspace is open (or it's still opening) there is nowhere to save to, and actions do nothing.
  */
 import { generateKeyBetween } from 'fractional-indexing'
 import { ulid } from 'ulid'
-import type { ArchivedIssue, Comment, Display, Filters, InboxItem, Issue, Label, Person, Project, ReadState, Team, View } from '@/model/schema'
-import { AUTO_ARCHIVE_MONTHS, FORMAT_VERSION, isGuest } from '@/model/schema'
-import { PRIORITY_NAMES, statusOf } from '@/model/status'
-import { BINARY_PREFIX } from '@/github/api'
-import { workspace } from '@/sync/engine'
-import { archiveMonth, archiveToFile, commentToFile as commentFile, issueToFile, jsonToFile, parseArchive, paths } from './files'
+import type { AnyChange, Change, Writable } from '@/backend/changes'
+import type { Json } from '@/backend/database.types'
+import type { KeyOf, LiveTable, Row } from '@/backend/tables'
+import { context, tell, write, type NoteRow, type WriteContext } from '@/backend/writes'
+import { MESSAGES } from '@/backend/writes/problems'
+import { createWorkspace } from '@/backend/workspaces'
+import type { Comment, Display, Filters, Issue, Label, Person, Project, Team, View } from '@/model/schema'
+import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
+import { statusOf } from '@/model/status'
+import type { TeamDraft } from '@/model/teamDraft'
+import { equal } from '@/lib/equal'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
-import { applyFiles, archiveFiles, highestArchived, parsedFiles, pathOf } from './project'
-import { relinkFiles } from './relink'
-import { dueForArchive, isUnread } from './select'
+import { isUnread } from './select'
 import { issueRef, useData } from './store'
 
 const now = () => new Date().toISOString()
 
-function save(files: Map<string, string | null>, message: string) {
-  const ws = workspace()
-  if (ws) ws.write(files, message)
-  else applyFiles(files, useData.getState().me?.login ?? null) // no workspace open (tests, previews): screen only
+// ---------- small helpers ----------
+
+type Ctx = Pick<WriteContext, 'workspaceId' | 'registry'>
+
+/** typed by table where it's made; one change of some table where it's handed on */
+const any = <N extends LiveTable>(c: Change<N>): AnyChange => c as unknown as AnyChange
+const ins = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'insert'>, guess?: Partial<Row<N>>): AnyChange =>
+  any<N>({ table, key, op: 'insert', fields, ...(guess && { guess }) })
+const upd = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'update'>, guess?: Partial<Row<N>>): AnyChange =>
+  any<N>({ table, key, op: 'update', fields, ...(guess && { guess }) })
+const del = <N extends LiveTable>(table: N, key: KeyOf<N>): AnyChange => any<N>({ table, key, op: 'delete' })
+
+/** a person's profile id; null for no one; undefined (and a warning) for a login nobody knows */
+function pid(c: Pick<WriteContext, 'registry'>, login: string | null | undefined): string | null | undefined {
+  if (!login) return null
+  const id = c.registry.profileId(login)
+  if (id === undefined) console.warn(`Sprawniej doesn’t know @${login} here, so it was left out`)
+  return id
 }
 
-const one = (path: string, text: string | null) => new Map([[path, text]])
+const tid = (c: Pick<WriteContext, 'registry'>, key: string): string | undefined => c.registry.teamId(key)
 
-// ---------- notes for other people's inboxes ----------
+const same = (a: unknown, b: unknown) => equal(a ?? null, b ?? null)
 
-const SAME_NOTE_WITHIN = 10 * 60_000
+/** the same text, without what nobody sees: trailing spaces and blank lines */
+const tidyBody = (body: string) => body.replace(/\s+$/, '')
 
 /**
- * the same note from me about the same issue, a few minutes ago (typing "@ania", deleting it, typing it again;
- * dragging an issue back and forth between two statuses)
+ * The inbox notes for teammates, as rows. Notes for people the registry doesn't know are left out; the database
+ * itself drops notes for people outside the workspace and the same note again within ten minutes.
  */
-function toldRecently(to: string, issue: string, n: Note, me: string): boolean {
-  if (n.type === 'commented') return false
-  const since = new Date(Date.now() - SAME_NOTE_WITHIN).toISOString()
-  for (const [, p] of parsedFiles()) {
-    const v = p.kind === 'inbox' && p.login === to ? p.value : null
-    if (v && v.actor === me && v.issue === issue && v.type === n.type && v.status === n.status && !v.comment && v.at > since) return true
-  }
-  return false
+export function noteRows(issueId: string, notes: readonly Note[], c: Ctx): NoteRow[] {
+  return notes.flatMap((n) => {
+    const to = c.registry.profileId(n.to)
+    if (!to) return []
+    return [{ id: ulid(), workspace_id: c.workspaceId, recipient_id: to, type: n.type, issue_id: issueId, comment_id: n.comment ?? null, status: n.status ?? null }]
+  })
 }
 
-/** adds an inbox file for each note to `files`, so the change and its notes are saved together */
-function addNotes(files: Map<string, string | null>, issue: string, notes: Note[]) {
-  const me = useData.getState().me?.login
-  if (!me) return
-  for (const n of notes) {
-    if (!n.comment && toldRecently(n.to, issue, n, me)) continue
-    const item: InboxItem = { id: ulid(), type: n.type, issue, actor: me, at: now() }
-    if (n.comment) item.comment = n.comment
-    if (n.status) item.status = n.status
-    files.set(paths.inbox(n.to, item.id), jsonToFile(item))
-  }
-}
-
-/** remove everyone's inbox notes about an issue or a comment that's gone */
-function dropNotes(files: Map<string, string | null>, about: (n: InboxItem) => boolean) {
-  for (const [path, p] of parsedFiles()) if (p.kind === 'inbox' && about(p.value)) files.set(path, null)
+/**
+ * You were looking at the guessed number of a new or moved issue ("ENG-12") and the database gave it another one:
+ * the address follows, so you don't end up looking at a teammate's issue that got that number.
+ */
+export function followNumber(team: string, from: number, to: number, loc: Pick<Location, 'hash' | 'replace'> | undefined = globalThis.location) {
+  if (!loc || from === to) return
+  const m = new RegExp(`^#/issue/${team}-${from}(?=$|[/?])`, 'i').exec(loc.hash)
+  if (m) loc.replace(`#/issue/${team}-${to}${loc.hash.slice(m[0].length)}`)
 }
 
 // ---------- issues ----------
@@ -74,63 +84,91 @@ export type IssuePatch = Partial<
   Pick<Issue, 'title' | 'description' | 'status' | 'priority' | 'assignee' | 'labels' | 'project' | 'parent' | 'sortOrder' | 'duplicateOf' | 'dueDate' | 'estimate'>
 >
 
-function describe(issue: Issue, patch: IssuePatch): string {
-  const ref = issueRef(issue)
-  const people = useData.getState().people
-  if (patch.status && patch.status !== issue.status) return `${ref}: ${statusOf(issue.status).name} -> ${statusOf(patch.status).name}`
-  if (patch.priority !== undefined && patch.priority !== issue.priority) return `${ref}: priority ${PRIORITY_NAMES[patch.priority]}`
-  if (patch.assignee !== undefined && patch.assignee !== issue.assignee)
-    return patch.assignee ? `${ref}: assign to ${people[patch.assignee]?.name ?? patch.assignee}` : `${ref}: unassign`
-  if (patch.labels !== undefined) return `${ref}: labels`
-  if (patch.project !== undefined) return patch.project ? `${ref}: project ${useData.getState().projects[patch.project]?.name ?? ''}`.trim() : `${ref}: no project`
-  if (patch.parent !== undefined) {
-    const parent = patch.parent ? useData.getState().issues[patch.parent] : undefined
-    return parent ? `${ref}: sub-issue of ${issueRef(parent)}` : `${ref}: no parent`
+/** an issue's fields as columns (labels are rows of their own: labelChanges) */
+export function issueColumns(patch: IssuePatch, c: Pick<WriteContext, 'registry'>): Writable<'issues', 'update'> {
+  const out: Writable<'issues', 'update'> = {}
+  if (patch.title !== undefined) out.title = patch.title
+  if (patch.description !== undefined) out.description = patch.description
+  if (patch.status !== undefined) out.status = patch.status
+  if (patch.priority !== undefined) out.priority = patch.priority
+  if (patch.assignee !== undefined) {
+    const id = pid(c, patch.assignee)
+    if (id !== undefined) out.assignee_id = id
   }
-  if (patch.dueDate !== undefined) return patch.dueDate ? `${ref}: due ${patch.dueDate}` : `${ref}: no due date`
-  if (patch.estimate !== undefined) return patch.estimate === null ? `${ref}: no estimate` : `${ref}: estimate ${patch.estimate}`
-  if (patch.title !== undefined) return `${ref}: edit title`
-  if (patch.description !== undefined) return `${ref}: edit description`
-  if (patch.sortOrder !== undefined) return `${ref}: reorder`
-  return `${ref}: update`
+  if (patch.project !== undefined) out.project_id = patch.project
+  if (patch.parent !== undefined) out.parent_id = patch.parent
+  if (patch.dueDate !== undefined) out.due_date = patch.dueDate ?? null
+  if (patch.estimate !== undefined) out.estimate = patch.estimate ?? null
+  if (patch.sortOrder !== undefined) out.sort_order = patch.sortOrder
+  if (patch.duplicateOf !== undefined) out.duplicate_of = patch.duplicateOf ?? null
+  return out
+}
+
+/** the label rows to add and remove so an issue has `after` instead of `before` */
+export function labelChanges(issueId: string, before: readonly string[], after: readonly string[], c: Pick<WriteContext, 'workspaceId'>): AnyChange[] {
+  const was = new Set(before)
+  const will = new Set(after)
+  return [
+    ...[...will].filter((l) => !was.has(l)).map((label_id) => ins('issue_labels', { issue_id: issueId, label_id }, { workspace_id: c.workspaceId, issue_id: issueId, label_id })),
+    ...[...was].filter((l) => !will.has(l)).map((label_id) => del('issue_labels', { issue_id: issueId, label_id })),
+  ]
+}
+
+/** who follows (true) or asked not to (false), as the issue says */
+const followingOf = (issue: Pick<Issue, 'subscribers' | 'unsubscribed'>): Map<string, boolean> =>
+  new Map([...(issue.subscribers ?? []).map((l) => [l, true] as const), ...(issue.unsubscribed ?? []).map((l) => [l, false] as const)])
+
+/** the follower rows to add, change or remove so `desired` is what the issue says */
+export function followerChanges(issue: Pick<Issue, 'id' | 'subscribers' | 'unsubscribed'>, desired: ReadonlyMap<string, boolean>, c: Ctx): AnyChange[] {
+  const current = followingOf(issue)
+  const out: AnyChange[] = []
+  for (const login of new Set([...current.keys(), ...desired.keys()])) {
+    const was = current.get(login)
+    const will = desired.get(login)
+    if (was === will) continue
+    const profile_id = pid(c, login)
+    if (!profile_id) continue
+    const key = { issue_id: issue.id, profile_id }
+    if (was === undefined) out.push(ins('issue_followers', key, { workspace_id: c.workspaceId, ...key, following: will }))
+    else if (will === undefined) out.push(del('issue_followers', key))
+    else out.push(upd('issue_followers', key, { following: will }))
+  }
+  return out
 }
 
 export function updateIssue(id: string, patch: IssuePatch): void {
-  const old = useData.getState().issues[id]
-  if (!old) return
-  // picking what it already is (Todo on a Todo issue) changes nothing, so nothing is saved
-  const same = (k: keyof IssuePatch) => JSON.stringify(patch[k] ?? null) === JSON.stringify(old[k as keyof Issue] ?? null)
-  if ((Object.keys(patch) as (keyof IssuePatch)[]).every(same)) return
-  const next: Issue = { ...old, ...patch, updatedAt: now() }
-  if (patch.status && patch.status !== old.status) {
-    next.completedAt = statusOf(patch.status).group === 'completed' ? now() : null
-  }
-  const files = one(paths.issue(next), issueToFile(next))
+  const c = context()
   const s = useData.getState()
-  if (s.me) addNotes(files, id, issueNotes(old, next, s.me.login, s.people, s.comments[id] ?? []))
-  save(files, describe(old, patch))
+  const old = s.issues[id]
+  if (!c || !s.me || !old) return
+  // labels as a set, only ones that exist (a label just made may be picked twice)
+  const labels = patch.labels && [...new Set(patch.labels)].filter((l) => s.labels[l])
+  const next: Issue = { ...old, ...patch, ...(labels && { labels }) }
+  // picking what it already is (Todo on a Todo issue) changes nothing, so nothing is saved
+  const changed: IssuePatch = {}
+  for (const k of Object.keys(patch) as (keyof IssuePatch)[]) if (k !== 'labels' && !same(patch[k], old[k])) Object.assign(changed, { [k]: patch[k] })
+  const fields = issueColumns(changed, c)
+  const changes: AnyChange[] = []
+  if (Object.keys(fields).length) {
+    const status = fields.status !== undefined && fields.status !== old.status
+    const done = (st: string) => statusOf(st as Issue['status']).group === 'completed'
+    changes.push(upd('issues', { id }, fields, { updated_at: now(), ...(status && { completed_at: done(next.status) ? now() : null }) }))
+  }
+  if (labels) changes.push(...labelChanges(id, old.labels, labels, c))
+  if (!changes.length) return
+  write({ changes, notes: noteRows(id, issueNotes(old, { ...next, updatedAt: now() }, s.me.login, s.people, s.comments[id] ?? []), c) })
 }
 
 /** Make exactly these people follow an issue (hear about its comments and status changes). */
 export function setFollowers(id: string, logins: string[]) {
+  const c = context()
   const s = useData.getState()
   const old = s.issues[id]
-  if (!old) return
+  if (!c || !old) return
   const lists = followLists(old, s.comments[id] ?? [], s.people, logins)
-  const next: Issue = { ...old }
-  // empty lists are left out, so the file stays short
-  for (const k of ['subscribers', 'unsubscribed'] as const) {
-    if (lists[k]?.length) next[k] = lists[k]
-    else delete next[k]
-  }
-  if (JSON.stringify([old.subscribers ?? [], old.unsubscribed ?? []]) === JSON.stringify([next.subscribers ?? [], next.unsubscribed ?? []])) return
   // following isn't an edit: "last changed" stays as it was
-  const me = s.me?.login
-  const was = new Set(followers(old, s.comments[id] ?? [], s.people))
-  const wanted = new Set(logins)
-  const changed = [...new Set([...was, ...wanted])].filter((l) => was.has(l) !== wanted.has(l))
-  const what = changed.length === 1 && changed[0] === me ? (wanted.has(me) ? 'subscribe' : 'unsubscribe') : 'subscribers'
-  save(one(paths.issue(next), issueToFile(next)), `${issueRef(old)}: ${what}`)
+  const changes = followerChanges(old, followingOf(lists), c)
+  if (changes.length) write({ changes })
 }
 
 /** Follow an issue, or stop following it. */
@@ -146,7 +184,7 @@ export function subscribe(id: string, on: boolean) {
 /**
  * A drag-n-drop drop. `patch` = what the group it landed in stands for (status, priority…); `place` = its new
  * neighbours (issue ids, null = top or bottom), or null to keep its place (the list isn't in manual order).
- * One file changes either way.
+ * Only the moved issue changes either way.
  */
 export function moveIssue(id: string, to: { patch: IssuePatch; place: { prev: string | null; next: string | null } | null }) {
   const issues = useData.getState().issues
@@ -187,23 +225,16 @@ export interface NewIssue {
   estimate?: number | null
 }
 
-/** a team's next issue number: one more than any issue it has, or ever had (deleted and archived ones count too) */
+/**
+ * A guess at a team's next issue number: one more than any it has or had that we know of. The database gives out
+ * the real one; when a teammate was quicker, the saved issue shows the real number (and followNumber follows it).
+ */
 export function nextNumber(team: string): number {
   const s = useData.getState()
-  const floor = Math.max(s.teams[team]?.lastNumber ?? 0, highestArchived(team))
-  const highest = Object.values(s.issues).reduce((max, i) => (i.team === team ? Math.max(max, i.number) : max), floor)
+  let highest = s.teams[team]?.lastNumber ?? 0
+  for (const i of Object.values(s.issues)) if (i.team === team) highest = Math.max(highest, i.number)
+  for (const i of Object.values(s.archive)) if (i.team === team) highest = Math.max(highest, i.number)
   return highest + 1
-}
-
-/** an issue leaves its team (deleted or moved): the team remembers its number so nobody gets it again */
-function rememberNumber(files: Map<string, string | null>, issue: Issue) {
-  const team = useData.getState().teams[issue.team]
-  if (team && (team.lastNumber ?? 0) < issue.number) {
-    const path = paths.team(team.key)
-    const current = files.get(path)
-    const latest = current ? (JSON.parse(current) as Team) : team
-    if ((latest.lastNumber ?? 0) < issue.number) files.set(path, jsonToFile({ ...latest, lastNumber: issue.number }))
-  }
 }
 
 /** where a new sub-issue goes: after its last sibling, or right after its parent */
@@ -215,11 +246,14 @@ function subIssueOrder(issues: Issue[], parent: Issue): string {
 
 /** Creates an issue at the top of its team's order (a sub-issue: under its siblings) and returns it. */
 export function createIssue(input: NewIssue): Issue {
+  const c = context()
   const s = useData.getState()
   const inTeam = Object.values(s.issues).filter((i) => i.team === input.team)
   const number = nextNumber(input.team)
   const first = inTeam.reduce<string | null>((min, i) => (min === null || i.sortOrder < min ? i.sortOrder : min), null)
   const parent = input.parent ? s.issues[input.parent] : undefined
+  const at = now()
+  const completed = statusOf(input.status ?? 'todo').group === 'completed'
   const issue: Issue = {
     id: ulid(),
     team: input.team,
@@ -229,347 +263,284 @@ export function createIssue(input: NewIssue): Issue {
     status: input.status ?? 'todo',
     priority: input.priority ?? 0,
     assignee: input.assignee ?? null,
-    labels: input.labels ?? [],
+    labels: [...new Set(input.labels ?? [])].filter((l) => s.labels[l]),
     project: input.project ?? null,
     parent: input.parent ?? null,
     ...(input.dueDate && { dueDate: input.dueDate }),
     ...(input.estimate != null && { estimate: input.estimate }),
     sortOrder: parent && parent.team === input.team ? subIssueOrder(inTeam, parent) : generateKeyBetween(null, first),
     createdBy: s.me?.login ?? 'unknown',
-    createdAt: now(),
-    updatedAt: now(),
-    completedAt: null,
+    createdAt: at,
+    updatedAt: at,
+    // the database sets it for an issue made as Done (E23)
+    completedAt: completed ? at : null,
   }
-  const files = one(paths.issue(issue), issueToFile(issue))
-  if (s.me) addNotes(files, issue.id, issueNotes(null, issue, s.me.login, s.people))
-  save(files, `Create ${issueRef(issue)}: ${issue.title}`)
-  return issue
+  const team = c && tid(c, input.team)
+  if (!c || !s.me || !team) {
+    if (c) console.warn(`Sprawniej doesn’t know the team ${input.team} here, so the issue wasn’t saved`)
+    return issue
+  }
+  const id = issue.id
+  const fields: Writable<'issues', 'insert'> = {
+    id,
+    workspace_id: c.workspaceId,
+    team_id: team,
+    title: issue.title,
+    description: issue.description,
+    status: issue.status,
+    priority: issue.priority,
+    assignee_id: pid(c, issue.assignee) ?? null,
+    project_id: issue.project,
+    parent_id: issue.parent,
+    due_date: input.dueDate ?? null,
+    estimate: input.estimate ?? null,
+    sort_order: issue.sortOrder,
+  }
+  // what the database fills in; never changed_at (newer-wins compares it)
+  const guess: Partial<Row<'issues'>> = {
+    number,
+    created_by: c.meId,
+    created_at: at,
+    updated_at: at,
+    completed_at: issue.completedAt ?? null,
+    former_refs: [],
+    duplicate_of: null,
+    archived_at: null,
+    archived_by: null,
+    linear_id: null,
+    extra: {},
+  }
+  write({
+    changes: [ins('issues', { id }, fields, guess), ...labelChanges(id, [], issue.labels, c)],
+    notes: noteRows(id, issueNotes(null, issue, s.me.login, s.people), c),
+    done: (r) => {
+      const real = r.ok ? r.rows.get(`issues:${id}`)?.number : undefined
+      if (typeof real === 'number') followNumber(input.team, number, real)
+    },
+  })
+  return useData.getState().issues[id] ?? issue
 }
 
 /** Remove an issue (and its comments). Its sub-issues stay, without a parent. */
 export function deleteIssue(id: string) {
+  const c = context()
   const s = useData.getState()
-  const issue = s.issues[id]
-  if (!issue) return
-  const files = new Map<string, string | null>([[paths.issue(issue), null]])
-  for (const c of s.comments[id] ?? []) files.set(paths.comment(issue.team, c), null)
-  for (const child of Object.values(s.issues).filter((i) => i.parent === id)) {
-    files.set(paths.issue(child), issueToFile({ ...child, parent: null, updatedAt: now() }))
-  }
-  dropNotes(files, (n) => n.issue === id)
-  rememberNumber(files, issue)
-  save(files, `Delete ${issueRef(issue)}: ${issue.title}`)
+  if (!c || !s.issues[id]) return
+  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  write({
+    changes: [del('issues', { id })],
+    // the database deletes its comments, labels, followers and notes along with it
+    cascade: s.inbox.filter((n) => n.issue === id).map((n) => del('inbox', { id: n.id })),
+    untilEcho: [
+      ...all.filter((i) => i.parent === id).map((i) => upd('issues', { id: i.id }, { parent_id: null })),
+      ...all.filter((i) => i.duplicateOf === id).map((i) => upd('issues', { id: i.id }, { duplicate_of: null })),
+    ],
+  })
 }
 
-/** Move an issue to another team: it gets that team's next number, like a new issue there. */
+/** Move an issue to another team: it gets that team's next number, like a new issue there. Returns it as shown. */
 export function moveIssueToTeam(id: string, team: string): Issue | undefined {
+  const c = context()
   const s = useData.getState()
   const old = s.issues[id]
   if (!old || old.team === team || !s.teams[team]) return old
+  const to = c && tid(c, team)
+  if (!c || !to) return old
   const number = nextNumber(team)
-  const next: Issue = { ...old, team, number, formerRefs: [...(old.formerRefs ?? []), issueRef(old)], updatedAt: now() }
-  const files = new Map<string, string | null>([
-    [pathOf((p) => p.kind === 'issue' && p.value.id === id) ?? paths.issue(old), null],
-    [paths.issue(next), issueToFile(next)],
-  ])
-  for (const c of s.comments[id] ?? []) {
-    files.set(paths.comment(old.team, c), null)
-    files.set(paths.comment(team, c), commentFile(c))
-  }
-  rememberNumber(files, old)
-  save(files, `Move ${issueRef(old)} to ${s.teams[team].name} as ${issueRef(next)}`)
-  return next
+  const guess: Partial<Row<'issues'>> = { team_id: to, number, former_refs: [...(old.formerRefs ?? []), issueRef(old)], updated_at: now() }
+  write({
+    changes: [{ table: 'issues', key: { id }, op: 'update', fields: {}, guess, call: { fn: 'move_issue_to_team', args: { p_issue: id, p_team: to } } }],
+    done: (r) => {
+      const real = r.ok ? r.rows.get(`issues:${id}`)?.number : undefined
+      if (typeof real === 'number') followNumber(team, number, real)
+    },
+  })
+  return useData.getState().issues[id]
 }
 
 // ---------- the archive ----------
 
-/** change the records in one archive month file; the change goes into `files` (an emptied file is removed) */
-function editArchive(files: Map<string, string | null>, path: string, team: string, edit: (records: ArchivedIssue[]) => ArchivedIssue[]) {
-  const text = files.has(path) ? files.get(path) : (archiveFiles().get(path) ?? null)
-  files.set(path, archiveToFile(edit(text ? parseArchive(path, team, text) : [])))
-}
-
-/** which archive files hold an issue (each line starts with its id) */
-function archivePathsOf(team: string, id: string): string[] {
-  const out: string[] = []
-  for (const [path, text] of archiveFiles()) if (path.startsWith(`teams/${team}/archive/`) && text.includes(`{"id":"${id}"`)) out.push(path)
-  return out
-}
-
 /**
  * Put issues away: they leave every list and board but can still be opened, found and brought back. An issue's
- * sub-issues go with it (unless `auto`, where each finished issue goes on its own). Returns how many were archived.
+ * sub-issues go with it. Returns how many were archived. (Finished issues are archived every night by the database.)
  */
-export function archiveIssues(ids: string[], { auto = false } = {}): number {
+export function archiveIssues(ids: string[]): number {
+  const c = context()
   const s = useData.getState()
-  const me = s.me?.login ?? 'unknown'
-  const at = now()
+  if (!c) return 0
   const all: Issue[] = []
   const add = (id: string) => {
     const issue = s.issues[id]
     if (!issue || all.includes(issue)) return
     all.push(issue)
-    if (!auto) for (const child of Object.values(s.issues)) if (child.parent === id) add(child.id)
+    for (const child of Object.values(s.issues)) if (child.parent === id) add(child.id)
   }
   ids.forEach(add)
   if (!all.length) return 0
-  const files = new Map<string, string | null>()
-  const byFile = new Map<string, ArchivedIssue[]>()
-  for (const issue of all) {
-    const comments = s.comments[issue.id] ?? []
-    const path = paths.archive(issue.team, archiveMonth(issue, at))
-    byFile.set(path, [...(byFile.get(path) ?? []), { ...issue, archivedAt: at, archivedBy: me, comments }])
-    files.set(pathOf((p) => p.kind === 'issue' && p.value.id === issue.id) ?? paths.issue(issue), null)
-    for (const c of comments) files.set(paths.comment(issue.team, c), null)
-    rememberNumber(files, issue)
-  }
-  for (const [path, records] of byFile) {
-    const ids = new Set(records.map((r) => r.id))
-    editArchive(files, path, records[0].team, (old) => [...old.filter((r) => !ids.has(r.id)), ...records])
-  }
-  const n = all.length
-  save(files, auto ? `Archive ${n} finished issue${n === 1 ? '' : 's'}` : n === 1 ? `Archive ${issueRef(all[0])}` : `Archive ${issueRef(all[0])} and ${n - 1} more`)
-  return n
+  // one moment for all of them, so they go in one request
+  const at = now()
+  write({ changes: all.map((i) => upd('issues', { id: i.id }, { archived_at: at }, { archived_by: c.meId })) })
+  return all.length
 }
 
 /**
- * Bring an archived issue back, with its comments, where it was. Sub-issues that were archived together with it come
+ * Bring an archived issue back where it was, with its comments. Sub-issues that were archived together with it come
  * back too. Needs the archive loaded (loadArchive).
  */
 export function restoreIssue(id: string): Issue | undefined {
+  const c = context()
   const s = useData.getState()
   const a = s.archive[id]
-  if (!a || s.issues[id]) return s.issues[id]
+  if (!c || !a || s.issues[id]) return s.issues[id]
   const all = [a]
   for (let k = 0; k < all.length; k++) {
-    for (const c of Object.values(s.archive)) if (c.parent === all[k].id && c.archivedAt === a.archivedAt && !s.issues[c.id] && !all.includes(c)) all.push(c)
+    for (const x of Object.values(s.archive)) if (x.parent === all[k].id && x.archivedAt === a.archivedAt && !s.issues[x.id] && !all.includes(x)) all.push(x)
   }
-  const files = new Map<string, string | null>()
-  const restored: Issue[] = []
-  let bump = 0
-  for (const r of all) {
-    const { archivedAt: _at, archivedBy: _by, comments, ...rest } = r
-    for (const path of archivePathsOf(r.team, r.id)) editArchive(files, path, r.team, (old) => old.filter((x) => x.id !== r.id))
-    // a number someone took meanwhile (only by editing files by hand) means a new one
-    const taken = Object.values(s.issues).some((i) => i.team === r.team && i.number === r.number)
-    const issue: Issue = { ...rest, number: taken ? nextNumber(r.team) + bump++ : r.number, updatedAt: now() }
-    files.set(paths.issue(issue), issueToFile(issue))
-    for (const c of comments) files.set(paths.comment(r.team, c), commentFile(c))
-    restored.push(issue)
-  }
-  const n = restored.length - 1
-  save(files, n ? `Restore ${issueRef(restored[0])} and ${n} sub-issue${n === 1 ? '' : 's'}` : `Restore ${issueRef(restored[0])}`)
-  return restored[0]
-}
-
-/** how many issues go into one save, so GitHub never gets one huge change */
-const ARCHIVE_BATCH = 300
-
-/**
- * The daily tidy-up: archives issues finished (and last changed) more than a team's `autoArchive` months ago, a few
- * hundred per save,
- * and mends the archive after two people's changes crossed (an archived issue someone edited at the same moment
- * stays out of the archive; a comment added to it meanwhile joins it). Returns how many were archived.
- */
-export async function tidyArchive(at = Date.now()): Promise<number> {
-  const s = useData.getState()
-  const due: string[] = []
-  for (const i of Object.values(s.issues)) if (dueForArchive(i, s.teams[i.team]?.autoArchive ?? AUTO_ARCHIVE_MONTHS, at)) due.push(i.id)
-  let done = 0
-  for (let n = 0; n < due.length; n += ARCHIVE_BATCH) {
-    done += archiveIssues(due.slice(n, n + ARCHIVE_BATCH), { auto: true })
-    await workspace()?.flush()
-  }
-  mendArchive()
-  return done
-}
-
-/** see tidyArchive */
-function mendArchive() {
-  const s = useData.getState()
-  const files = new Map<string, string | null>()
-  for (const [path, text] of archiveFiles()) {
-    const team = path.split('/')[1]
-    const ids = [...text.matchAll(/^\{"id":"([^"]+)"/gm)].map((m) => m[1])
-    const active = ids.filter((id) => s.issues[id])
-    const loose = ids.filter((id) => !s.issues[id] && s.comments[id]?.length)
-    if (!active.length && !loose.length) continue
-    editArchive(files, path, team, (old) =>
-      old
-        .filter((r) => {
-          if (!active.includes(r.id)) return true
-          // the issue came back: so do its comments that only the archive still has
-          const issue = s.issues[r.id]
-          const here = new Set((s.comments[r.id] ?? []).map((c) => c.id))
-          for (const c of r.comments) if (!here.has(c.id)) files.set(paths.comment(issue.team, { ...c, issue: r.id }), commentFile({ ...c, issue: r.id }))
-          return false
-        })
-        .map((r) => {
-          if (!loose.includes(r.id)) return r
-          // a comment added or edited meanwhile joins the archived issue; the newer copy wins
-          const newer = new Map(s.comments[r.id].map((c) => [c.id, c]))
-          const merged = [...r.comments.filter((c) => !newer.has(c.id)), ...newer.values()]
-          return { ...r, comments: merged.sort((a, b) => a.createdAt.localeCompare(b.createdAt)) }
-        }),
-    )
-    for (const id of loose) for (const c of s.comments[id]) files.set(paths.comment(team, c), null)
-  }
-  if (files.size) save(files, 'Tidy up the archive')
+  const at = now()
+  write({ changes: all.map((i) => upd('issues', { id: i.id }, { archived_at: null }, { archived_by: null, updated_at: at })) })
+  return useData.getState().issues[id]
 }
 
 // ---------- comments ----------
 
-const tidyBody = (body: string) => body.replace(/\s+$/, '')
-
-/** where a comment's file really is (usually under the issue's team, but not if the issue moved meanwhile) */
-const commentPath = (id: string) => pathOf((p) => p.kind === 'comment' && p.value.id === id)
-
 export function createComment(issueId: string, body: string): Comment | undefined {
+  const c = context()
   const s = useData.getState()
   const issue = s.issues[issueId]
-  if (!issue || !s.me || !body.trim()) return undefined
+  if (!c || !issue || !s.me || !body.trim()) return undefined
   const comment: Comment = { id: ulid(), issue: issueId, author: s.me.login, createdAt: now(), body: tidyBody(body) }
-  const files = one(paths.comment(issue.team, comment), commentFile(comment))
-  addNotes(files, issueId, commentNotes(issue, comment, null, s.comments[issueId] ?? [], s.me.login, s.people))
-  save(files, `${issueRef(issue)}: comment`)
+  write({
+    changes: [
+      ins(
+        'comments',
+        { id: comment.id },
+        { id: comment.id, workspace_id: c.workspaceId, issue_id: issueId, body: comment.body },
+        { author_id: c.meId, created_at: comment.createdAt, edited_at: null, linear_id: null, extra: {} },
+      ),
+    ],
+    notes: noteRows(issueId, commentNotes(issue, comment, null, s.comments[issueId] ?? [], s.me.login, s.people), c),
+  })
   return comment
 }
 
-/** only your own comments; an empty text is ignored (delete the comment instead) */
+/** An empty text is ignored (delete the comment instead). Only the author may change it; the database says so. */
 export function updateComment(issueId: string, id: string, body: string) {
+  const c = context()
   const s = useData.getState()
   const issue = s.issues[issueId]
-  const old = s.comments[issueId]?.find((c) => c.id === id)
-  if (!issue || !old || !s.me || old.author !== s.me.login || !body.trim() || tidyBody(body) === old.body) return
-  const next: Comment = { ...old, body: tidyBody(body), editedAt: now() }
-  const files = one(paths.comment(issue.team, next), commentFile(next))
-  // written in the issue's old team while a teammate moved the issue: it moves along now
-  const was = commentPath(id)
-  if (was && was !== paths.comment(issue.team, next)) files.set(was, null)
-  addNotes(files, issueId, commentNotes(issue, next, old.body, [], s.me.login, s.people))
-  save(files, `${issueRef(issue)}: edit comment`)
+  const old = s.comments[issueId]?.find((x) => x.id === id)
+  if (!c || !issue || !old || !s.me || !body.trim() || tidyBody(body) === old.body) return
+  const next: Comment = { ...old, body: tidyBody(body) }
+  write({
+    changes: [upd('comments', { id }, { body: next.body }, { edited_at: now() })],
+    // sent only if the edit is saved
+    notes: noteRows(issueId, commentNotes(issue, next, old.body, [], s.me.login, s.people), c),
+  })
 }
 
 export function deleteComment(issueId: string, id: string) {
+  const c = context()
   const s = useData.getState()
-  const issue = s.issues[issueId]
-  const old = s.comments[issueId]?.find((c) => c.id === id)
-  if (!issue || !old || !s.me || old.author !== s.me.login) return
-  const files = one(commentPath(id) ?? paths.comment(issue.team, old), null)
-  dropNotes(files, (n) => n.comment === id)
-  save(files, `${issueRef(issue)}: delete comment`)
+  if (!c || !s.comments[issueId]?.some((x) => x.id === id)) return
+  write({
+    changes: [del('comments', { id })],
+    // the database deletes the notes about it along with it
+    cascade: s.inbox.filter((n) => n.comment === id).map((n) => del('inbox', { id: n.id })),
+  })
 }
 
 // ---------- your inbox ----------
 
-function saveReadState(next: ReadState, files = new Map<string, string | null>(), message = 'Inbox: mark as read') {
-  const me = useData.getState().me?.login
-  if (!me) return
-  files.set(paths.readState(me), jsonToFile(next))
-  save(files, message)
-}
-
 export function markRead(ids: string[]) {
+  const c = context()
   const s = useData.getState()
-  const fresh = s.inbox.filter((n) => ids.includes(n.id) && isUnread(n, s.readState)).map((n) => n.id)
-  if (fresh.length) saveReadState({ ...s.readState, read: [...s.readState.read, ...fresh] })
+  if (!c) return
+  const at = now()
+  const fresh = s.inbox.filter((n) => ids.includes(n.id) && isUnread(n, s.readState))
+  if (fresh.length) write({ changes: fresh.map((n) => upd('inbox', { id: n.id }, { read_at: at })) })
 }
 
 export function markAllRead() {
+  const c = context()
   const s = useData.getState()
-  if (!s.inbox.some((n) => isUnread(n, s.readState))) return
+  if (!c || !s.inbox.some((n) => isUnread(n, s.readState))) return
   const latest = s.inbox.reduce((max, n) => (n.at > max ? n.at : max), s.readState.readUntil ?? '')
-  saveReadState({ ...s.readState, readUntil: latest, read: [] }, undefined, 'Inbox: mark all as read')
+  const key = { profile_id: c.meId, workspace_id: c.workspaceId }
+  write({ changes: [ins('read_state', key, { ...key, read_until: latest }, { extra: {} })] })
 }
 
 /** delete notes from your inbox (all of them if `ids` is left out, only read ones with `readOnly`) */
 export function deleteInboxItems(ids?: string[], { readOnly = false } = {}) {
+  const c = context()
   const s = useData.getState()
-  const me = s.me?.login
-  if (!me) return
+  if (!c) return
   const gone = s.inbox.filter((n) => (!ids || ids.includes(n.id)) && (!readOnly || !isUnread(n, s.readState)))
-  if (!gone.length) return
-  const files = new Map<string, string | null>(gone.map((n) => [paths.inbox(me, n.id), null]))
-  const ids2 = new Set(gone.map((n) => n.id))
-  const read = s.readState.read.filter((id) => !ids2.has(id))
-  if (read.length !== s.readState.read.length) files.set(paths.readState(me), jsonToFile({ ...s.readState, read }))
-  save(files, gone.length === 1 ? 'Inbox: delete a note' : `Inbox: delete ${gone.length} notes`)
+  if (gone.length) write({ changes: gone.map((n) => del('inbox', { id: n.id })) })
 }
 
 const DAY = 86_400_000
-/** how long inbox notes are kept: read ones, unread ones, and anyone's (people who left never tidy theirs) */
+/** how long inbox notes are kept: read ones, unread ones, and anyone's (the database's nightly job keeps to it) */
 export const INBOX_KEEP = { read: 30 * DAY, unread: 90 * DAY, anyone: 180 * DAY }
-
-/**
- * Keeps the workspace small: removes old notes from your inbox (and very old ones from anyone's) and forgets read
- * marks for notes that are gone. Runs when the workspace opens; saves nothing when there's nothing to tidy.
- */
-export function tidyInbox(at = Date.now()) {
-  const s = useData.getState()
-  const me = s.me?.login
-  if (!me) return
-  const before = (ms: number) => new Date(at - ms).toISOString()
-  const files = new Map<string, string | null>()
-  for (const [path, p] of parsedFiles()) {
-    if (p.kind !== 'inbox') continue
-    const n = p.value
-    const old = p.login === me ? n.at < (isUnread(n, s.readState) ? before(INBOX_KEEP.unread) : before(INBOX_KEEP.read)) : n.at < before(INBOX_KEEP.anyone)
-    if (old) files.set(path, null)
-  }
-  const left = new Set(s.inbox.filter((n) => !files.has(paths.inbox(me, n.id))).map((n) => n.id))
-  const read = s.readState.read.filter((id) => left.has(id))
-  if (read.length !== s.readState.read.length) files.set(paths.readState(me), jsonToFile({ ...s.readState, read }))
-  if (files.size) save(files, 'Tidy up old inbox notes')
-}
 
 // ---------- labels ----------
 
 /** a calm set of label colours; new labels take the next one */
 export const LABEL_COLORS = ['#eb5757', '#f2994a', '#f2c94c', '#4cb782', '#26b5ce', '#5e6ad2', '#bb87fc', '#f7a8d8', '#95a2b3']
 
+/** two labels with one name can't be told apart in pickers and filters */
+const labelNamed = (labels: Record<string, Label>, name: string, but?: string) =>
+  Object.values(labels).find((l) => l.id !== but && l.name.toLowerCase() === name.trim().toLowerCase())
+
+/** a new label, or the one that already has this name (E5) */
 export function createLabel(name: string): Label {
+  const c = context()
   const s = useData.getState()
+  const existing = labelNamed(s.labels, name)
+  if (existing) return existing
   const label: Label = { id: ulid(), name: name.trim(), color: LABEL_COLORS[Object.keys(s.labels).length % LABEL_COLORS.length] }
-  save(one(paths.label(label.id), jsonToFile(label)), `Add label ${label.name}`)
+  if (c) write({ changes: [ins('labels', { id: label.id }, { id: label.id, workspace_id: c.workspaceId, name: label.name, color: label.color }, { linear_id: null, extra: {} })] })
   return label
 }
 
 export function updateLabel(id: string, patch: Partial<Pick<Label, 'name' | 'color'>>) {
+  const c = context()
   const labels = useData.getState().labels
   const label = labels[id]
-  if (!label) return
-  // two labels with one name can't be told apart in pickers and filters
-  if (patch.name !== undefined && Object.values(labels).some((l) => l.id !== id && l.name.toLowerCase() === patch.name!.trim().toLowerCase())) return
-  save(one(paths.label(id), jsonToFile({ ...label, ...patch })), `Edit label ${patch.name ?? label.name}`)
-}
-
-/** remove a label everywhere */
-export function deleteLabel(id: string) {
-  const s = useData.getState()
-  const label = s.labels[id]
-  if (!label) return
-  const files = new Map<string, string | null>([[paths.label(id), null]])
-  for (const i of Object.values(s.issues)) {
-    if (i.labels.includes(id)) files.set(paths.issue(i), issueToFile({ ...i, labels: i.labels.filter((l) => l !== id), updatedAt: now() }))
-  }
-  dropFromViews(files, 'labels', id)
-  save(files, `Delete label ${label.name}`)
+  if (!c || !label) return
+  if (patch.name !== undefined && (!patch.name.trim() || labelNamed(labels, patch.name, id))) return
+  const fields: Writable<'labels', 'update'> = {}
+  if (patch.name !== undefined && patch.name.trim() !== label.name) fields.name = patch.name.trim()
+  if (patch.color !== undefined && patch.color !== label.color) fields.color = patch.color
+  if (Object.keys(fields).length) write({ changes: [upd('labels', { id }, fields)] })
 }
 
 /**
  * A label, project or team that's gone comes out of saved views' filters where others are left ("Bug or Design"
  * becomes "Design"). Where it was the only one, it stays: the view keeps showing nothing rather than suddenly showing
- * every issue, and its filter says the one it was about was deleted.
+ * every issue, and its filter says the one it was about was deleted. `skip`: views being deleted anyway.
  */
-function dropFromViews(files: Map<string, string | null>, field: 'labels' | 'projects' | 'teams', id: string) {
-  for (const v of Object.values(useData.getState().views)) {
-    if (files.has(paths.view(v.id))) continue // being deleted already
+export function viewsWithout(views: Record<string, View>, field: 'labels' | 'projects' | 'teams', id: string, skip: ReadonlySet<string> = new Set()): AnyChange[] {
+  const out: AnyChange[] = []
+  for (const v of Object.values(views)) {
+    if (skip.has(v.id)) continue
     const list = v.filters[field] as (string | null)[] | undefined
     if (!list?.includes(id)) continue
     const rest = list.filter((x) => x !== id)
-    if (!rest.length) continue
-    files.set(paths.view(v.id), jsonToFile({ ...v, filters: { ...v.filters, [field]: rest } }))
+    if (rest.length) out.push(upd('views', { id: v.id }, { filters: { ...v.filters, [field]: rest } as Json }))
   }
+  return out
+}
+
+/** remove a label everywhere */
+export function deleteLabel(id: string) {
+  const c = context()
+  const s = useData.getState()
+  if (!c || !s.labels[id]) return
+  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  write({
+    changes: [del('labels', { id }), ...viewsWithout(s.views, 'labels', id)],
+    cascade: all.filter((i) => i.labels.includes(id)).map((i) => del('issue_labels', { issue_id: i.id, label_id: id })),
+  })
 }
 
 // ---------- views ----------
@@ -584,7 +555,11 @@ export interface NewView {
   display: Display
 }
 
+/** empty filter lists are left out, so a view says only what it filters by */
+const cleanFilters = (f: Filters): Filters => Object.fromEntries(Object.entries(f).filter(([, v]) => !Array.isArray(v) || v.length > 0))
+
 export function createView(input: NewView): View {
+  const c = context()
   const me = useData.getState().me
   const view: View = {
     id: ulid(),
@@ -593,30 +568,54 @@ export function createView(input: NewView): View {
     description: input.description?.trim() ?? '',
     owner: me?.login ?? 'unknown',
     team: input.team,
-    filters: input.filters ?? {},
+    filters: cleanFilters(input.filters ?? {}),
     display: input.display,
     createdAt: now(),
   }
-  save(one(paths.view(view.id), jsonToFile(view)), `Create view ${view.emoji} ${view.name}`)
-  return view
+  const team = c && input.team !== null ? tid(c, input.team) : null
+  if (!c || team === undefined) return view
+  write({
+    changes: [
+      ins(
+        'views',
+        { id: view.id },
+        {
+          id: view.id,
+          workspace_id: c.workspaceId,
+          team_id: team,
+          name: view.name,
+          emoji: view.emoji,
+          description: view.description,
+          filters: view.filters as Json,
+          display: view.display as Json,
+        },
+        { owner_id: c.meId, created_at: view.createdAt, linear_id: null, extra: {} },
+      ),
+    ],
+  })
+  return useData.getState().views[view.id] ?? view
 }
 
 export type ViewPatch = Partial<Pick<View, 'name' | 'emoji' | 'description' | 'filters' | 'display'>>
 
 export function updateView(id: string, patch: ViewPatch) {
+  const c = context()
   const view = useData.getState().views[id]
-  if (!view) return
+  if (!c || !view) return
   const next: View = { ...view, ...patch }
-  // empty filter lists are left out, so the file stays readable
-  next.filters = Object.fromEntries(Object.entries(next.filters).filter(([, v]) => !Array.isArray(v) || v.length > 0))
-  const what = patch.filters ? 'filters' : patch.display ? 'display' : patch.name ? 'rename' : 'edit'
-  save(one(paths.view(id), jsonToFile(next)), `View ${next.emoji} ${next.name}: ${what}`)
+  next.filters = cleanFilters(next.filters)
+  const fields: Writable<'views', 'update'> = {}
+  if (next.name !== view.name) fields.name = next.name
+  if (next.emoji !== view.emoji) fields.emoji = next.emoji
+  if (next.description !== view.description) fields.description = next.description
+  if (!equal(next.filters, view.filters)) fields.filters = next.filters as Json
+  if (!equal(next.display, view.display)) fields.display = next.display as Json
+  if (Object.keys(fields).length) write({ changes: [upd('views', { id }, fields)] })
 }
 
 export function deleteView(id: string) {
-  const view = useData.getState().views[id]
-  if (!view) return
-  save(one(paths.view(id), null), `Delete view ${view.emoji} ${view.name}`)
+  const c = context()
+  if (c && useData.getState().views[id]) write({ changes: [del('views', { id })] })
 }
 
 // ---------- projects ----------
@@ -631,7 +630,20 @@ export interface NewProject {
   targetDate?: string | null
 }
 
+/** the project_teams rows to add and remove so a project lists `after` instead of `before` */
+function projectTeamChanges(projectId: string, before: readonly string[], after: readonly string[], c: Ctx): AnyChange[] {
+  const out: AnyChange[] = []
+  for (const key of new Set([...before, ...after])) {
+    const team_id = tid(c, key)
+    if (!team_id || before.includes(key) === after.includes(key)) continue
+    const k = { project_id: projectId, team_id }
+    out.push(after.includes(key) ? ins('project_teams', k, { workspace_id: c.workspaceId, ...k }) : del('project_teams', k))
+  }
+  return out
+}
+
 export function createProject(input: NewProject): Project {
+  const c = context()
   const project: Project = {
     id: ulid(),
     name: input.name.trim(),
@@ -639,116 +651,172 @@ export function createProject(input: NewProject): Project {
     description: input.description?.trim() ?? '',
     status: input.status ?? 'planned',
     lead: input.lead ?? null,
-    teams: input.teams ?? [],
+    teams: [...new Set(input.teams ?? [])],
     targetDate: input.targetDate ?? null,
     createdAt: now(),
   }
-  save(one(paths.project(project.id), jsonToFile(project)), `Create project ${project.emoji} ${project.name}`)
-  return project
+  if (!c) return project
+  const p = project
+  write({
+    changes: [
+      ins(
+        'projects',
+        { id: p.id },
+        { id: p.id, workspace_id: c.workspaceId, name: p.name, emoji: p.emoji, description: p.description, status: p.status, lead_id: pid(c, p.lead) ?? null, target_date: p.targetDate },
+        { created_at: p.createdAt, linear_id: null, extra: {} },
+      ),
+      ...projectTeamChanges(p.id, [], p.teams, c),
+    ],
+  })
+  return useData.getState().projects[p.id] ?? project
 }
 
 export type ProjectPatch = Partial<Pick<Project, 'name' | 'emoji' | 'description' | 'status' | 'lead' | 'teams' | 'targetDate'>>
 
 export function updateProject(id: string, patch: ProjectPatch) {
+  const c = context()
   const project = useData.getState().projects[id]
-  if (!project) return
-  const next = { ...project, ...patch }
-  const what = patch.status ? `status ${patch.status.replace('_', ' ')}` : patch.lead !== undefined ? 'lead' : patch.targetDate !== undefined ? 'target date' : 'edit'
-  save(one(paths.project(id), jsonToFile(next)), `Project ${next.emoji} ${next.name}: ${what}`)
+  if (!c || !project) return
+  const fields: Writable<'projects', 'update'> = {}
+  if (patch.name !== undefined && patch.name !== project.name) fields.name = patch.name
+  if (patch.emoji !== undefined && patch.emoji !== project.emoji) fields.emoji = patch.emoji
+  if (patch.description !== undefined && patch.description !== project.description) fields.description = patch.description
+  if (patch.status !== undefined && patch.status !== project.status) fields.status = patch.status
+  if (patch.lead !== undefined && patch.lead !== project.lead) {
+    const lead = pid(c, patch.lead)
+    if (lead !== undefined) fields.lead_id = lead
+  }
+  if (patch.targetDate !== undefined && patch.targetDate !== project.targetDate) fields.target_date = patch.targetDate
+  const changes = [...(Object.keys(fields).length ? [upd('projects', { id }, fields)] : []), ...(patch.teams ? projectTeamChanges(id, project.teams, patch.teams, c) : [])]
+  if (changes.length) write({ changes })
 }
 
 /** remove a project; its issues stay, without a project */
 export function deleteProject(id: string) {
+  const c = context()
   const s = useData.getState()
   const project = s.projects[id]
-  if (!project) return
-  const files = new Map<string, string | null>([[paths.project(id), null]])
-  for (const i of Object.values(s.issues)) if (i.project === id) files.set(paths.issue(i), issueToFile({ ...i, project: null, updatedAt: now() }))
-  dropFromViews(files, 'projects', id)
-  save(files, `Delete project ${project.emoji} ${project.name}`)
+  if (!c || !project) return
+  write({
+    changes: [del('projects', { id }), ...viewsWithout(s.views, 'projects', id)],
+    cascade: project.teams.flatMap((key) => {
+      const team_id = tid(c, key)
+      return team_id ? [del('project_teams', { project_id: id, team_id })] : []
+    }),
+    untilEcho: [...Object.values(s.issues), ...Object.values(s.archive)].filter((i) => i.project === id).map((i) => upd('issues', { id: i.id }, { project_id: null })),
+  })
 }
 
 // ---------- teams ----------
 
 export function createTeam(input: { key: string; name: string; emoji: string }): Team {
-  const me = useData.getState().me
-  const team: Team = { key: input.key, name: input.name.trim(), emoji: input.emoji, members: me ? [me.login] : [], createdAt: now() }
-  save(one(paths.team(team.key), jsonToFile(team)), `Create team ${team.name}`)
-  return team
+  const c = context()
+  const s = useData.getState()
+  if (s.teams[input.key]) {
+    tell(MESSAGES.teamKey)
+    return s.teams[input.key]
+  }
+  const team: Team = { key: input.key, name: input.name.trim(), emoji: input.emoji, members: s.me ? [s.me.login] : [], createdAt: now(), lastNumber: 0, autoArchive: AUTO_ARCHIVE_MONTHS }
+  if (!c) return team
+  const id = crypto.randomUUID()
+  write({
+    changes: [
+      ins('teams', { id }, { id, workspace_id: c.workspaceId, key: team.key, name: team.name, emoji: team.emoji }, { created_at: team.createdAt, last_number: 0, auto_archive: AUTO_ARCHIVE_MONTHS, linear_id: null, extra: {} }),
+      ins('team_members', { team_id: id, profile_id: c.meId }, { workspace_id: c.workspaceId, team_id: id, profile_id: c.meId }),
+    ],
+  })
+  return useData.getState().teams[team.key] ?? team
 }
 
 /** how many months after an issue is finished it gets archived; 0 = never */
 export function setAutoArchive(key: string, months: number) {
+  const c = context()
   const team = useData.getState().teams[key]
-  if (!team || (team.autoArchive ?? AUTO_ARCHIVE_MONTHS) === months) return
-  save(one(paths.team(key), jsonToFile({ ...team, autoArchive: months })), months ? `${team.name}: archive finished issues after ${months} ${months === 1 ? 'month' : 'months'}` : `${team.name}: never archive finished issues`)
+  const id = c && tid(c, key)
+  if (!id || !team || (team.autoArchive ?? AUTO_ARCHIVE_MONTHS) === months) return
+  write({ changes: [upd('teams', { id }, { auto_archive: months })] })
 }
 
 /** a team's name or emoji; its key stays (issue numbers like ENG-12 are made from it) */
 export function updateTeam(key: string, patch: { name?: string; emoji?: string }) {
+  const c = context()
   const team = useData.getState().teams[key]
-  if (!team) return
-  const next = { ...team, ...(patch.name !== undefined && { name: patch.name.trim() }), ...(patch.emoji !== undefined && { emoji: patch.emoji }) }
-  if (!next.name || (next.name === team.name && next.emoji === team.emoji)) return
-  save(one(paths.team(key), jsonToFile(next)), next.name !== team.name ? `Rename team ${team.name} to ${next.name}` : `Team ${next.emoji} ${next.name}: emoji`)
+  const id = c && tid(c, key)
+  if (!id || !team) return
+  const fields: Writable<'teams', 'update'> = {}
+  const name = patch.name?.trim()
+  if (name !== undefined && name && name !== team.name) fields.name = name
+  if (patch.emoji !== undefined && patch.emoji !== team.emoji) fields.emoji = patch.emoji
+  if (Object.keys(fields).length) write({ changes: [upd('teams', { id }, fields)] })
 }
 
-/** what deleting a team takes with it, for the warning */
+/** what deleting a team takes with it, for the warning; `archived` counts what's loaded (backend.countArchived counts all) */
 export function teamContents(key: string): { issues: number; archived: number; comments: number; views: number } {
   const s = useData.getState()
-  const prefix = `teams/${key}/`
-  const all = workspace()?.paths() ?? []
-  const archived = all
-    .filter((p) => p.startsWith(`${prefix}archive/`))
-    .reduce((n, p) => n + (workspace()?.read(p) ?? '').split('\n').filter((l) => l.trim()).length, 0)
+  const issues = Object.values(s.issues).filter((i) => i.team === key)
   return {
-    issues: Object.values(s.issues).filter((i) => i.team === key).length,
-    archived,
-    comments: all.filter((p) => p.startsWith(`${prefix}comments/`)).length,
+    issues: issues.length,
+    archived: Object.values(s.archive).filter((i) => i.team === key).length,
+    comments: issues.reduce((n, i) => n + (s.comments[i.id]?.length ?? 0), 0),
     views: Object.values(s.views).filter((v) => v.team === key).length,
   }
 }
 
+const isAdmin = (s: ReturnType<typeof useData.getState>) => !!s.me && ['owner', 'admin'].includes(s.members[s.me.login]?.role ?? '')
+
 /**
  * Delete a team for everyone: its issues, comments, archive and its own views go. Sub-issues in other teams lose their
- * parent, projects stop listing the team, and inbox notes about its issues go away.
+ * parent, projects stop listing the team, and inbox notes about its issues go away. Only admins and owners may: for
+ * anyone else it says so and returns false.
  */
-export function deleteTeam(key: string) {
+export function deleteTeam(key: string): boolean {
+  const c = context()
   const s = useData.getState()
-  const team = s.teams[key]
-  if (!team) return
-  const files = new Map<string, string | null>()
-  for (const p of [...(workspace()?.paths() ?? []), ...archiveFiles().keys()]) if (p.startsWith(`teams/${key}/`)) files.set(p, null)
-  files.set(paths.team(key), null)
-  const gone = new Set(Object.values(s.issues).filter((i) => i.team === key).map((i) => i.id))
-  for (const id of gone) {
-    files.set(paths.issue(s.issues[id]), null)
-    for (const c of s.comments[id] ?? []) files.set(paths.comment(key, c), null)
+  const id = c && tid(c, key)
+  if (!c || !id || !s.teams[key]) return false
+  if (!isAdmin(s)) {
+    tell(MESSAGES.deleteTeam)
+    return false
   }
-  for (const i of Object.values(s.issues)) {
-    if (i.team !== key && i.parent && gone.has(i.parent)) files.set(paths.issue(i), issueToFile({ ...i, parent: null, updatedAt: now() }))
-  }
-  for (const v of Object.values(s.views)) if (v.team === key) files.set(paths.view(v.id), null)
-  dropFromViews(files, 'teams', key)
-  for (const p of Object.values(s.projects)) if (p.teams.includes(key)) files.set(paths.project(p.id), jsonToFile({ ...p, teams: p.teams.filter((t) => t !== key) }))
-  dropNotes(files, (n) => gone.has(n.issue))
-  save(files, `Delete team ${team.emoji} ${team.name}`)
+  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  const gone = new Set(all.filter((i) => i.team === key).map((i) => i.id))
+  const views = new Set(Object.values(s.views).filter((v) => v.team === key).map((v) => v.id))
+  write({
+    changes: [del('teams', { id }), ...viewsWithout(s.views, 'teams', key, views)],
+    // all of this the database deletes along with the team
+    cascade: [
+      ...[...gone].map((i) => del('issues', { id: i })),
+      ...[...views].map((v) => del('views', { id: v })),
+      ...Object.values(s.projects)
+        .filter((p) => p.teams.includes(key))
+        .map((p) => del('project_teams', { project_id: p.id, team_id: id })),
+      ...s.inbox.filter((n) => gone.has(n.issue)).map((n) => del('inbox', { id: n.id })),
+    ],
+    untilEcho: [
+      ...all.filter((i) => !gone.has(i.id) && i.parent && gone.has(i.parent)).map((i) => upd('issues', { id: i.id }, { parent_id: null })),
+      ...all.filter((i) => !gone.has(i.id) && i.duplicateOf && gone.has(i.duplicateOf)).map((i) => upd('issues', { id: i.id }, { duplicate_of: null })),
+    ],
+  })
+  return true
 }
 
 export function joinTeam(key: string) {
+  const c = context()
   const s = useData.getState()
   const team = s.teams[key]
-  if (!team || !s.me || team.members.includes(s.me.login)) return
-  const next = { ...team, members: [...team.members, s.me.login] }
-  save(one(paths.team(key), jsonToFile(next)), `${s.me.name || s.me.login} joins ${team.name}`)
+  const id = c && tid(c, key)
+  if (!c || !id || !team || !s.me || team.members.includes(s.me.login)) return
+  const k = { team_id: id, profile_id: c.meId }
+  write({ changes: [ins('team_members', k, { workspace_id: c.workspaceId, ...k })] })
 }
 
 export function leaveTeam(key: string) {
+  const c = context()
   const s = useData.getState()
   const team = s.teams[key]
-  if (!team || !s.me) return
-  const next = { ...team, members: team.members.filter((m) => m !== s.me!.login) }
-  save(one(paths.team(key), jsonToFile(next)), `${s.me.name || s.me.login} leaves ${team.name}`)
+  const id = c && tid(c, key)
+  if (!c || !id || !team || !s.me || !team.members.includes(s.me.login)) return
+  write({ changes: [del('team_members', { team_id: id, profile_id: c.meId })] })
 }
 
 /** "Engineering" → "ENG", "Mobile app" → "MA" */
@@ -766,57 +834,40 @@ export function suggestKey(name: string): string {
 
 // ---------- people and the workspace ----------
 
-/**
- * Make sure your people/ file matches your GitHub profile (name and picture change over time). A name you typed here
- * stays, and so does one your file already has when GitHub has none (someone from Linear linked to you).
- */
-export function introduceMe(me: Person) {
-  const s = useData.getState()
-  const mine = s.people[me.login]
-  const keepName = !!mine?.name && (mine.nameSetHere || (me.name === me.login && mine.name !== me.login))
-  const next = { ...mine, ...me, name: keepName ? mine!.name : me.name }
-  if (mine && mine.name === next.name && mine.avatarUrl === me.avatarUrl && mine.githubId === me.githubId) return
-  save(one(paths.person(me.login), jsonToFile(next)), mine ? `Update ${next.name || me.login}'s profile` : `${next.name || me.login} joins the workspace`)
-}
-
-/** Your name as teammates see it here. Empty, or the same as on GitHub: back to your GitHub name. */
+/** Your name as teammates see it here. Empty, or the same as it is: nothing changes. */
 export function renameMe(name: string) {
+  const c = context()
   const s = useData.getState()
-  if (!s.me) return
+  if (!c || !s.me) return
   const mine = s.people[s.me.login] ?? s.me
   const typed = name.trim().replace(/\s+/g, ' ')
-  const { nameSetHere: _was, ...rest } = mine
-  const next: Person = !typed || typed === s.me.name ? { ...rest, name: s.me.name } : { ...rest, name: typed, nameSetHere: true }
-  if (next.name === mine.name && !!next.nameSetHere === !!mine.nameSetHere) return
-  save(one(paths.person(s.me.login), jsonToFile(next)), `${mine.name} is now called ${next.name}`)
+  if (!typed || typed === mine.name) return
+  write({ changes: [upd('profiles', { id: c.meId }, { name: typed, name_set_here: true })] })
 }
 
 /**
- * Someone from the Linear import who hadn't joined is this GitHub person: their issues, comments, projects and views
- * become theirs, and their "hasn't joined" profile goes (see relink.ts). `to` is what GitHub says about the account;
- * their own people/ file, if they have one, wins.
+ * Someone from the Linear import who hadn't joined is this person. Not here yet: the screen that offers it is hidden
+ * until linking comes back.
  */
-export function linkPerson(guest: string, to: Person) {
-  const g = useData.getState().people[guest]
-  if (!g || !isGuest(guest) || isGuest(to.login)) return
-  save(relinkFiles(g, to), `Link ${g.name} to @${to.login}`)
+export function linkPerson(_guest: string, _to: Person) {
+  tell("Linking people from Linear isn't available yet.")
 }
 
-/** A brand-new workspace: its file, you, and a first team. */
-export function startWorkspace(name: string, firstTeam: { key: string; name: string; emoji: string }) {
-  const me = useData.getState().me
-  const created = now()
-  const files = new Map<string, string | null>([[paths.workspace(), jsonToFile({ name: name.trim(), format: FORMAT_VERSION, createdAt: created })]])
-  if (me) files.set(paths.person(me.login), jsonToFile(me))
-  const team: Team = { key: firstTeam.key, name: firstTeam.name.trim(), emoji: firstTeam.emoji, members: me ? [me.login] : [], createdAt: created }
-  files.set(paths.team(team.key), jsonToFile(team))
-  save(files, `Create the ${name.trim()} workspace`)
+/** A brand-new workspace with you as its owner and its first team. Returns its id. */
+export function startWorkspace(name: string, firstTeam: TeamDraft): Promise<string> {
+  return createWorkspace(name, firstTeam)
 }
 
 export function renameWorkspace(name: string) {
-  const ws = useData.getState().workspace
-  if (!ws || !name.trim()) return
-  save(one(paths.workspace(), jsonToFile({ ...ws, name: name.trim() })), `Rename the workspace to ${name.trim()}`)
+  const c = context()
+  const s = useData.getState()
+  const ws = s.workspace
+  if (!c || !ws || !name.trim() || name.trim() === ws.name) return
+  if (!isAdmin(s)) {
+    tell(MESSAGES.renameWorkspace)
+    return
+  }
+  write({ changes: [upd('workspaces', { id: c.workspaceId }, { name: name.trim() })] })
 }
 
 // ---------- pictures ----------
@@ -824,18 +875,9 @@ export function renameWorkspace(name: string) {
 const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
 export const MAX_IMAGE_MB = 10
 
-/** Keep a pasted or dropped picture in the workspace. Returns the address to put in the Markdown. */
+/** Keep a pasted or dropped picture in the workspace. Returns the address to put in the Markdown. Coming back soon. */
 export async function addImage(file: Blob): Promise<string> {
-  const ext = IMAGE_TYPES[file.type]
-  if (!ext) throw new Error('Only PNG, JPEG, GIF and WebP pictures can be added.')
+  if (!IMAGE_TYPES[file.type]) throw new Error('Only PNG, JPEG, GIF and WebP pictures can be added.')
   if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(`This picture is too big. Pictures can be up to ${MAX_IMAGE_MB} MB.`)
-  const bytes = new Uint8Array(await file.arrayBuffer())
-  const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map((b) => b.toString(16).padStart(2, '0')).join('').slice(0, 24)
-  const path = `assets/${hash}.${ext}`
-  if (!workspace()?.read(path)) {
-    let binary = ''
-    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
-    save(one(path, BINARY_PREFIX + btoa(binary)), 'Add a picture')
-  }
-  return `/${path}`
+  throw new Error("Pictures can't be added just yet. They're coming back soon.")
 }

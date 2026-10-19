@@ -84,7 +84,9 @@ function Composer() {
     typed.current = { title: '', description: '' }
     unsent = null
     created.current = !more
-    toast(`Created ${issueRef(issue)}`, { description: issue.title, action: { label: 'Open', onClick: () => navigate(`/issue/${issueRef(issue)}`) } })
+    // the number shown is a guess until it's saved; Open goes to the number it has by then
+    const open = () => navigate(`/issue/${issueRef(useData.getState().issues[issue.id] ?? issue)}`)
+    toast(`Created ${issueRef(issue)}`, { description: issue.title, action: { label: 'Open', onClick: open } })
     if (more) {
       setDraft((d) => ({ ...d, title: '', description: '' }))
       setRound((r) => r + 1)

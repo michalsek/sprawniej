@@ -3,20 +3,24 @@
  * meanwhile), teammates' changes as they happen, and catching up after the connection dropped or the tab slept.
  * Everything goes into the store through applyRows.
  *
- * Everything it talks to (the database, the channels, the browser, the stores) comes in an env, so tests can give it
- * pretend ones; index.ts gives it the real ones.
+ * Your own changes are saved by the writer (writes.ts), which shows them on the open workspace: it attaches once the
+ * workspace is open, stays while the workspace is read again from the start, and stops when it closes.
+ *
+ * Everything it talks to (the database, the channels, the browser, the stores, the writer) comes in an env, so tests
+ * can give it pretend ones; index.ts gives it the real ones.
  */
 import type { StoreApi } from 'zustand'
 import { EMPTY, type DataState } from '@/data/store'
-import { applyRows, emptyLive, type Incoming, type LiveState, type StoreSlice } from './apply'
+import { applyRows, emptyLive, type Incoming, type LiveState, type Mirror, type StoreSlice } from './apply'
 import type { ConnectionEvents } from './connection'
 import { RowFetcher, type Asked } from './fetching'
 import { isMessage, track, type ChannelEvents, type ChannelsLike, type ChannelStatus, type Topic, type Tracked } from './live'
 import { planFetch, sinceMark, tooOld, type Reader } from './load'
 import type { MyProfile } from './profiles'
 import type { Registry } from './registry'
-import { connectionState, type SaveStatus } from './status'
+import { chipState, type SaveStatus } from './status'
 import type { LiveTable, Message } from './tables'
+import type { WriteTarget } from './writes'
 
 export type Phase = 'closed' | 'opening' | 'open' | 'failed' | 'gone'
 
@@ -40,9 +44,32 @@ export interface Delays {
   retry: readonly number[]
   /** after this long hidden, coming back catches up (the browser may have paused the connection) */
   slept: number
+  /** a deleted team or project: catch up this long after, for whatever of its many rows' messages didn't come */
+  cascade: number
 }
 
-export const DELAYS: Delays = { flush: 16, fetch: 50, askAgain: 30_000, retry: [2_000, 5_000, 15_000, 30_000], slept: 60_000 }
+export const DELAYS: Delays = { flush: 16, fetch: 50, askAgain: 30_000, retry: [2_000, 5_000, 15_000, 30_000], slept: 60_000, cascade: 3_000 }
+
+/** what an open workspace needs from the writer (writes.ts) */
+export interface WritesHooks {
+  /** open: your changes show on this workspace (what's still unsaved shows again) */
+  attach(target: WriteTarget): void
+  /** read again from the start: keep sending, show nothing until the next attach */
+  detach(): void
+  /** closing for good: send what's waiting for up to `ms`, then stop */
+  finish(ms: number): Promise<void>
+  /** the workspace went away: stop at once, quietly */
+  stop(): void
+  status(): { pending: number; waiting: boolean }
+}
+
+export const NO_WRITES: WritesHooks = {
+  attach: () => {},
+  detach: () => {},
+  finish: () => Promise.resolve(),
+  stop: () => {},
+  status: () => ({ pending: 0, waiting: false }),
+}
 
 type Store<T> = Pick<StoreApi<T>, 'getState' | 'setState'>
 
@@ -60,6 +87,7 @@ export interface WorkspaceEnv {
   /** read the whole workspace again (catching up from too far back) */
   reopen(): void
   delays: Delays
+  writes: WritesHooks
 }
 
 const slice = (s: DataState): StoreSlice => ({
@@ -85,7 +113,7 @@ function noAnswer(reqs: readonly Asked[]): Incoming[] {
   return [...byTable].map(([table, keys]): Incoming => ({ from: 'fetch', table, rows: [], keys }))
 }
 
-export class LiveWorkspace {
+export class LiveWorkspace implements WriteTarget {
   readonly workspaceId: string
   readonly me: MyProfile
   closed = false
@@ -114,6 +142,7 @@ export class LiveWorkspace {
   private failing = false
   private retries = 0
   private retryTimer: ReturnType<typeof setTimeout> | undefined
+  private cascadeTimer: ReturnType<typeof setTimeout> | undefined
   private unwatch: (() => void) | undefined
 
   constructor(env: WorkspaceEnv, workspaceId: string, me: MyProfile) {
@@ -138,6 +167,18 @@ export class LiveWorkspace {
         this.retryLater()
       },
     })
+  }
+
+  get meId(): string {
+    return this.me.id
+  }
+
+  get registry(): Registry {
+    return this.env.registry
+  }
+
+  server(): Mirror {
+    return this.live.server
   }
 
   /** never throws: whatever goes wrong while opening shows as "We couldn't open this workspace" */
@@ -198,6 +239,7 @@ export class LiveWorkspace {
         this.refresh()
       },
     })
+    env.writes.attach(this)
     this.refresh({ synced: true, progress: undefined })
     if (catchUp) void this.catchUp()
   }
@@ -207,6 +249,7 @@ export class LiveWorkspace {
     clearTimeout(this.flushTimer)
     clearTimeout(this.retryTimer)
     clearTimeout(this.archiveTimer)
+    clearTimeout(this.cascadeTimer)
     this.fetcher.stop()
     this.unwatch?.()
     await this.channels?.close()
@@ -231,6 +274,11 @@ export class LiveWorkspace {
     }
     // a burst (a deleted team's issues, say) is drawn once
     this.queue.push(m)
+    // so many rows go with a team or a project that some messages may not come: a catch-up finds the rest
+    if (m.op === 'DELETE' && (m.table === 'teams' || m.table === 'projects')) {
+      clearTimeout(this.cascadeTimer)
+      this.cascadeTimer = setTimeout(() => void this.catchUp(), this.env.delays.cascade)
+    }
     this.flushTimer ??= setTimeout(() => {
       this.flushTimer = undefined
       const q = this.queue
@@ -256,17 +304,19 @@ export class LiveWorkspace {
     this.floor ??= this.live.mark
   }
 
-  /** the chip, from the facts as they are now */
-  private refresh(more: Partial<SaveStatus> = {}) {
+  /** the chip, from the facts as they are now (the writer calls it too) */
+  refresh(more: Partial<SaveStatus> = {}) {
     if (this.closed) return
     if (this.env.backend.getState().phase !== 'open' && !more.synced) return
-    const state = connectionState(this.env.online(), this.tracks.ws.up && this.tracks.me.up, this.env.signedIn(), this.failing)
-    this.env.status.setState({ state, pending: 0, detail: undefined, ...more })
+    const w = this.env.writes.status()
+    const c = { online: this.env.online(), channelsUp: this.tracks.ws.up && this.tracks.me.up, signedIn: this.env.signedIn(), failing: this.failing }
+    this.env.status.setState({ state: chipState(c, w), pending: w.pending, waiting: w.waiting, detail: undefined, ...more })
   }
 
   // ---------- applying ----------
 
-  private apply(inputs: Incoming[]) {
+  /** everything goes into the store through here: loads, messages, and your own changes (the writer) */
+  apply(inputs: Incoming[]) {
     if (this.closed || !inputs.length) return
     const { env } = this
     const r = applyRows(this.live, slice(env.data.getState()), inputs, { workspaceId: this.workspaceId, meId: this.me.id, registry: env.registry })
@@ -392,6 +442,16 @@ export class LiveWorkspace {
     )
   }
 
+  /** how many archived issues a team has (deleting it says so); 0 when it can't be told */
+  async countArchived(teamKey: string): Promise<number> {
+    const id = this.env.registry.teamId(teamKey)
+    if (!id || this.closed) return 0
+    return this.env.reader.countArchived(id).catch((e: unknown) => {
+      console.warn('Sprawniej couldn’t count the archived issues', e)
+      return 0
+    })
+  }
+
   // ---------- endings ----------
 
   private fail(failure: 'gone' | 'network') {
@@ -403,6 +463,8 @@ export class LiveWorkspace {
   /** deleted or left while open: say so, and keep what's on screen until they choose another workspace */
   private goneAway(gone: 'deleted' | 'removed' | 'missing') {
     if (this.closed) return
+    // nothing of yours can be saved there any more, and saying so for each change helps nobody
+    this.env.writes.stop()
     void this.close()
     this.env.status.setState({ state: 'closed', detail: undefined })
     this.env.backend.setState({ phase: 'gone', gone })
@@ -419,11 +481,13 @@ export class Lifecycle {
   private make: (workspaceId: string, me: MyProfile) => LiveWorkspace | null
   private backend: Store<BackendState>
   private registry: Registry
+  private writes: WritesHooks
 
-  constructor(make: Lifecycle['make'], backend: Store<BackendState>, registry: Registry) {
+  constructor(make: Lifecycle['make'], backend: Store<BackendState>, registry: Registry, writes: WritesHooks = NO_WRITES) {
     this.make = make
     this.backend = backend
     this.registry = registry
+    this.writes = writes
   }
 
   private queue(job: () => Promise<void>): Promise<void> {
@@ -432,29 +496,35 @@ export class Lifecycle {
   }
 
   open(workspaceId: string, me: MyProfile): Promise<void> {
-    return this.queue(async () => {
-      if (this.current) await this.closeNow()
-      const ws = this.make(workspaceId, me)
-      if (!ws) return
-      this.current = ws
-      // opening isn't waited for here: a close that comes meanwhile marks it closed, and it stops at its next step
-      void ws.open()
-    })
+    return this.queue(() => this.start(workspaceId, me, false))
   }
 
   close(): Promise<void> {
-    return this.queue(() => this.closeNow())
+    return this.queue(() => this.closeNow(false))
   }
 
-  /** the same workspace read again from the start, if it's still the one open */
+  /** the same workspace read again from the start, if it's still the one open; your unsaved changes carry over */
   reopen(ws: LiveWorkspace): void {
-    if (this.current === ws) void this.open(ws.workspaceId, ws.me)
+    if (this.current === ws) void this.queue(() => (this.current === ws ? this.start(ws.workspaceId, ws.me, true) : Promise.resolve()))
   }
 
-  private async closeNow() {
+  private async start(workspaceId: string, me: MyProfile, again: boolean) {
+    if (this.current) await this.closeNow(again)
+    const ws = this.make(workspaceId, me)
+    if (!ws) return
+    this.current = ws
+    // opening isn't waited for here: a close that comes meanwhile marks it closed, and it stops at its next step
+    void ws.open()
+  }
+
+  /** `again`: the same workspace opens next, so what's waiting to be saved stays */
+  private async closeNow(again: boolean) {
     const ws = this.current
     this.current = null
     if (!ws) return
+    if (again) this.writes.detach()
+    // switching workspace or signing out: a moment to send what's waiting, while it still shows
+    else await this.writes.finish(3_000)
     await ws.close()
     this.registry.clear()
     this.backend.setState({ phase: 'closed', workspaceId: undefined, failure: undefined, gone: undefined })

@@ -28,7 +28,7 @@ let switchOver: ((reload?: boolean) => Promise<void>) | undefined
 export async function applyUpdate() {
   if (useUpdate.getState().applying) return
   useUpdate.setState({ applying: true })
-  // anything not saved yet stays on this device anyway; this just sends it before the page reloads
+  // what's still waiting is sent first: whatever isn't saved when the page reloads is lost
   await Promise.race([backend.flush().catch(() => {}), new Promise((r) => setTimeout(r, 8_000))])
   // the new version waits in this browser: let it take over (it reloads the page). Another tab may have done that
   // already, in which case a plain reload picks it up.

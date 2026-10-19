@@ -3,7 +3,7 @@ import { useState, type SubmitEvent } from 'react'
 import { useLocation } from 'wouter'
 import { Loader2 } from 'lucide-react'
 import { friendlyDbError } from '@/backend/problem'
-import { createWorkspace } from '@/backend/workspaces'
+import { startWorkspace } from '@/data/actions'
 import { TeamFields } from '@/features/teams/TeamFields'
 import { teamDraftOk, type TeamDraft } from '@/model/teamDraft'
 import { useSession } from '@/session'
@@ -26,7 +26,7 @@ export function NewWorkspace({ onBack }: { onBack: () => void }) {
     setBusy(true)
     setProblem(undefined)
     try {
-      const id = await createWorkspace(name, team)
+      const id = await startWorkspace(name, team)
       open({ id, name: name.trim() })
       navigate(`/team/${team.key}/issues/active`, { replace: true })
     } catch (err) {

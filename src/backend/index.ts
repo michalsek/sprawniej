@@ -1,9 +1,8 @@
 /**
- * The backend as the app uses it: open one workspace and keep it up to date (workspace.ts), with the real database,
- * channels, browser and stores.
- *
- * Saving comes in phase 5: until then actions still change the store the old way, and nothing they do is saved.
+ * The backend as the app uses it: open one workspace and keep it up to date (workspace.ts) and save your changes
+ * (writes.ts), with the real database, channels, browser and stores.
  */
+import { toast } from 'sonner'
 import { create } from 'zustand'
 import { useData } from '@/data/store'
 import { useAuth } from './auth'
@@ -14,11 +13,30 @@ import { Loader } from './load'
 import type { MyProfile } from './profiles'
 import { registry } from './registry'
 import { useSaveStatus } from './status'
-import { DELAYS, Lifecycle, LiveWorkspace, type BackendState } from './workspace'
+import { DELAYS, Lifecycle, LiveWorkspace, type BackendState, type WritesHooks } from './workspace'
+import { attach, debugWrites, detach, flush, pending, startWrites, started, stopWrites, writesStatus } from './writes'
+import { postgrest } from './writes/send'
 
 export type { BackendState, Phase } from './workspace'
 
 export const useBackend = create<BackendState>()(() => ({ phase: 'closed' }))
+
+const writes: WritesHooks = {
+  attach(target) {
+    const db = getClient()
+    if (!db) return
+    // one writer per open session; a workspace read again from the start keeps the one it has
+    if (!started()) startWrites({ transport: postgrest(db), tell: (m) => toast(m), onStatus: () => life.current?.refresh() })
+    attach(target)
+  },
+  detach,
+  finish: async (ms) => {
+    await flush(ms)
+    stopWrites()
+  },
+  stop: stopWrites,
+  status: writesStatus,
+}
 
 const life: Lifecycle = new Lifecycle(
   (workspaceId: string, me: MyProfile) => {
@@ -37,6 +55,7 @@ const life: Lifecycle = new Lifecycle(
         watch: watchConnection,
         reopen: () => life.reopen(ws),
         delays: DELAYS,
+        writes,
       },
       workspaceId,
       me,
@@ -45,21 +64,25 @@ const life: Lifecycle = new Lifecycle(
   },
   useBackend,
   registry,
+  writes,
 )
 
 const CLOSED_CHANNELS: Record<Topic, ChannelStatus> = { ws: 'CLOSED', me: 'CLOSED' }
 
 export const backend = {
   open: (workspaceId: string, me: MyProfile): Promise<void> => life.open(workspaceId, me),
+  /** closing: what's waiting gets a moment to be sent first */
   close: (): Promise<void> => life.close(),
   /** read what changed since the last change we know of (scripted checks call it too) */
   catchUp: (): Promise<void> => life.current?.catchUp() ?? Promise.resolve(),
   /** archived issues into the store, once per opening */
   loadArchive: (): void => life.current?.loadArchive(),
-  /** sends what's still waiting (phase 5) */
-  flush: (): Promise<void> => Promise.resolve(),
-  /** changes still waiting (phase 5) */
-  pending: (): number => 0,
+  /** sends what's still waiting now; done once it's saved, or can't be for now, or after `ms` */
+  flush: (ms?: number): Promise<void> => flush(ms).then(() => {}),
+  /** changes still waiting to be saved */
+  pending,
+  /** how many archived issues a team has */
+  countArchived: (teamKey: string): Promise<number> => life.current?.countArchived(teamKey) ?? Promise.resolve(0),
   /** for scripted checks */
   debug: () => {
     const ws = life.current
@@ -70,6 +93,7 @@ export const backend = {
       mark: ws?.live.mark ?? null,
       channels: ws?.channels && !ws.closed ? { ...ws.channels.status } : { ...CLOSED_CHANNELS },
       catchUps: ws?.catchUps ?? 0,
+      writes: debugWrites(),
     }
   },
 }

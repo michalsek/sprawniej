@@ -43,8 +43,12 @@ There is no Save button. Whatever you type or change is kept right away. In the 
 
 - **Saved**: everything is safe and your teammates can see it.
 - **Saving…**: it's on its way, give it a second.
-- **Offline: your changes are safe on this device**: no internet right now. Keep working; everything goes out when
-  you're back online.
+- **Offline**: no internet right now. Keep working and keep the tab open; everything goes out when you're back
+  online. If you try to close the tab before that, Sprawniej asks first.
+- **Not saved yet**: Sprawniej can't be reached for a moment. It keeps trying; wait until it says Saved before you
+  close the tab.
+- If someone else's change and yours can't both be kept (say, they deleted an issue you were editing), a short
+  message says what wasn't saved.
 
 Your teammates' changes show up on their own, too.
 

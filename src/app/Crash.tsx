@@ -1,9 +1,10 @@
 /**
  * The last safety net: if a screen fails to draw, show a way out instead of a blank page. The usual cause is a part
  * of the app that couldn't be downloaded (offline, or a tab left open across a new version), which a reload fixes.
- * Your changes are already kept on this device, so reloading loses nothing.
+ * Reload first sends what's still waiting to be saved (for a few seconds at most).
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import { backend } from '@/backend'
 import { Button } from '@/ui/button'
 
 const RELOADED = 'sprawniej:reloaded-for-update'
@@ -36,9 +37,9 @@ export class Crash extends Component<{ children: ReactNode }, { error: unknown }
           <p className="mt-2 text-[15px] text-muted-foreground">
             {offline
               ? 'You seem to be offline, and this part of Sprawniej hasn’t been opened on this device yet. Connect to the internet and reload.'
-              : 'Reloading usually fixes it. Your changes are kept on this device, so nothing is lost.'}
+              : 'Reloading usually fixes it. Your saved changes are safe.'}
           </p>
-          <Button className="mt-5" onClick={() => location.reload()}>
+          <Button className="mt-5" onClick={() => void backend.flush(3_000).finally(() => location.reload())}>
             Reload
           </Button>
         </div>

@@ -34,8 +34,8 @@ function forgetMine() {
  * its screen goes.
  */
 export async function signOutOfThisBrowser(then = '#/') {
-  // nothing that waits may be lost (phase 5); a failure here is told by the sign-out dialog, not now
-  await backend.flush().catch(() => {})
+  // the sign-out dialog already asked about anything that couldn't be sent
+  await backend.flush(3_000).catch(() => {})
   await signOutLocally()
   useSession.getState().signOut()
   resetProjection()
@@ -45,10 +45,8 @@ export async function signOutOfThisBrowser(then = '#/') {
   location.reload()
 }
 
-/** Back to the workspace list. Changes still waiting are sent first (they'd otherwise wait until you open it again). */
+/** Back to the workspace list. Changes still waiting get a moment to be sent first (useSwitchWorkspace asks before). */
 export async function switchWorkspace() {
-  // as above: anything still waiting is told about, not lost silently (phase 5)
-  await backend.flush().catch(() => {})
   await backend.close()
   useSession.getState().close()
   location.hash = '#/'

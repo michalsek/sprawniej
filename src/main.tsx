@@ -8,11 +8,16 @@ import { backend } from '@/backend'
 import { startAuth, takeReturnedUrl } from '@/backend/auth'
 import { isSetUp } from '@/backend/client'
 import { useSaveStatus } from '@/backend/status'
+import { debugWrites } from '@/backend/writes'
 import * as actions from '@/data/actions'
 import './index.css'
 
 // for scripted checks (CLAUDE.md, testing)
-window.sprawniej = { ...window.sprawniej, actions: { ...actions }, backend: { status: useSaveStatus, catchUp: backend.catchUp, debug: backend.debug } }
+window.sprawniej = {
+  ...window.sprawniej,
+  actions: { ...actions },
+  backend: { status: useSaveStatus, catchUp: backend.catchUp, debug: backend.debug, pending: backend.pending, flush: backend.flush, writes: debugWrites },
+}
 
 // a page that loaded fine clears the "reloaded once for a new version" mark, so the next update can do it again
 window.addEventListener('load', () => setTimeout(() => sessionStorage.removeItem('sprawniej:reloaded-for-update'), 10_000))
