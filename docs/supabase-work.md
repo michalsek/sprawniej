@@ -36,10 +36,10 @@ Status: `todo`, `doing`, `done`.
 | 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | done | 2b367bd + fix round; QA probes re-run |
 | 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | done | 537747e + fix round; 23/23 browser scenarios, 59/59 DB tests |
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | done | 80d144b + fix round; QA's Q1-Q15 and 22 browser cases pass |
-| 6 | Linear import end to end (`import_rows`) | doing | being built in its own worktree |
+| 6 | Linear import end to end (`import_rows`) | doing | built on its branch (cf67730); QA and review in; fix round running |
 | 7 | History and pictures | done | 773dc82 + fix round, merged in cca59f9 |
-| 8 | Team features: invites, members and roles, people from Linear, ways to sign in | doing | built on its branch (632eef6); QA and review running |
-| 9 | Read cache and catch-up from IndexedDB | doing | being built in its own worktree |
+| 8 | Team features: invites, members and roles, people from Linear, ways to sign in | doing | built on its branch (632eef6); QA and review in; fix round running |
+| 9 | Read cache and catch-up from IndexedDB | doing | built on its branch (5770657); QA and review running |
 | 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | todo | after 6 to 9 |
 | 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | todo | last |
 
@@ -261,6 +261,23 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E166 | phase 6 review | `paged` runs an exact count query on every page | open |  |
 | E167 | phase 5 fix round | `bunx supabase db query` sometimes fails to log in to the pooler under load (parallel runs); retrying works | won't do | a CLI hiccup, not app code; scripts retry |
 | E168 | phase 5 fix round | Cleanup must delete workspaces before profiles (the last-owner rule refuses the other order) | fixed | briefs updated |
+| E169 | phase 8 QA | Two owners stepping down or leaving at the same moment can leave a workspace with no owner | open | phase 8 fix round (R1, advisory lock) |
+| E170 | phase 8 QA | Long workspace names push the Join button off the screen on a phone | open | phase 8 fix round (R2) |
+| E171 | phase 8 review | Member dialogs read "Make undefined an owner?" while closing; a locked role's reason is only a hover title | open | phase 8 fix round (R3, R4) |
+| E172 | phase 8 review | Messages and the role type are copied in two places; an import cycle between Gate and JoinFlow | open | phase 8 fix round (R5, R6) |
+| E173 | phase 8 QA | Some malformed invite links show the normal welcome instead of "This invite link doesn't work" | open | phase 8 fix round (R10) |
+| E174 | phase 8 QA | A different person signing in after a reload inherits the previous person's last workspace | open | phase 8 fix round (R14) |
+| E175 | phase 8 review | `ConfirmDialog` always uses the red button, also for "Make owner" | open |  |
+| E176 | phase 9 implementer | The 10 s look-back re-reads rows changed just before the mark (harmless, some egress) | won't do | small and it makes catching up safe; fine for 8 people |
+| E177 | phase 6 QA | Try again after a partial import loses guests' emails, and after a reload leaves a new team with no members | open | phase 6 fix round (I1) |
+| E178 | phase 6 QA | After a team swap, re-imports never settle (views re-sent every time) | open | phase 6 fix round (I2) |
+| E179 | phase 6 QA + review | A dropped connection during the check step shows "Something went wrong: [object Object]" | open | phase 6 fix round (I3) |
+| E180 | phase 6 QA | A teammate with the archive open sees only part of an imported archive until a reload | open | phase 6 fix round (I4) |
+| E181 | phase 6 QA | The check step counts fewer comments on a second import (archived issues' comments left out) | open | phase 6 fix round (I6) |
+| E182 | phase 9 review | Opening from the copy never loads the archive (archived issues stay "Loading") | open | phase 9 fix round |
+| E183 | phase 9 review | A copy that reads back but crashes blocks the workspace for good | open | phase 9 fix round |
+| E184 | phase 9 review | A tab that hasn't heard about the sign-out can write the copy back after it was deleted | open | phase 9 fix round |
+| E185 | phase 9 review | A copy that's too big is encoded again on every change | open | phase 9 fix round |
 
 ## Waiting on the user
 
