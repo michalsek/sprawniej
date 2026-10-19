@@ -34,7 +34,8 @@ Read before changing things:
 GitHub · `src/sync` the local copy, saving, pulling and merging · `src/session.ts` who is signed in.
 
 ## Releasing
-`main` deploys to GitHub Pages and **real people use it**.
+`main` is what GitHub Pages serves, but publishing is **by hand**: run the *Deploy to GitHub Pages* workflow (Actions
+tab, or `gh workflow run pages.yml`). Nothing is published on a push. Once the team uses it, treat `main` as what people get.
 - Work on a branch (`git switch -c feat/<name>`); push to `main` only a complete, tested feature.
 - Before merging: `bunx tsc -b`, `bun test`, `bun run lint`, `bun run build`, and drive the real flow in a browser.
 - Every merge into `main` is a release. Pick the version bump in `src/version.ts` **before** merging, add an entry at

@@ -21,6 +21,10 @@ goes away.
 - **No email sender and no domain for now.** The first days run from localhost, by one person, to check that
   everything behaves. Sign-in starts with GitHub and email and password; Google, our own email sender and a public
   address come before teammates join (section 6, section 11).
+- **2.0.0 replaces the current site** of this fork (`michalsek/sprawniej`), which nobody uses yet. Its GitHub Pages
+  address, `https://michalsek.github.io/sprawniej/`, is the public address for stage B. Publishing is **by hand only**: the Pages workflow
+  runs when started from the Actions tab (`gh workflow run pages.yml`), not on every push to `main`. The original
+  repository (`mikolajpochec/sprawniej`) and any other Pages site are untouched.
 - **The tasks come from Linear.** The existing Linear import moves onto rows first (section 8); importing an old
   Sprawniej workspace from GitHub isn't needed for this run and comes later, only if someone needs it.
 
@@ -1010,7 +1014,7 @@ Supabase Auth with three ways in: **GitHub**, **Google**, and **email and passwo
 | Stage | Who | Ways in | Emails | Address |
 | --- | --- | --- | --- | --- |
 | **A. Solo on localhost** (first days) | you | GitHub, email and password with **"confirm email" off** | none needed | `http://localhost:5173` only |
-| **B. The team** (6 to 8 people) | everyone | GitHub, email and password with confirmation, Google | our own sender (for confirmations and password resets) | the public address |
+| **B. The team** (6 to 8 people) | everyone | GitHub, email and password with confirmation, Google | our own sender (for confirmations and password resets) | `https://michalsek.github.io/sprawniej/` |
 
 Stage A needs no email and no domain: GitHub sign-in sends no email, and with confirmations off an email account works
 at once. The built-in sender would only reach the project team's own addresses, a couple of times an hour, so we don't
@@ -1036,8 +1040,9 @@ Stage B changes `site_url`, adds the public address to the redirect URLs, turns 
 `[auth.external.google]` and `[auth.email.smtp]`, and is pushed with `supabase config push`. Moving from A to B changes
 no code, only settings.
 
-`main` deploys to GitHub Pages, where people use today's version, so the Supabase version **stays on its branch** during
-stage A and runs only from localhost. It reaches `main` at the switch (section 11).
+Publishing to GitHub Pages happens only when someone runs the Pages workflow, so nothing reaches the public address by
+accident. During stage A the Supabase version runs only from localhost; it is published at the switch (section 11).
+GitHub Pages isn't turned on for this fork yet; step 12 does that.
 
 ### PKCE, because the app uses hash routes
 
@@ -1056,7 +1061,7 @@ createClient(url, publishableKey, { auth: { flowType: 'pkce', detectSessionInUrl
   `{{ .SiteURL }}/?token_hash={{ .TokenHash }}&type=email` (or `type=recovery`), and the app calls
   `verifyOtp({ token_hash, type })`. A recovery opens a "Choose a new password" screen.
 - **Redirect URLs** allowed in Auth settings: `http://localhost:5173`, `:5297`, `:5298`, `:5299` for development and
-  tests, and in stage B the public address (`VITE_PUBLIC_URL`, GitHub Pages today).
+  tests, and in stage B `https://michalsek.github.io/sprawniej/` (also `VITE_PUBLIC_URL`).
 - In stage B, email sign-ups must confirm their address before they can sign in.
 
 ### Providers
@@ -1219,7 +1224,7 @@ is what `buildImport` returns and how it is saved.
 
 ### From a GitHub workspace (later, only if someone needs it)
 
-Not needed for this run. If a team using today's GitHub version wants to move, this is the one-time move, done by the
+Not needed: nobody uses the GitHub version of this fork. If that changes and a team wants to move, this is the one-time move, done by the
 workspace's owner from the app: **Settings › Bring over your old workspace**. It would live only for a release or two,
 so it can reuse today's code instead of a new tool.
 
@@ -1348,6 +1353,7 @@ never whole descriptions. Pictures stay at 10 MB at most; the editor could shrin
 | Statuses and priorities are fixed. | **Stays**, plus: the SQL checks copy `src/model/status.ts`. | |
 | Classic tokens only. No fine-grained tokens, no OAuth app, no proxy server. | **Sign in through Supabase Auth only. No server of our own besides Supabase: database rules, a few SQL functions, Edge Functions for webhooks.** | The old rule forbids exactly what we're doing. |
 | No agents or AI features. | **Stays.** | |
+| Releasing: "`main` deploys to GitHub Pages and real people use it." | Publishing is by hand: merging into `main` doesn't publish; running the Pages workflow does. The rest (branches, checks, version bump and changelog before merging) stays. | The workflow now runs only when started by hand (changed 2026-10-19). |
 | Code map: `src/github`, `src/sync`. | `src/backend` (all Supabase calls), `supabase/` (migrations, SQL tests, email templates, Edge Functions). | |
 | Testing: sync tests on a throwaway repo; `window.sprawniej.sync`; two origins and two tabs. | Tests run against the local stack (`supabase start`), **never the real project**. `window.sprawniej.backend`. Two people = two browsers signed in as two test accounts; also test one person in two tabs, and a dropped connection. | |
 | Never write a GitHub key into a file. | Never write a Supabase secret key, database password or GitHub key into a file. The publishable key and project URL may be in the build. | |
@@ -1407,15 +1413,20 @@ the switch.
 11. **What a team needs:** invites and Settings › members and roles, the read cache (section 9), Google sign-in, our own
     email sender and templates with confirmations on, the backup workflow and picture backup, and a restore tried once
     into the local stack.
-12. **Where the team opens it:** the public address in `config.toml` and `VITE_PUBLIC_URL` (see open question 2).
+12. **Where the team opens it:** `https://michalsek.github.io/sprawniej/`. Turn on GitHub Pages for the fork (Settings › Pages › Source:
+    GitHub Actions), add the address to `site_url` and the redirect URLs in `config.toml` (`supabase config push`), and
+    give the Pages workflow `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` and `VITE_PUBLIC_URL` as repository variables
+    (the publishable key is meant to be public; no secrets in the build). Done = a manual run of the workflow publishes a
+    build that signs in against `sprawniejapp` from that address.
 13. **Remove the old code** (`src/sync`, most of `src/github`, `src/data/project.ts`, old tests) and update
     docs/architecture.md, docs/data-format.md (becomes "the database"), docs/user-guide.md, Help, README, CLAUDE.md.
-14. **Switch.** Release 2.0.0 (version, changelog, `package.json`, `bun scripts/changelog.ts`), a final re-import, the
-    team signs in.
+14. **Switch.** Release 2.0.0 (version, changelog, `package.json`, `bun scripts/changelog.ts`), merge into `main`, run
+    the Pages workflow by hand, a final re-import from Linear, the team signs in.
 
 **Later**
 
-- The GitHub workspace import (section 8), only if a team on today's GitHub version wants to move.
+- The GitHub workspace import (section 8): not needed, since nobody uses the GitHub version of this fork. Kept in the
+  plan only in case that changes.
 
 - The GitHub App and an Edge Function (`supabase/functions/github-webhook`) that moves issues when linked pull
     requests open or merge, writing as the person who opened the PR (`sprawniej.actor`) and reusing `notify.ts`. Its
@@ -1431,27 +1442,24 @@ the switch.
 - *Where do the tasks come from?* Linear. The Linear import moves onto rows first; the GitHub workspace import waits
   until someone needs it (section 8).
 - *History from Linear?* It stays in Linear; the import brings issues as they are now, as it does today.
+- *Where does the team open it?* 2.0.0 replaces this fork's current site, which nobody uses; the address is
+  `https://michalsek.github.io/sprawniej/`, and publishing is by hand only (section 11, steps 12 and 14).
 - *Email sender and our own address?* Not now. Stage A runs from localhost with no email (section 6); both come back
   before the team joins.
 
 **Still open:**
 
-1. **Who opens it in stage B?** Today `main` deploys to GitHub Pages for the people using the GitHub version. Should
-   2.0.0 replace that for everyone, or should the Supabase version live at a second address (another Pages site or a
-   preview) while today's version keeps running for its users?
-2. **Which public address** for stage B: GitHub Pages as now, or a custom domain? (Redirect URLs, email links and
-   `VITE_PUBLIC_URL` follow from it.)
-3. **Who may delete teams, labels and projects?** Today anyone can. Keep that, or only admins?
-4. **Invites by email** (sent by Sprawniej), or links only, as today?
-5. **Google sign-in in stage B:** for everyone with a Google account, or only company Google accounts (an "Internal"
+1. **Who may delete teams, labels and projects?** Today anyone can. Keep that, or only admins?
+2. **Invites by email** (sent by Sprawniej), or links only, as today?
+3. **Google sign-in in stage B:** for everyone with a Google account, or only company Google accounts (an "Internal"
    consent screen and a domain check)?
-6. **Simultaneous description edits:** is "the later save wins for the whole description" acceptable, or should the
+4. **Simultaneous description edits:** is "the later save wins for the whole description" acceptable, or should the
    line merge come back in the editor right away?
-7. **Where do backups go?** GitHub Actions artifacts in this repo (30 days, visible to everyone with access to the
+5. **Where do backups go?** GitHub Actions artifacts in this repo (30 days, visible to everyone with access to the
    repo), or a separate private repo, possibly encrypted?
-8. **Login handles for Google and email sign-ups:** chosen by the person (proposed), or made from their email
+6. **Login handles for Google and email sign-ups:** chosen by the person (proposed), or made from their email
     automatically?
-9. **One workspace or several?** The design allows several per person, as today. Is there a reason to limit it to one
+7. **One workspace or several?** The design allows several per person, as today. Is there a reason to limit it to one
     (which would simplify sign-up to "anyone with a company address joins")?
-10. **Inbox notes:** written by the app with the existing rules (proposed), or moved into the database as triggers (more
+8. **Inbox notes:** written by the app with the existing rules (proposed), or moved into the database as triggers (more
     robust, but the rules would live in SQL)?
