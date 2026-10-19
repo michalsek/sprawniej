@@ -22,7 +22,7 @@ import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
 import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
-import { IMAGE_TYPES, MAX_IMAGE_MB, pictureName } from './assets'
+import { IMAGE_TYPES, MAX_IMAGE_MB, openWorkspaceId, pictureName, picturePath } from './assets'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
 import { isUnread } from './select'
@@ -874,8 +874,6 @@ export function renameWorkspace(name: string) {
 
 // ---------- pictures ----------
 
-export { MAX_IMAGE_MB }
-
 /** what to tell someone whose picture couldn't be added */
 export const PICTURE_MESSAGES: Record<PictureProblem, string> = {
   'too-big': `This picture is too big. Pictures can be up to ${MAX_IMAGE_MB} MB.`,
@@ -885,18 +883,25 @@ export const PICTURE_MESSAGES: Record<PictureProblem, string> = {
   network: "This picture couldn't be added. Check your connection and try again.",
 }
 
-/** Keep a pasted or dropped picture with the workspace. Returns the address to put in the Markdown. */
-export async function addImage(file: Blob): Promise<string> {
-  if (!IMAGE_TYPES[file.type]) throw new Error(PICTURE_MESSAGES['wrong-type'])
+/**
+ * Keep a pasted or dropped picture with the workspace. Returns the address to put in the Markdown; `named` hears it
+ * as soon as it's known, while the picture already shows from this browser's own copy.
+ */
+export async function addImage(file: Blob, named?: (src: string) => void): Promise<string> {
+  const ext = IMAGE_TYPES[file.type]
+  if (!ext) throw new Error(PICTURE_MESSAGES['wrong-type'])
   if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(PICTURE_MESSAGES['too-big'])
-  const ws = context()?.workspaceId
+  const ws = openWorkspaceId()
   if (!ws) throw new Error('Pictures can be added once your workspace is open.')
-  const name = await pictureName(file)
-  if (!name) throw new Error(PICTURE_MESSAGES['wrong-type'])
+  const name = await pictureName(file, ext)
+  const path = picturePath(ws, name)
+  const src = `/assets/${name}`
+  pictures.preview(path, file)
+  named?.(src)
   try {
-    await pictures.add(`${ws}/${name}`, file)
+    await pictures.add(path, file)
   } catch (e) {
     throw new Error(PICTURE_MESSAGES[e instanceof PictureError ? e.kind : 'network'], { cause: e })
   }
-  return `/assets/${name}`
+  return src
 }

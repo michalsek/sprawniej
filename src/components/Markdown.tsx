@@ -18,7 +18,9 @@ function Img({ src, alt }: ComponentProps<'img'> & { node?: unknown }) {
   const { url, missing } = usePictureUrl(typeof src === 'string' ? src : undefined)
   if (url) return <img src={url} alt={alt ?? ''} loading="lazy" />
   if (missing) return <span className="text-xs text-muted-foreground">This picture can’t be shown.</span>
-  return <span className="inline-block h-24 w-40 rounded-md bg-muted" role="img" aria-label={alt ?? ''} />
+  // a grey space until it arrives; named like the picture, or left out for screen readers when it has no name
+  const named = alt ? { role: 'img', 'aria-label': alt } : { 'aria-hidden': true }
+  return <span className="inline-block h-24 w-40 rounded-md bg-muted" {...named} />
 }
 
 /** `references`: highlight @people and issue references (comments, descriptions) */

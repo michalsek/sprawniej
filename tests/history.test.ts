@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { AT_CREATION_MS, historySignature, issueEvents, type EventRow, type HistoryContext } from '@/data/history'
+import { AT_CREATION_MS, historySignature, issueEvents, mergeFetched, type EventRow, type HistoryContext } from '@/data/history'
 import type { ArchivedIssue, Issue } from '@/model/schema'
 
 const START = Date.parse('2026-10-01T10:00:00.000Z')
@@ -70,7 +70,6 @@ describe('issue history', () => {
     const soon = START + 2_000
     const r = (actor: string, ms: number, changes: unknown, id = 1): EventRow => ({ id, actorId: actor, at: new Date(ms).toISOString(), changes })
     expect(kinds([r('pa', soon, { labels: { added: ['L1'] } })])).toEqual([])
-    expect(kinds([r('pa', START + 40_000, { labels: { added: ['L1'] } })])).toEqual(['labels'])
     expect(kinds([r('pa', START + AT_CREATION_MS + 1, { labels: { added: ['L1'] } })])).toEqual(['labels'])
     expect(kinds([r('pb', soon, { labels: { added: ['L1'] } })])).toEqual(['labels'])
     expect(kinds([r('pa', soon, { labels: { added: ['L1'] } }), r('pa', soon, { status: ['todo', 'done'] }, 2)])).toEqual(['status'])
@@ -114,18 +113,37 @@ describe('when the history has something new', () => {
   }
   const sig = historySignature(issue)
 
-  test('changes for what writes history', () => {
+  test('every saved change of the issue moves "last changed"; labels and archiving count on their own', () => {
+    // as the database sends them: a new title, a move, a restore, even a new place in the list come with a new time
+    expect(historySignature({ ...issue, title: 'New', updatedAt: at(1) })).not.toBe(sig)
+    expect(historySignature({ ...issue, sortOrder: 'b0', updatedAt: at(2) })).not.toBe(sig)
     expect(historySignature({ ...issue, labels: ['a'] })).not.toBe(sig)
-    expect(historySignature({ ...issue, team: 'DES', number: 7 })).not.toBe(sig)
     const archived: ArchivedIssue = { ...issue, archivedAt: at(5), archivedBy: 'ana', comments: [] }
     expect(historySignature(archived)).not.toBe(sig)
-    // archived and restored straight away: only "last changed" says so
-    expect(historySignature({ ...issue, updatedAt: at(6) })).not.toBe(sig)
   })
 
-  test('not for the order or following alone, nor for the order of labels', () => {
-    expect(historySignature({ ...issue, sortOrder: 'b0' })).toBe(sig)
+  test('not for following, nor for the order of labels', () => {
     expect(historySignature({ ...issue, subscribers: ['bob'], unsubscribed: ['cy'] })).toBe(sig)
     expect(historySignature({ ...issue, labels: ['b', 'a'] })).toBe(sig)
+  })
+})
+
+describe('events read in several goes', () => {
+  const e = (id: number) => row(id, id, 'pa', { description: true })
+
+  test('each event once, oldest first, whatever order the answers came in', () => {
+    const first = mergeFetched(undefined, [e(1), e(2)], { sig: 's1', asked: 1 })
+    const next = mergeFetched(first, [e(3), e(2)], { sig: 's2', asked: 2 })
+    expect(next).toEqual({ rows: [e(1), e(2), e(3)], sig: 's2', asked: 2 })
+  })
+
+  test('an older ask answered last adds its events but keeps the newer signature', () => {
+    const newer = mergeFetched(undefined, [e(1), e(3)], { sig: 'new', asked: 5 })
+    expect(mergeFetched(newer, [e(2)], { sig: 'old', asked: 4 })).toEqual({ rows: [e(1), e(2), e(3)], sig: 'new', asked: 5 })
+  })
+
+  test('read from the start: what was read before goes (a person linked meanwhile has new events)', () => {
+    const before = mergeFetched(undefined, [e(1), e(2)], { sig: 's', asked: 1 })
+    expect(mergeFetched(before, [e(2)], { sig: 's', asked: 2 }, true).rows).toEqual([e(2)])
   })
 })

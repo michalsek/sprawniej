@@ -2,7 +2,7 @@
  * Pictures pasted into descriptions and comments. Each is kept once per workspace, under `<workspace id>/<name>`,
  * where the name comes from the picture's own bytes (src/data/assets.ts): the same picture pasted twice is one file,
  * and a file never changes. They are private, so showing one takes an address signed for a day; the addresses that
- * are needed together are asked for in one go, and kept while the app is open.
+ * are needed together are asked for in one go, kept while the app is open, and signed again before they stop working.
  *
  * Everything it talks to comes in `PictureDeps`, so tests/pictures.test.ts needs no Supabase.
  */
@@ -13,8 +13,11 @@ import type { Database } from './database.types'
 
 export type PictureEntry =
   | { state: 'loading' }
-  /** `until`: when the address stops working (ms); `local`: the picture you added, shown from this browser */
-  | { state: 'ready'; url: string; until: number; local?: boolean }
+  /**
+   * `until`: when the address stops working (ms); `local`: the picture you added, shown from this browser;
+   * `retryAt`: signing it again failed, so it isn't asked for again before then
+   */
+  | { state: 'ready'; url: string; until: number; local?: boolean; retryAt?: number }
   | { state: 'missing'; retryAt: number }
   | { state: 'failed'; retryAt: number }
 
@@ -52,7 +55,7 @@ export interface PictureDeps {
 }
 
 /** how long a signed address works, in seconds */
-export const DAY = 86_400
+export const SIGNED_FOR_S = 86_400
 /** an address with less than this left is signed again */
 export const RESIGN_BEFORE = 3_600_000
 /** a picture that isn't there is asked for again after this */
@@ -60,17 +63,20 @@ export const MISSING_RETRY = 5 * 60_000
 /** one that couldn't be asked for, after this */
 export const FAILED_RETRY = 30_000
 /** addresses asked for together */
-const CHUNK = 100
+export const CHUNK = 100
 /** addresses wanted within this long are asked for in one go */
 const GATHER = 30
 
 export interface Pictures {
-  store: PicturesStore
-  /** the address to show `path` from, if there is one yet; never changes the store while it's called */
+  /** the address to show `path` from, if there is one now; never changes the store while it's called */
   url(path: string): string | undefined
-  /** keep a picture; done once it's kept (or was already) */
+  /** when `url(path)` should be asked again (a retry, signing again, or the address running out); undefined: no need */
+  nextCheck(path: string): number | undefined
+  /** show a picture you're adding from this browser's own copy, at once */
+  preview(path: string, file: Blob): void
+  /** keep a picture; done once it's kept (or was already). If it can't be, its preview goes */
   add(path: string, file: Blob): Promise<void>
-  /** switching workspace, signing out: forget everything */
+  /** switching workspace, signing out, removed from it: forget everything */
   clear(): void
 }
 
@@ -79,14 +85,22 @@ export function makePictures(deps: PictureDeps, store: PicturesStore = create<Pi
   /** paths that are kept: no need to add them again */
   const known = new Set<string>()
   const inflight = new Map<string, Promise<'added' | 'there'>>()
-  const blobs = new Set<string>()
+  const blobs = new Map<string, string>()
   let scheduled = false
   /** a clear() in between makes answers that arrive afterwards count for nothing */
   let round = 0
 
-  const set = (patch: Record<string, PictureEntry>) => store.setState((s) => ({ entries: { ...s.entries, ...patch } }))
+  const entry = (path: string): PictureEntry | undefined => store.getState().entries[path]
+  function set(patch: Record<string, PictureEntry>) {
+    if (Object.keys(patch).length) store.setState((s) => ({ entries: { ...s.entries, ...patch } }))
+  }
+  const allowed = (retryAt: number | undefined) => retryAt === undefined || deps.now() >= retryAt
+
+  /** paths being asked for right now: wanting one again waits for that answer */
+  const asking = new Set<string>()
 
   function want(path: string) {
+    if (asking.has(path)) return
     queue.add(path)
     if (scheduled) return
     scheduled = true
@@ -99,35 +113,49 @@ export function makePictures(deps: PictureDeps, store: PicturesStore = create<Pi
     queue.clear()
     if (!paths.length) return
     const r = round
-    const entries = store.getState().entries
     // a picture already showing keeps its address while a fresh one is asked for
-    const waiting = Object.fromEntries(paths.filter((p) => entries[p]?.state !== 'ready').map((p) => [p, { state: 'loading' } as PictureEntry]))
-    if (Object.keys(waiting).length) set(waiting)
+    set(Object.fromEntries(paths.filter((p) => entry(p)?.state !== 'ready').map((p): [string, PictureEntry] => [p, { state: 'loading' }])))
     for (let i = 0; i < paths.length; i += CHUNK) {
       const chunk = paths.slice(i, i + CHUNK)
+      let answers: { path: string; url: string | null }[]
+      for (const p of chunk) asking.add(p)
       try {
-        const answers = await deps.sign(chunk)
-        if (r !== round) return
-        const urls = new Map(answers.map((a) => [a.path, a.url]))
-        const now = deps.now()
-        const patch: Record<string, PictureEntry> = {}
-        for (const p of chunk) {
-          const url = urls.get(p)
-          if (url) {
-            known.add(p)
-            patch[p] = { state: 'ready', url, until: now + DAY * 1000 }
-          } else if (store.getState().entries[p]?.state !== 'ready') {
-            patch[p] = { state: 'missing', retryAt: now + MISSING_RETRY }
-          }
-        }
-        set(patch)
+        answers = await deps.sign(chunk)
       } catch (e) {
+        for (const p of chunk) asking.delete(p)
         if (r !== round) return
         console.warn('Sprawniej couldn’t get pictures', e)
         const retryAt = deps.now() + FAILED_RETRY
-        const now = store.getState().entries
-        set(Object.fromEntries(chunk.filter((p) => now[p]?.state !== 'ready').map((p) => [p, { state: 'failed', retryAt } as PictureEntry])))
+        // one still showing keeps its address, and waits before it's signed again
+        set(
+          Object.fromEntries(
+            chunk.map((p): [string, PictureEntry] => {
+              const was = entry(p)
+              return [p, was?.state === 'ready' ? { ...was, retryAt } : { state: 'failed', retryAt }]
+            }),
+          ),
+        )
+        continue
       }
+      for (const p of chunk) asking.delete(p)
+      if (r !== round) return
+      const urls = new Map(answers.map((a) => [a.path, a.url]))
+      const now = deps.now()
+      const patch: Record<string, PictureEntry> = {}
+      for (const p of chunk) {
+        const url = urls.get(p)
+        const e = entry(p)
+        if (url) {
+          known.add(p)
+          patch[p] = { state: 'ready', url, until: now + SIGNED_FOR_S * 1000 }
+        } else if (e?.state === 'ready' && e.until > now) {
+          // no new address (you may have been removed): the one shown works until it runs out
+          patch[p] = { ...e, retryAt: now + MISSING_RETRY }
+        } else {
+          patch[p] = { state: 'missing', retryAt: now + MISSING_RETRY }
+        }
+      }
+      set(patch)
     }
   }
 
@@ -136,53 +164,86 @@ export function makePictures(deps: PictureDeps, store: PicturesStore = create<Pi
   })
 
   function url(path: string): string | undefined {
-    const e = store.getState().entries[path]
+    const e = entry(path)
     if (!e) {
       want(path)
       return undefined
     }
+    const now = deps.now()
     switch (e.state) {
       case 'ready':
-        if (e.until - deps.now() < RESIGN_BEFORE) want(path)
-        return e.url
+        if (e.until - now < RESIGN_BEFORE && allowed(e.retryAt)) want(path)
+        return e.until > now ? e.url : undefined
       case 'loading':
         return undefined
       case 'missing':
       case 'failed':
-        if (deps.now() >= e.retryAt) want(path)
+        if (allowed(e.retryAt)) want(path)
         return undefined
     }
   }
 
+  function nextCheck(path: string): number | undefined {
+    const e = entry(path)
+    if (!e || e.state === 'loading' || (e.state === 'ready' && e.local)) return undefined
+    if (e.state !== 'ready') return e.retryAt
+    const now = deps.now()
+    const resign = Math.max(e.until - RESIGN_BEFORE, e.retryAt ?? 0)
+    const times = [resign, e.until].filter((t) => t > now)
+    return times.length ? Math.min(...times) : e.retryAt
+  }
+
+  function preview(path: string, file: Blob) {
+    if (entry(path)?.state === 'ready') return
+    const local = (deps.objectUrl ?? URL.createObjectURL)(file)
+    blobs.set(path, local)
+    set({ [path]: { state: 'ready', url: local, until: Infinity, local: true } })
+  }
+
   async function add(path: string, file: Blob): Promise<void> {
     if (known.has(path)) return
+    // whoever adds it sees it from their own copy: no address to ask for
+    preview(path, file)
     let going = inflight.get(path)
     if (!going) {
       going = deps.upload(path, file).finally(() => inflight.delete(path))
       inflight.set(path, going)
     }
     const r = round
-    await going
-    if (r !== round) return
-    known.add(path)
-    if (store.getState().entries[path]?.state === 'ready') return
-    // whoever added it sees it from their own copy: no address to ask for
-    const local = (deps.objectUrl ?? URL.createObjectURL)(file)
-    blobs.add(local)
-    set({ [path]: { state: 'ready', url: local, until: Infinity, local: true } })
+    try {
+      await going
+    } catch (e) {
+      if (r === round && !known.has(path)) unpreview(path)
+      throw e
+    }
+    if (r === round) known.add(path)
+  }
+
+  /** the preview of a picture that couldn't be kept */
+  function unpreview(path: string) {
+    const blob = blobs.get(path)
+    const e = entry(path)
+    if (!blob || e?.state !== 'ready' || e.url !== blob) return
+    ;(deps.revokeUrl ?? URL.revokeObjectURL)(blob)
+    blobs.delete(path)
+    store.setState((s) => {
+      const { [path]: _gone, ...rest } = s.entries
+      return { entries: rest }
+    })
   }
 
   function clear() {
     round++
-    for (const b of blobs) (deps.revokeUrl ?? URL.revokeObjectURL)(b)
+    for (const b of blobs.values()) (deps.revokeUrl ?? URL.revokeObjectURL)(b)
     blobs.clear()
     queue.clear()
     known.clear()
     inflight.clear()
+    asking.clear()
     store.setState({ entries: {} })
   }
 
-  return { store, url, add, clear }
+  return { url, nextCheck, preview, add, clear }
 }
 
 // ---------- the real thing ----------
@@ -210,20 +271,20 @@ export function pictureProblem(e: StorageErrorLike): PictureProblem {
   return 'network'
 }
 
-const PICTURES = 'pictures'
+const BUCKET = 'pictures'
 
 export function supabasePictureDeps(db: () => SupabaseClient<Database> | null): PictureDeps {
   return {
     async upload(path, file) {
       const client = db()
       if (!client) throw new PictureError('network')
-      let answer: Awaited<ReturnType<ReturnType<SupabaseClient<Database>['storage']['from']>['upload']>>
-      try {
-        // the name is the picture's hash, so what's kept under it never changes: the browser may keep it for long
-        answer = await client.storage.from(PICTURES).upload(path, file, { contentType: file.type, upsert: false, cacheControl: '31536000' })
-      } catch {
-        throw new PictureError('network')
-      }
+      // the name is the picture's hash, so what's kept under it never changes: the browser may keep it for long
+      const answer = await client.storage
+        .from(BUCKET)
+        .upload(path, file, { contentType: file.type, upsert: false, cacheControl: '31536000' })
+        .catch(() => {
+          throw new PictureError('network')
+        })
       if (!answer.error) return 'added'
       if (isAlreadyThere(answer.error)) return 'there'
       throw new PictureError(pictureProblem(answer.error))
@@ -231,7 +292,7 @@ export function supabasePictureDeps(db: () => SupabaseClient<Database> | null): 
     async sign(paths) {
       const client = db()
       if (!client) throw new Error('not set up')
-      const { data, error } = await client.storage.from(PICTURES).createSignedUrls(paths, DAY)
+      const { data, error } = await client.storage.from(BUCKET).createSignedUrls(paths, SIGNED_FOR_S)
       if (error) throw error
       return data.map((d, i) => ({ path: d.path ?? paths[i], url: d.error ? null : d.signedUrl }))
     },

@@ -327,7 +327,7 @@ describe('the writer and the open workspace', () => {
       },
       createStore<BackendState>()(() => ({ phase: 'closed' })),
       new Registry(),
-      r.hooks,
+      { writes: r.hooks },
     )
     await life.open(WS, { id: ME, person: ANA })
     await sleep(5)

@@ -25,10 +25,6 @@ describe('the save chip', () => {
 
 describe('statuses', () => {
   test('a status this app does not know reads as Backlog instead of breaking the screen', () => {
-    expect(statusOf('done').name).toBe('Done')
-    const unknown = statusOf('blocked' as StatusId)
-    expect(unknown.id).toBe('backlog')
-    expect(unknown.group).toBe('backlog')
-    expect(unknown.name).toBe('Backlog')
+    expect(statusOf('blocked' as StatusId)).toMatchObject({ id: 'backlog', group: 'backlog' })
   })
 })

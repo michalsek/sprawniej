@@ -28,7 +28,7 @@ export interface HistoryEvent {
   /** the event the line started from: it stays the same while later ones fold into it */
   id: number
   at: string
-  /** a login; null when nobody was signed in (the nightly tidy-up) */
+  /** a login; null when nobody was signed in (the nightly tidy-up, or a change made by hand) */
   by: string | null
   change: Change
 }
@@ -52,65 +52,74 @@ export interface HistoryContext {
 /** labels added by whoever created the issue this soon after creating it were part of creating it */
 export const AT_CREATION_MS = 30_000
 
-const STATUSES = new Set<unknown>(STATUS_IDS)
-const PRIORITIES = new Set<unknown>(PRIORITY_IDS)
+// ---------- reading one event ----------
 
-const isPair = (x: unknown): x is [unknown, unknown] => Array.isArray(x) && x.length === 2
+type Guard<T> = (x: unknown) => x is T
+
+const isText = (x: unknown): x is string => typeof x === 'string'
 const textOrNull = (x: unknown): x is string | null => x === null || typeof x === 'string'
-const strings = (x: unknown): string[] | null => (x === undefined ? [] : Array.isArray(x) && x.every((s) => typeof s === 'string') ? x : null)
-const DAY = /^\d{4}-\d{2}-\d{2}$/
+const isStatus = (x: unknown): x is StatusId => STATUS_IDS.some((s) => s === x)
+const isPriority = (x: unknown): x is Priority => PRIORITY_IDS.some((p) => p === x)
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
+const dayOrNull = (x: unknown): x is string | null => x === null || (typeof x === 'string' && DATE_ONLY.test(x))
+const isRecord = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x)
 
+/** `[from, to]`, each of its kind */
+function pair<A, B>(x: unknown, from: Guard<A>, to: Guard<B>): [A, B] | undefined {
+  return Array.isArray(x) && x.length === 2 && from(x[0]) && to(x[1]) ? [x[0], x[1]] : undefined
+}
+
+/** label ids (missing: none); undefined when it's something else */
+const ids = (x: unknown): string[] | undefined => (x === undefined ? [] : Array.isArray(x) && x.every(isText) ? x : undefined)
+
+/** a number, a number written as text (how the database sends numeric), or null; undefined when it's neither */
 function estimate(x: unknown): number | null | undefined {
   if (x === null) return null
   const n = typeof x === 'number' ? x : typeof x === 'string' && x.trim() ? Number(x) : NaN
   return Number.isFinite(n) ? n : undefined
 }
+const isEstimate = (x: unknown): x is number | string | null => estimate(x) !== undefined
 
 /**
  * What one event says changed, in the order the issue page lists properties (the database keeps no order of its
  * own). Anything it can't read is left out, and so are kinds of change this app doesn't know yet.
  */
 export function changesOf(changes: unknown, login: (id: string) => string | undefined): Change[] {
-  if (!changes || typeof changes !== 'object' || Array.isArray(changes)) return []
-  const c = changes as Record<string, unknown>
+  if (!isRecord(changes)) return []
+  const c = changes
   const out: Change[] = []
-  const pair = (key: string, ok: (x: unknown) => boolean): [unknown, unknown] | undefined => {
-    const v = c[key]
-    return isPair(v) && ok(v[0]) && ok(v[1]) ? v : undefined
-  }
-  const person = (id: unknown) => (typeof id === 'string' ? (login(id) ?? id) : null)
+  const person = (id: string | null) => (id === null ? null : (login(id) ?? id))
 
-  if (isPair(c.team) && textOrNull(c.team[0]) && typeof c.team[1] === 'string') out.push({ kind: 'team', from: c.team[0], to: c.team[1] })
-  const title = pair('title', textOrNull)
-  if (title) out.push({ kind: 'title', from: (title[0] as string | null) ?? '', to: (title[1] as string | null) ?? '' })
-  const status = pair('status', (x) => STATUSES.has(x))
-  if (status) out.push({ kind: 'status', from: status[0] as StatusId, to: status[1] as StatusId })
-  const priority = pair('priority', (x) => PRIORITIES.has(x))
-  if (priority) out.push({ kind: 'priority', from: priority[0] as Priority, to: priority[1] as Priority })
-  const assignee = pair('assignee', textOrNull)
+  const team = pair(c.team, textOrNull, isText)
+  if (team) out.push({ kind: 'team', from: team[0], to: team[1] })
+  const title = pair(c.title, textOrNull, textOrNull)
+  if (title) out.push({ kind: 'title', from: title[0] ?? '', to: title[1] ?? '' })
+  const status = pair(c.status, isStatus, isStatus)
+  if (status) out.push({ kind: 'status', from: status[0], to: status[1] })
+  const priority = pair(c.priority, isPriority, isPriority)
+  if (priority) out.push({ kind: 'priority', from: priority[0], to: priority[1] })
+  const assignee = pair(c.assignee, textOrNull, textOrNull)
   if (assignee) out.push({ kind: 'assignee', from: person(assignee[0]), to: person(assignee[1]) })
-  const labels = c.labels
-  if (labels && typeof labels === 'object' && !Array.isArray(labels)) {
-    const l = labels as Record<string, unknown>
-    const added = strings(l.added)
-    const removed = strings(l.removed)
+  if (isRecord(c.labels)) {
+    const added = ids(c.labels.added)
+    const removed = ids(c.labels.removed)
     if (added && removed && (added.length || removed.length)) out.push({ kind: 'labels', added, removed })
   }
-  const project = pair('project', textOrNull)
-  if (project) out.push({ kind: 'project', from: project[0] as string | null, to: project[1] as string | null })
-  const parent = pair('parent', textOrNull)
-  if (parent) out.push({ kind: 'parent', from: parent[0] as string | null, to: parent[1] as string | null })
-  const due = pair('dueDate', (x) => x === null || (typeof x === 'string' && DAY.test(x)))
-  if (due) out.push({ kind: 'dueDate', from: due[0] as string | null, to: due[1] as string | null })
-  if (isPair(c.estimate)) {
-    const [a, b] = [estimate(c.estimate[0]), estimate(c.estimate[1])]
-    if (a !== undefined && b !== undefined) out.push({ kind: 'estimate', from: a, to: b })
-  }
+  const project = pair(c.project, textOrNull, textOrNull)
+  if (project) out.push({ kind: 'project', from: project[0], to: project[1] })
+  const parent = pair(c.parent, textOrNull, textOrNull)
+  if (parent) out.push({ kind: 'parent', from: parent[0], to: parent[1] })
+  const due = pair(c.dueDate, dayOrNull, dayOrNull)
+  if (due) out.push({ kind: 'dueDate', from: due[0], to: due[1] })
+  const points = pair(c.estimate, isEstimate, isEstimate)
+  if (points) out.push({ kind: 'estimate', from: estimate(points[0]) ?? null, to: estimate(points[1]) ?? null })
   if (c.description === true) out.push({ kind: 'description' })
   if (c.archived === true) out.push({ kind: 'archived' })
   if (c.restored === true) out.push({ kind: 'restored' })
   return out
 }
+
+// ---------- events to lines ----------
 
 /** changes this close together, by the same person, read as one: typing saves a title several times, and a status
  * clicked twice in a row is one decision */
@@ -168,26 +177,32 @@ export function issueEvents(rows: readonly EventRow[], ctx: HistoryContext): His
   return out
 }
 
+// ---------- knowing when to read again ----------
+
 /**
- * The fields that write events, as one string: when it changes, there's something new in the history. Following an
- * issue changes nothing here. "Last changed" is in it too: archiving and restoring an issue at once leaves every
- * other field as it was.
+ * When this changes, the issue's history may have something new. Every saved change of an issue's own fields moves
+ * "last changed" (so does reordering it: then one quick read finds nothing new); labels are kept apart, so they
+ * count separately, and so does archiving.
  */
 export function historySignature(issue: Issue | ArchivedIssue): string {
-  return JSON.stringify([
-    issue.updatedAt,
-    issue.title,
-    issue.description,
-    issue.status,
-    issue.priority,
-    issue.assignee,
-    [...issue.labels].sort(),
-    issue.project,
-    issue.parent,
-    issue.dueDate ?? null,
-    issue.estimate ?? null,
-    issue.team,
-    issue.number,
-    'archivedAt' in issue ? issue.archivedAt : null,
-  ])
+  return JSON.stringify([issue.updatedAt, 'archivedAt' in issue ? issue.archivedAt : null, [...issue.labels].sort()])
+}
+
+/** an issue's events read so far, and the issue as it was when they were asked for */
+export interface Fetched {
+  rows: EventRow[]
+  sig: string
+  /** which ask it came from: asks are numbered in the order they were made */
+  asked: number
+}
+
+/**
+ * Events just read, added to those read before (`fresh`: read from the start, so they replace them). Each event
+ * once, oldest first. Answers can arrive out of order: the later ask's signature stays.
+ */
+export function mergeFetched(known: Fetched | undefined, rows: readonly EventRow[], ask: { sig: string; asked: number }, fresh = false): Fetched {
+  const seen = new Set<number>()
+  const all = [...(fresh || !known ? [] : known.rows), ...rows].filter((r) => !seen.has(r.id) && !!seen.add(r.id)).sort((a, b) => a.id - b.id)
+  const newer = known && known.asked > ask.asked
+  return { rows: all, sig: newer ? known.sig : ask.sig, asked: newer ? known.asked : ask.asked }
 }

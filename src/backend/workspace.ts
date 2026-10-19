@@ -482,15 +482,18 @@ export class Lifecycle {
   private backend: Store<BackendState>
   private registry: Registry
   private writes: WritesHooks
-  /** after a workspace closed for good (not when it's read again from the start): forget what belonged to it */
   private onClosed: () => void
 
-  constructor(make: Lifecycle['make'], backend: Store<BackendState>, registry: Registry, writes: WritesHooks = NO_WRITES, onClosed: () => void = () => {}) {
+  /**
+   * `writes`: the writer (none in some tests); `closed`: a workspace closed for good (not when it's read again from
+   * the start), so what belonged to it is forgotten
+   */
+  constructor(make: Lifecycle['make'], backend: Store<BackendState>, registry: Registry, more: { writes?: WritesHooks; closed?: () => void } = {}) {
     this.make = make
     this.backend = backend
     this.registry = registry
-    this.writes = writes
-    this.onClosed = onClosed
+    this.writes = more.writes ?? NO_WRITES
+    this.onClosed = more.closed ?? (() => {})
   }
 
   private queue(job: () => Promise<void>): Promise<void> {
@@ -530,7 +533,8 @@ export class Lifecycle {
     else await this.writes.finish(3_000)
     await ws.close()
     this.registry.clear()
-    if (!again) this.onClosed()
     this.backend.setState({ phase: 'closed', workspaceId: undefined, failure: undefined, gone: undefined })
+    // once nothing shows it as open any more, so nothing asks for its pictures again
+    if (!again) this.onClosed()
   }
 }

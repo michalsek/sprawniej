@@ -67,10 +67,24 @@ const life: Lifecycle = new Lifecycle(
   },
   useBackend,
   registry,
-  writes,
-  // signed addresses work for whoever holds them: switching workspace or signing out forgets them
-  () => pictures.clear(),
+  { writes, closed: () => forget() },
 )
+
+/**
+ * What belongs to one open workspace and is kept in memory beside the store (pictures' signed addresses, which
+ * work for whoever holds them; read history): forgotten when it closes for good (switching workspace, signing out)
+ * or goes away (deleted, or you were removed).
+ */
+const forgetting: (() => void)[] = [() => pictures.clear()]
+export function onForget(fn: () => void): void {
+  forgetting.push(fn)
+}
+function forget() {
+  for (const fn of forgetting) fn()
+}
+useBackend.subscribe((s, was) => {
+  if (s.phase === 'gone' && was.phase !== 'gone') forget()
+})
 
 const CLOSED_CHANNELS: Record<Topic, ChannelStatus> = { ws: 'CLOSED', me: 'CLOSED' }
 
@@ -95,8 +109,6 @@ export const backend = {
     if (!ws || ws.closed || !db) return Promise.reject(new Error('No workspace is open.'))
     return fetchIssueEvents(db, ws.workspaceId, issueId, afterId)
   },
-  /** keep a picture under `<workspace id>/<name>` (actions.ts addImage) */
-  addPicture: (path: string, file: Blob): Promise<void> => pictures.add(path, file),
   /** for scripted checks */
   debug: () => {
     const ws = life.current
