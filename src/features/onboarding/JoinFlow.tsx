@@ -7,15 +7,15 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation } from 'wouter'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-import { ProfileFailed, Waiting } from '@/app/Gate'
 import type { MyProfileState } from '@/app/useMyProfile'
 import { useAuth } from '@/backend/auth'
-import { InviteError, inviteInfo, type InviteInfo } from '@/backend/workspaces'
+import { INVITE_DAYS, inviteInfo, inviteProblem, type InviteInfo } from '@/backend/workspaces'
 import { PersonAvatar } from '@/components/Avatar'
 import { useSignOut } from '@/components/SignOut'
 import { joinWorkspace } from '@/data/actions'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
+import { ProfileFailed, Waiting } from './Gatekeeping'
 import { JOINING_KEY, joinStage, peopleLine } from './invite'
 import { PickLogin } from './PickLogin'
 import { Problem, Step } from './Step'
@@ -59,8 +59,11 @@ function GoHome({ title, children }: { title: string; children: string }) {
   )
 }
 
-export function JoinFlow({ link, profile }: { link: { token: string } | 'old'; profile: MyProfileState }) {
+const NO_SUCH_LINK = 'It may have been deleted, or part of the link is missing. Ask whoever invited you for a new one.'
+
+export function JoinFlow({ link, profile }: { link: { token: string | null } | 'old'; profile: MyProfileState }) {
   if (link === 'old') return <GoHome title="This invite link is from an older Sprawniej">Ask whoever invited you for a new link.</GoHome>
+  if (!link.token) return <GoHome title="This invite link doesn't work">{NO_SUCH_LINK}</GoHome>
   return <Join key={link.token} token={link.token} profile={profile} />
 }
 
@@ -118,20 +121,19 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
   useEffect(() => {
     if (stage !== 'joining' || joining.current || joinProblem || !info) return
     joining.current = true
+    // another tab that comes back to this invite doesn't join (and say so) a second time
+    forget()
     joinWorkspace(token).then(
       (id) => {
-        forget()
         useSession.getState().open({ id, name: info.workspaceName })
         navigate('/', { replace: true })
         toast(`You joined ${info.workspaceName}`)
       },
       (e: unknown) => {
-        const err = e instanceof InviteError ? e : new InviteError('other', String(e))
+        const err = inviteProblem(e)
         if (err.kind === 'used' || err.kind === 'expired') {
-          forget()
-          setInfo({ ...info, state: err.kind, people: [] })
+          setInfo({ ...info, state: err.kind, people: [], forName: null })
         } else if (err.kind === 'unknown') {
-          forget()
           setInfo(null)
         } else {
           joining.current = false
@@ -140,6 +142,9 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
       },
     )
   }, [stage, token, info, joinProblem, navigate])
+
+  const login = profile.state === 'ready' ? profile.mine.person.login : undefined
+  const signedInAs = user?.email || (login ? `@${login}` : '')
 
   const goHome = () => {
     forget()
@@ -163,15 +168,11 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
         </Step>
       )
     case 'unknown':
-      return (
-        <GoHome title="This invite link doesn't work">
-          It may have been deleted, or part of the link is missing. Ask whoever invited you for a new one.
-        </GoHome>
-      )
+      return <GoHome title="This invite link doesn't work">{NO_SUCH_LINK}</GoHome>
     case 'used':
       return <GoHome title="This invite was already used">{`Each invite link works once. Ask ${by} for a new one.`}</GoHome>
     case 'expired':
-      return <GoHome title="This invite has expired">{`Invite links work for 14 days. Ask ${by} for a new one.`}</GoHome>
+      return <GoHome title="This invite has expired">{`Invite links work for ${INVITE_DAYS} days. Ask ${by} for a new one.`}</GoHome>
     case 'member':
       return (
         <Step
@@ -185,7 +186,7 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
                 navigate('/', { replace: true })
               }}
             >
-              Open {ws}
+              Open workspace
             </Button>
           }
         >
@@ -210,11 +211,11 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
                   setPressed(true)
                 }}
               >
-                Join {ws}
+                Join workspace
               </Button>
               {user && (
                 <span className="ml-auto text-sm text-muted-foreground">
-                  Signed in as {user.email ?? profile.mine?.person.login} ·{' '}
+                  {signedInAs ? `Signed in as ${signedInAs} · ` : ''}
                   <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={signOut}>
                     use another account
                   </button>
@@ -265,7 +266,7 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
         </Step>
       )
     case 'profile':
-      return profile.state === 'failed' ? <ProfileFailed problem={profile.problem ?? ''} onRetry={profile.retry} /> : <Waiting title="Just a moment…" />
+      return profile.state === 'failed' ? <ProfileFailed problem={profile.problem} onRetry={profile.retry} /> : <Waiting title="Just a moment…" />
     case 'name':
       return <PickLogin initialName={info?.forName ?? undefined} onDone={profile.picked} />
     case 'joining':

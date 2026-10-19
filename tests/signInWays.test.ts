@@ -26,6 +26,8 @@ describe('ways to sign in', () => {
     const [password, github] = signInWays({ email: 'ana@x.test', identities: [GITHUB], passwordSet: true }, on)
     expect(password.action).toBe('change-password')
     expect(github.action).toBeNull()
+    // not "your only way": the password works too
+    expect(github.why).toBe("You made your account with GitHub, so it can't be removed.")
   })
 
   test('email and GitHub: GitHub can go, the email never is offered', () => {

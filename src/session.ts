@@ -20,6 +20,10 @@ export interface Session {
   workspaceId: string | null
   /** workspaces opened before, newest first */
   recent: RecentWorkspace[]
+  /** whose these are (the signed-in account): someone else signing in here starts with none of them */
+  owner: string | null
+  /** called for whoever is signed in; another account than before forgets the workspaces */
+  signedInAs: (userId: string) => void
   setProfile: (profileId: string | null, user: Person | null) => void
   /** opens it, and moves it to the top of `recent` (with its name as it is now) */
   open: (ws: RecentWorkspace) => void
@@ -37,6 +41,9 @@ export const useSession = create<Session>()(
       profileId: null,
       workspaceId: null,
       recent: [],
+      owner: null,
+      signedInAs: (userId) =>
+        set((s) => (s.owner === userId ? s : s.owner === null ? { owner: userId } : { owner: userId, user: null, profileId: null, workspaceId: null, recent: [] })),
       setProfile: (profileId, user) => set({ profileId, user }),
       open: (ws) => set((s) => ({ workspaceId: ws.id, recent: [ws, ...s.recent.filter((r) => r.id !== ws.id)].slice(0, 10) })),
       close: () => set({ workspaceId: null }),
@@ -44,6 +51,6 @@ export const useSession = create<Session>()(
       signOut: () => set({ user: null, profileId: null, workspaceId: null, recent: [] }),
       set: (patch) => set(patch),
     }),
-    { name: 'sprawniej-session-v2', partialize: (s) => ({ workspaceId: s.workspaceId, recent: s.recent }) },
+    { name: 'sprawniej-session-v2', partialize: (s) => ({ workspaceId: s.workspaceId, recent: s.recent, owner: s.owner }) },
   ),
 )

@@ -34,7 +34,7 @@ export function PasswordDialog({ change, email, onDone }: { change: boolean; ema
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onDone(false)}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="[overflow-wrap:anywhere] sm:max-w-md">
         <DialogTitle>{change ? 'Change your password' : 'Set a password'}</DialogTitle>
         <DialogDescription>{change ? `For signing in with ${email}.` : `Then you can also sign in with ${email} and this password.`}</DialogDescription>
         <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>

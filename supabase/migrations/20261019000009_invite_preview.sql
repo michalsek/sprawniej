@@ -35,10 +35,16 @@ revoke execute on function public.invite_info(text) from public;
 grant execute on function public.invite_info(text) to anon, authenticated;
 
 -- A link works for 14 days (the default); nobody can make one that lasts longer than 30 (E127). created_at can't be
--- changed by anyone, so this holds for updates too.
+-- changed by anyone, so this holds for updates too. Added "not valid" first, so it holds for new and changed links
+-- even where older links break it; checked for the older ones after that, when they all fit.
 do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'invites_expire_soon' and conrelid = 'public.invites'::regclass) then
-    alter table public.invites add constraint invites_expire_soon check (expires_at <= created_at + interval '30 days');
+    alter table public.invites add constraint invites_expire_soon check (expires_at <= created_at + interval '30 days') not valid;
   end if;
+  begin
+    alter table public.invites validate constraint invites_expire_soon;
+  exception when check_violation then
+    raise notice 'Some older invite links last longer than 30 days; new ones can''t.';
+  end;
 end $$;

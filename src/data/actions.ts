@@ -24,13 +24,14 @@ import {
   deleteInvite as removeInvite,
   linkPerson as linkGuest,
   removeMember,
+  RULES,
   setMemberRole,
   type Invite,
   type InviteRole,
   type Role,
 } from '@/backend/workspaces'
 import { useSession } from '@/session'
-import { canLeave, ruleFor, type Who } from './roles'
+import { canLeave, myWho, ruleFor, whoIs } from './roles'
 import type { Comment, Display, Filters, Issue, Label, Project, Team, View } from '@/model/schema'
 import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
 import { statusOf } from '@/model/status'
@@ -879,11 +880,6 @@ export function renameMe(name: string) {
 // Awaited, not handed to the writer: the database rules word their refusals precisely, and nothing should flicker
 // back. Each throws an Error whose message can be shown as it is; the store follows from the database's echo.
 
-const whoIs = (s: ReturnType<typeof useData.getState>, login: string | undefined): Who | null => {
-  const m = login ? s.members[login] : undefined
-  return login && m && !m.removedAt ? { login, role: m.role } : null
-}
-
 function openHere(): WriteContext {
   const c = context()
   if (!c) throw new Error('Open the workspace first.')
@@ -902,7 +898,7 @@ async function changeMember(login: string, to: Role | 'removed') {
   const target = whoIs(s, login)
   if (!target) throw new Error("They're not in this workspace any more.")
   if (to === target.role) return
-  const why = ruleFor(whoIs(s, s.me?.login), target, to, ownerCount(s))
+  const why = ruleFor(myWho(s), target, to, ownerCount(s))
   if (why) throw new Error(why)
   if (to === 'removed') await removeMember(c.workspaceId, idOf(c, login))
   else await setMemberRole(c.workspaceId, idOf(c, login), to)
@@ -919,7 +915,7 @@ export const removeFromWorkspace = (login: string): Promise<void> => changeMembe
 export async function leaveWorkspace(): Promise<void> {
   const c = openHere()
   const s = useData.getState()
-  const can = canLeave(whoIs(s, s.me?.login), ownerCount(s))
+  const can = canLeave(myWho(s), ownerCount(s))
   if (!can.ok) throw new Error(can.why ?? "You're not in this workspace any more.")
   // what you changed last is saved before you go
   await backend.flush(3_000)
@@ -928,25 +924,23 @@ export async function leaveWorkspace(): Promise<void> {
   location.hash = '#/'
 }
 
-const NOT_INVITER = 'Only admins and owners can invite people.'
-
 /** a link for one person (for someone from Linear: they become that person when they join) */
 export async function createInvite(o: { role: InviteRole; forGuest?: string; forEmail?: string }): Promise<Invite> {
   const c = openHere()
-  if (!isAdmin(useData.getState())) throw new Error(NOT_INVITER)
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notInviter)
   return makeInvite(c.workspaceId, { role: o.role, forEmail: o.forEmail, ...(o.forGuest && { forProfile: idOf(c, o.forGuest) }) })
 }
 
 export async function deleteInvite(id: string): Promise<void> {
   openHere()
-  if (!isAdmin(useData.getState())) throw new Error(NOT_INVITER)
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notInviter)
   await removeInvite(id)
 }
 
 /** Someone from the Linear import who hadn't joined is this member: their issues, comments and views move over. */
 export async function linkPerson(guest: string, to: string): Promise<void> {
   const c = openHere()
-  if (!isAdmin(useData.getState())) throw new Error('Only admins and owners can link people.')
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notLinker)
   await linkGuest(c.workspaceId, idOf(c, guest), idOf(c, to))
   void backend.catchUp()
 }

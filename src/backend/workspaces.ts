@@ -1,4 +1,5 @@
 /** The workspaces you are in, making a new one, and who is in one: invites, members and roles. */
+import { isRole, type Role } from '@/model/schema'
 import type { TeamDraft } from '@/model/teamDraft'
 import { requireClient, type Db } from './client'
 import { friendlyDbError, isUnreachable, UNREACHABLE } from './problem'
@@ -32,9 +33,29 @@ export async function createWorkspace(name: string, team: TeamDraft, db: Db = re
 // These are awaited calls, not changes for the writer: they are rare, the database rules word their refusals
 // precisely, and nothing should flicker back on a refusal. The store follows from the database's own echo.
 
-export type Role = 'owner' | 'admin' | 'member'
-export type InviteRole = 'admin' | 'member'
-export type InviteState = 'open' | 'used' | 'expired' | 'member'
+export type { Role }
+export type InviteRole = Exclude<Role, 'owner'>
+const INVITE_STATES = ['open', 'used', 'expired', 'member'] as const
+export type InviteState = (typeof INVITE_STATES)[number]
+const isInviteState = (v: unknown): v is InviteState => (INVITE_STATES as readonly unknown[]).includes(v)
+/** invites are for admins and members; owners are made in Settings */
+const inviteRole = (v: unknown): InviteRole => (isRole(v) && v !== 'owner' ? v : 'member')
+
+/** how long a link works (the database's default) */
+export const INVITE_DAYS = 14
+
+/**
+ * The rules' own words (guard_members and keep_an_owner in supabase/migrations/20261019000003_triggers.sql, which
+ * tests/roles.test.ts checks), and ours for what the rules refuse without words.
+ */
+export const RULES = {
+  notAdmin: 'Only admins and owners can change roles or remove people.',
+  owners: 'Only an owner can change who owns the workspace.',
+  ownRole: "You can't change your own role.",
+  lastOwner: 'A workspace needs at least one owner. Make someone else an owner first.',
+  notInviter: 'Only admins and owners can invite people.',
+  notLinker: 'Only admins and owners can link people.',
+}
 
 export interface InviteInfo {
   /** only when state is 'member' (you're already in) */
@@ -48,7 +69,6 @@ export interface InviteInfo {
   people: { name: string; avatarUrl: string }[]
 }
 
-const STATES: readonly string[] = ['open', 'used', 'expired', 'member']
 const text = (v: unknown): string | null => (typeof v === 'string' && v !== '' ? v : null)
 
 /** a row of invite_info as the join page uses it (nulls kept: the generated types call every column a string) */
@@ -65,9 +85,9 @@ export function toInviteInfo(row: Record<string, unknown>): InviteInfo {
     workspaceName: text(row.workspace_name) ?? '',
     invitedBy: by ? { name: by, login: text(row.invited_by_login), avatarUrl: text(row.invited_by_avatar) ?? '' } : null,
     forName: text(row.for_name),
-    role: row.role === 'admin' ? 'admin' : 'member',
+    role: inviteRole(row.role),
     // something new from a later version: treat it as a link that can't be used
-    state: STATES.includes(String(row.state)) ? (row.state as InviteState) : 'used',
+    state: isInviteState(row.state) ? row.state : 'used',
     people,
   }
 }
@@ -102,13 +122,14 @@ export function inviteProblem(e: unknown): InviteError {
 
 /** makes you a member; returns the workspace's id. Throws an InviteError. */
 export async function acceptInvite(token: string): Promise<string> {
-  try {
-    const { data, error } = await requireClient().rpc('accept_invite', { p_token: token })
-    if (error || !data) throw inviteProblem(error)
-    return data
-  } catch (e) {
-    throw inviteProblem(e)
-  }
+  const { data, error } = await requireClient()
+    .rpc('accept_invite', { p_token: token })
+    .then(
+      (r) => r,
+      (e: unknown) => ({ data: null, error: e }),
+    )
+  if (error || !data) throw inviteProblem(error)
+  return data
 }
 
 export interface Invite {
@@ -138,7 +159,7 @@ interface InviteRow {
 const toInvite = (r: InviteRow): Invite => ({
   id: r.id,
   token: r.token,
-  role: r.role === 'admin' ? 'admin' : 'member',
+  role: inviteRole(r.role),
   forProfile: r.for_profile,
   forEmail: r.for_email,
   invitedBy: r.invited_by,
@@ -160,12 +181,13 @@ export async function listInvites(ws: string): Promise<Invite[]> {
 
 /** throws an Error whose message can be shown as it is */
 export async function createInvite(ws: string, o: { role: InviteRole; forProfile?: string; forEmail?: string }): Promise<Invite> {
+  const email = o.forEmail?.trim()
   const { data, error } = await requireClient()
     .from('invites')
-    .insert({ workspace_id: ws, role: o.role, for_profile: o.forProfile ?? null, for_email: o.forEmail?.trim() || null })
+    .insert({ workspace_id: ws, role: o.role, for_profile: o.forProfile ?? null, for_email: email ? email : null })
     .select(INVITE_COLUMNS)
     .single()
-  if (error?.code === '42501') throw new Error('Only admins and owners can invite people.')
+  if (error?.code === '42501') throw new Error(RULES.notInviter)
   if (error || !data) throw new Error(friendlyDbError(error, "We couldn't make the link. Try again in a moment."))
   return toInvite(data)
 }
@@ -193,8 +215,6 @@ export function expiresText(expiresAt: string, now: number): string {
 
 export const isExpired = (i: Pick<Invite, 'expiresAt'>, now: number): boolean => Date.parse(i.expiresAt) < now
 
-export const NOT_ADMIN = 'Only admins and owners can change roles or remove people.'
-
 async function changeMember(ws: string, profileId: string, patch: { role?: Role; removed_at?: string }): Promise<void> {
   const { data, error } = await requireClient()
     .from('workspace_members')
@@ -204,7 +224,7 @@ async function changeMember(ws: string, profileId: string, patch: { role?: Role;
     .select('role,removed_at')
   if (error) throw new Error(friendlyDbError(error, "That change couldn't be made. Try again in a moment."))
   // the rules let only admins and owners change anyone: for others nothing changes, and there is no error
-  if (!data.length) throw new Error(NOT_ADMIN)
+  if (!data.length) throw new Error(RULES.notAdmin)
 }
 
 /** admins and owners; refusals come back in the rules' own words */

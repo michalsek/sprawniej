@@ -3,19 +3,18 @@
  * keep_an_owner in supabase/migrations/20261019000003_triggers.sql), so Settings only offers what will work.
  * Pure, so it's tested (tests/roles.test.ts, which also checks the messages match the database's).
  */
-import type { Role } from '@/backend/workspaces'
+import { RULES } from '@/backend/workspaces'
+import { ROLES, type Member, type Person, type Role } from '@/model/schema'
 
-export const ROLES: readonly Role[] = ['owner', 'admin', 'member']
+export { ROLES }
 
 export const ROLE_NAMES: Record<Role, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' }
 
 export const MSG = {
-  notAdmin: 'Only admins and owners can change roles or remove people.',
-  /** the database's own words (guard_members) */
-  owners: 'Only an owner can change who owns the workspace.',
-  ownRole: "You can't change your own role.",
-  /** keep_an_owner */
-  lastOwner: 'A workspace needs at least one owner. Make someone else an owner first.',
+  notAdmin: RULES.notAdmin,
+  owners: RULES.owners,
+  ownRole: RULES.ownRole,
+  lastOwner: RULES.lastOwner,
   removeSelf: "You can't remove yourself. Leave the workspace instead.",
   onlyOwnerLeaving: "You're the only owner. Make someone else an owner first, then you can leave.",
 }
@@ -24,6 +23,15 @@ export interface Who {
   login: string
   role: Role
 }
+
+/** someone in the workspace as the rules see them (null: not in it) */
+export function whoIs(s: { members: Record<string, Member> }, login: string | null | undefined): Who | null {
+  const m = login ? s.members[login] : undefined
+  return login && m && !m.removedAt ? { login, role: m.role } : null
+}
+
+/** you, as the rules see you */
+export const myWho = (s: { members: Record<string, Member>; me: Person | null }): Who | null => whoIs(s, s.me?.login)
 
 /** null: allowed; otherwise why not, in words to show */
 export function ruleFor(me: Who | null, target: Who, to: Role | 'removed', owners: number): string | null {

@@ -6,7 +6,7 @@ import { useState, type SubmitEvent } from 'react'
 import { Copy, Loader2, Mail, MessageSquareText } from 'lucide-react'
 import { createInvite } from '@/data/actions'
 import { useData } from '@/data/store'
-import type { Invite, InviteRole } from '@/backend/workspaces'
+import { INVITE_DAYS, type Invite, type InviteRole } from '@/backend/workspaces'
 import { inviteMessage, inviteUrl } from '@/features/onboarding/invite'
 import { Problem } from '@/features/onboarding/Step'
 import type { Person } from '@/model/schema'
@@ -14,7 +14,7 @@ import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
-import { copy } from './useInvites'
+import { copy } from './copy'
 
 export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Person; email?: string; onDone: (made: boolean) => void }) {
   const ws = useData((s) => s.workspace?.name ?? '')
@@ -47,7 +47,7 @@ export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Per
     const mail = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(`Join ${ws} in Sprawniej`)}&body=${encodeURIComponent(message)}`
     return (
       <Dialog open onOpenChange={(o) => !o && close()}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="[overflow-wrap:anywhere] sm:max-w-lg">
           <DialogTitle>Send this link to {guest?.name ?? (to || 'them')}</DialogTitle>
           <DialogDescription>You'll find it under Invite links until it's used.</DialogDescription>
           <Input readOnly value={url} className="h-10 font-mono text-sm" onFocus={(e) => e.target.select()} aria-label="Invite link" />
@@ -84,12 +84,12 @@ export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Per
 
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="[overflow-wrap:anywhere] sm:max-w-lg">
         <DialogTitle>{guest ? `Invite ${guest.name}` : 'Invite someone'}</DialogTitle>
         <DialogDescription>
           {guest
             ? `When they join with this link, they become ${guest.name}: their issues, comments and views from Linear are theirs.`
-            : 'Make a link and send it to them. It works once, for 14 days.'}
+            : `Make a link and send it to them. It works once, for ${INVITE_DAYS} days.`}
         </DialogDescription>
         <form className="flex flex-col gap-4" onSubmit={(e) => void submit(e)}>
           <div>
@@ -103,7 +103,7 @@ export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Per
             <label htmlFor="invite-role" className="mb-1.5 block text-sm font-medium">
               Role
             </label>
-            <Select value={role} onValueChange={(v) => setRole(v as InviteRole)}>
+            <Select value={role} onValueChange={(v) => setRole(v === 'admin' ? 'admin' : 'member')}>
               <SelectTrigger id="invite-role" className="h-10 w-44">
                 <SelectValue />
               </SelectTrigger>

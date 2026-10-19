@@ -53,6 +53,11 @@ describe('coming back from GitHub', () => {
     )
     expect(run({ hash: '#error=x&error_code=manual_linking_disabled' }).problem).toContain("isn't switched on yet")
     expect(run({ search: '?error=x&error_code=something_new' }).problem).toBe("Signing in with GitHub didn't finish. Try again, or use your email.")
+    // only our own words, never what an object has by itself
+    for (const code of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      expect(run({ search: `?error=x&error_code=${code}` }).problem).toBe("Signing in with GitHub didn't finish. Try again, or use your email.")
+      expect(friendlyAuthError({ code, status: 400 })).toBe('Something went wrong while signing in. Try again in a moment.')
+    }
   })
 })
 

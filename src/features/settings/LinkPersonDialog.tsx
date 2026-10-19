@@ -67,7 +67,7 @@ export function LinkPersonDialog({ guest, onClose }: { guest: Person; onClose: (
 
   return (
     <Dialog open onOpenChange={(o) => !o && !busy && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="[overflow-wrap:anywhere] sm:max-w-lg">
         <DialogTitle>Who is {guest.name} here?</DialogTitle>
         <DialogDescription>
           Pick the member they are. Their issues, comments and views move to them. Not here yet? Send them an invite instead: they become {guest.name}{' '}

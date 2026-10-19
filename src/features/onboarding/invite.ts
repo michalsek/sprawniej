@@ -1,13 +1,26 @@
 /** Invite links: reading one from the address, making the one to send, and which join screen to show. Pure. */
-import type { InviteInfo } from '@/backend/workspaces'
+import { INVITE_DAYS, type InviteInfo } from '@/backend/workspaces'
 import { authRedirectUrl, publicAppUrl } from '@/config'
 
-/** "/join/<hex token>" → { token }; the older "/join/<owner>/<repo>" links → 'old'; anything else → null */
-export function readInvitePath(path: string): { token: string } | 'old' | null {
-  const m = path.match(/^\/join\/([0-9a-f]{16,128})\/?$/i)
-  if (m) return { token: m[1].toLowerCase() }
-  if (/^\/join\/[\w.-]+\/[\w.-]+/.test(path)) return 'old'
-  return null
+const TOKEN = /^[0-9a-f]{16,128}$/
+
+/**
+ * "/join/<hex token>" → { token }; the older "/join/<owner>/<repo>" links → 'old'; any other "/join/…" → an invite
+ * whose token is null (it doesn't work); anything else → null. Spaces around the token and a ?query after it go.
+ */
+export function readInvitePath(path: string): { token: string | null } | 'old' | null {
+  if (!/^\/join(\/|$)/.test(path)) return null
+  const rest = path.slice('/join'.length).split(/[?#]/)[0]
+  const parts = rest.split('/').filter(Boolean)
+  if (parts.length >= 2 && /^[\w.-]+$/.test(parts[0]) && /^[\w.-]+$/.test(parts[1])) return 'old'
+  let raw = parts[0] ?? ''
+  try {
+    raw = decodeURIComponent(raw)
+  } catch {
+    // not encoded properly: as it is
+  }
+  const token = raw.trim().toLowerCase()
+  return { token: parts.length === 1 && TOKEN.test(token) ? token : null }
 }
 
 /** the link to send: the published address, or this computer's (`local`: it only works here) */
@@ -19,7 +32,7 @@ export function inviteUrl(token: string): { url: string; local: boolean } {
 /** a ready-to-send message ("Hi Jan! …") */
 export function inviteMessage(url: string, workspace: string, forName?: string | null): string {
   const first = forName?.trim().split(/\s+/)[0]
-  return `${first ? `Hi ${first}!` : 'Hi!'} We plan and track our work in Sprawniej. Open this link to join ${workspace}. It works once, in the next 14 days:\n${url}`
+  return `${first ? `Hi ${first}!` : 'Hi!'} We plan and track our work in Sprawniej. Open this link to join ${workspace}. It works once, in the next ${INVITE_DAYS} days:\n${url}`
 }
 
 /** "Ania, Tomek and 4 others are here." (invite_info shows up to 8, so 8 may mean more) */

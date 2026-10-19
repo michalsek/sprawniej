@@ -82,18 +82,7 @@ export const backend = {
   /** closing: what's waiting gets a moment to be sent first */
   close: (): Promise<void> => life.close(),
   /** you leave the open workspace, and it closes (no "You're no longer in this workspace" for your own leaving) */
-  leave: async (): Promise<void> => {
-    const ws = life.current
-    if (!ws) return
-    ws.leaving = true
-    try {
-      await leaveWorkspace(ws.workspaceId)
-    } catch (e) {
-      ws.leaving = false
-      throw e
-    }
-    await life.close()
-  },
+  leave: (): Promise<void> => life.leave(leaveWorkspace),
   /** read what changed since the last change we know of (scripted checks call it too) */
   catchUp: (): Promise<void> => life.current?.catchUp() ?? Promise.resolve(),
   /** archived issues into the store, once per opening */

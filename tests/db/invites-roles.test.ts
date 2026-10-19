@@ -260,6 +260,51 @@ describe.skipIf(!enabled)('invites, members and roles', () => {
     await expectError(w.bob.db.rpc('leave_workspace', { p_ws: ws }), '23514')
   })
 
+  test('two owners acting at the same moment always leave exactly one owner', async () => {
+    const owners = async (by: Someone, ws: string) =>
+      (await ok(by.db.from('workspace_members').select('profile_id').eq('workspace_id', ws).eq('role', 'owner').is('removed_at', null))).length
+    const pair = async (label: string) => {
+      const { ws } = await newWorkspace(w.ana, label)
+      await addMember(w.ana, w.bob, ws)
+      await ok(w.ana.db.from('workspace_members').update({ role: 'owner' }).eq('workspace_id', ws).eq('profile_id', w.bob.profileId).select())
+      return ws
+    }
+    const member = (by: Someone, of: Someone, ws: string, patch: { role?: string; removed_at?: string }) =>
+      by.db.from('workspace_members').update(patch).eq('workspace_id', ws).eq('profile_id', of.profileId).select('role')
+    // a refusal: keep_an_owner (23514); or, when the other change was saved first, guard_members (42501) or the rules
+    // (nothing changes for someone who is no longer in)
+    const done = (r: { error: unknown; data: unknown }) => !r.error && (!Array.isArray(r.data) || r.data.length > 0)
+    const oneRefused = (results: { error: unknown; data: unknown }[]) => results.filter((r) => !done(r)).length
+
+    for (let i = 0; i < 3; i++) {
+      const ws = await pair(`race demote ${i}`)
+      const both = await Promise.all([member(w.ana, w.bob, ws, { role: 'admin' }), member(w.bob, w.ana, ws, { role: 'admin' })])
+      expect(oneRefused(both)).toBe(1)
+      expect(await owners(w.ana, ws)).toBe(1)
+    }
+    for (let i = 0; i < 3; i++) {
+      const ws = await pair(`race leave ${i}`)
+      const both = await Promise.all([w.ana.db.rpc('leave_workspace', { p_ws: ws }), w.bob.db.rpc('leave_workspace', { p_ws: ws })])
+      expect(oneRefused(both)).toBe(1)
+      const stayed = done(both[0]) ? w.bob : w.ana
+      expect(await owners(stayed, ws)).toBe(1)
+    }
+    const ws = await pair('race remove')
+    const now = new Date().toISOString()
+    const both = await Promise.all([member(w.ana, w.bob, ws, { removed_at: now }), member(w.bob, w.ana, ws, { removed_at: now })])
+    expect(oneRefused(both)).toBe(1)
+    expect(await owners(done(both[0]) ? w.ana : w.bob, ws)).toBe(1)
+  })
+
+  test('a link that was used or expired no longer says whom it was for', async () => {
+    const { ws } = await newWorkspace(w.ana, 'used for whom')
+    const g = crypto.randomUUID()
+    await ok(importRows(ws, 'profiles', [{ id: g, login: `~dbt-${RUN}-g10`, name: 'Guest Ten' }]))
+    const r = await ok(w.ana.db.from('invites').insert({ workspace_id: ws, for_profile: g, expires_at: '2020-01-01T00:00:00Z' }).select('token').single())
+    const [expired] = await ok(anonClient().rpc('invite_info', { p_token: r.token }))
+    expect(expired).toMatchObject({ state: 'expired', for_name: null, people: [] })
+  })
+
   test('only admins link, and only to people who joined', async () => {
     const g = crypto.randomUUID()
     await ok(importRows(w.ws, 'profiles', [{ id: g, login: `~dbt-${RUN}-g8`, name: 'Guest Eight' }]))

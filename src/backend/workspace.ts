@@ -528,6 +528,23 @@ export class Lifecycle {
     return this.queue(() => this.start(workspaceId, me, false))
   }
 
+  /**
+   * You leave the open workspace (`call` tells the database), and it closes. Your own leaving gets no "You're no
+   * longer in this workspace": the message saying you left may come before it closes.
+   */
+  async leave(call: (workspaceId: string) => Promise<void>): Promise<void> {
+    const ws = this.current
+    if (!ws) return
+    ws.leaving = true
+    try {
+      await call(ws.workspaceId)
+    } catch (e) {
+      ws.leaving = false
+      throw e
+    }
+    await this.close()
+  }
+
   /** a workspace that failed to open keeps what's waiting: "Try again" opens it once more */
   close(): Promise<void> {
     return this.queue(() => this.closeNow(this.backend.getState().phase === 'failed'))

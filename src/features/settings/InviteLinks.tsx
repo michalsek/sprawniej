@@ -1,8 +1,7 @@
 /** Settings › Invite links (admins and owners): the links not used yet, copying them again, deleting them. */
-import { useState } from 'react'
 import { Copy, Link2, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { expiresText, isExpired, type Invite } from '@/backend/workspaces'
+import { expiresText, INVITE_DAYS, isExpired, type Invite } from '@/backend/workspaces'
 import { EmptyState } from '@/components/EmptyState'
 import { deleteInvite } from '@/data/actions'
 import { useData } from '@/data/store'
@@ -12,12 +11,15 @@ import { cn } from '@/lib/utils'
 import { ROLE_NAMES } from '@/data/roles'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
-import { copy, personById, type Invites } from './useInvites'
+import { personById } from '@/data/people'
+import { useNow } from '@/lib/useNow'
+import { copy } from './copy'
+import type { Invites } from './useInvites'
 
 export function InviteLinks({ invites: { invites, state, reload }, onCreate }: { invites: Invites; onCreate: () => void }) {
   const ws = useData((s) => s.workspace?.name ?? '')
   const people = useData((s) => s.people)
-  const [now] = useState(() => Date.now())
+  const now = useNow()
 
   const remove = async (i: Invite) => {
     try {
@@ -41,7 +43,7 @@ export function InviteLinks({ invites: { invites, state, reload }, onCreate }: {
       <div className="mb-3 flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
           <h3 className="font-medium">Invite links</h3>
-          <p className="text-sm text-muted-foreground">Each link works once, for 14 days. Whoever opens it can create an account and join.</p>
+          <p className="text-sm text-muted-foreground">Each link works once, for {INVITE_DAYS} days. Whoever opens it can create an account and join.</p>
         </div>
         {state === 'ready' && invites.length > 0 && create}
       </div>
@@ -87,7 +89,7 @@ export function InviteLinks({ invites: { invites, state, reload }, onCreate }: {
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon-sm" aria-label={`More for the link ${title.toLowerCase()}`}>
+                        <Button variant="ghost" size="icon-sm" aria-label={`More for the link: ${title}`}>
                           <MoreHorizontal />
                         </Button>
                       </DropdownMenuTrigger>

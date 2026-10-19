@@ -269,12 +269,37 @@ describe('keeping up', () => {
     expect(s.env.backend.getState()).toMatchObject({ phase: 'gone', gone: 'removed' })
   })
 
-  test('leaving yourself: nothing to say (it closes next)', async () => {
-    const s = await opened()
-    s.ws.leaving = true
-    s.channels[0].on.message(removed())
+  test('leaving yourself: nothing to say, and it closes; a refused leave stays open', async () => {
+    const made: ReturnType<typeof setup>[] = []
+    const backend = createStore<BackendState>()(() => ({ phase: 'closed' }))
+    const life = new Lifecycle(
+      () => {
+        const s = setup()
+        made.push(s)
+        return s.ws
+      },
+      backend,
+      new Registry(),
+    )
+    await life.open(WS, { id: ME, person: ANA })
     await sleep(5)
-    expect(s.env.backend.getState().phase).toBe('open')
+    const s = made[0]
+    const phases: string[] = []
+    s.env.backend.subscribe((b) => phases.push(b.phase))
+
+    await expect(life.leave(async () => Promise.reject(new Error('A workspace needs at least one owner.')))).rejects.toThrow('owner')
+    expect(s.ws.leaving).toBe(false)
+    expect(life.current).toBe(s.ws)
+
+    // the database's message that you left comes before the leave call returns
+    await life.leave(async () => {
+      s.channels[0].on.message(removed())
+      await sleep(5)
+    })
+    expect(phases).not.toContain('gone')
+    expect(life.current).toBeNull()
+    expect(backend.getState().phase).toBe('closed')
+    expect(s.ws.closed).toBe(true)
   })
 })
 

@@ -5,19 +5,22 @@
 import { useEffect, useState } from 'react'
 import { Copy, Link2, Search, UserPlus } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { registry } from '@/backend/registry'
 import { expiresText, guestEmails, isExpired } from '@/backend/workspaces'
 import { PersonAvatar } from '@/components/Avatar'
 import { PagedList } from '@/components/PagedList'
+import { profileIdOf } from '@/data/people'
 import { useData } from '@/data/store'
 import { inviteUrl } from '@/features/onboarding/invite'
 import { fuzzy } from '@/lib/fuzzy'
+import { useNow } from '@/lib/useNow'
 import type { Person } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { LinkPersonDialog } from './LinkPersonDialog'
 import { useUnlinked, workOf } from './unlinked'
-import { copy, type Invites } from './useInvites'
+import { copy } from './copy'
+import { Section } from './Section'
+import type { Invites } from './useInvites'
 
 export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; admin: boolean; invites: Invites; onInvite: (guest: Person, email?: string) => void }) {
   const unlinked = useUnlinked()
@@ -25,7 +28,9 @@ export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; ad
   const [emails, setEmails] = useState<Record<string, string>>({})
   const [query, setQuery] = useState('')
   const [linking, setLinking] = useState<Person>()
-  const [now] = useState(() => Date.now())
+  const now = useNow()
+  // read again when someone from Linear comes or goes (an import, a link)
+  const who = unlinked.map((g) => g.login).join(',')
 
   useEffect(() => {
     if (!ws || !admin) return
@@ -37,28 +42,29 @@ export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; ad
     return () => {
       stop = true
     }
-  }, [ws, admin])
+  }, [ws, admin, who])
 
   if (!unlinked.length) return null
   const shown = fuzzy(unlinked, query, (g) => [g.name])
   const emailOf = (g: Person) => {
-    const id = registry.profileId(g.login)
+    const id = profileIdOf(g.login)
     return id ? emails[id] : undefined
   }
   const openInviteFor = (g: Person) => {
-    const id = registry.profileId(g.login)
+    const id = profileIdOf(g.login)
     return id ? invites.invites.find((i) => i.forProfile === id && !isExpired(i, now)) : undefined
   }
 
   return (
-    <section className="border-b py-8 last:border-0">
-      <h2 className="text-lg font-semibold">People from Linear</h2>
-      <p className="mt-1 text-[15px] text-muted-foreground">
-        {admin
+    <Section
+      title="People from Linear"
+      description={
+        admin
           ? "They came with the Linear import and haven't joined yet. Invite them: when they join, their issues, comments and views become theirs. Already here under another name? Link them instead."
-          : "They came with the Linear import and haven't joined yet. An admin can invite them."}
-      </p>
-      <div className="mt-5 flex flex-col gap-4">
+          : "They came with the Linear import and haven't joined yet. An admin can invite them."
+      }
+    >
+      <div className="flex flex-col gap-4">
         {unlinked.length > 10 && (
           <div className="relative max-w-sm">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -112,6 +118,6 @@ export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; ad
         />
       </div>
       {linking && <LinkPersonDialog guest={linking} onClose={() => setLinking(undefined)} />}
-    </section>
+    </Section>
   )
 }

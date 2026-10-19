@@ -67,7 +67,6 @@ function Palette() {
   const actions: Entry[] = [
     { id: 'new', label: 'New issue', icon: <SquarePen />, run: () => openComposer(), shortcut: 'C' },
     { id: 'sidebar', label: 'Show or hide the sidebar', icon: <PanelLeft />, run: () => useChrome.getState().toggleSidebar() },
-    // only admins and owners import
     ...(admin ? [{ id: 'import', label: 'Import from Linear', icon: <Download />, run: go('/settings/import') }] : []),
   ]
 

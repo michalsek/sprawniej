@@ -5,7 +5,7 @@
  * GitHub sign-in leaves the page and comes back to it (authRedirectUrl) with ?code, which the client turns into a
  * sign-in when it starts. The #route you were on is kept in sessionStorage meanwhile and put back first thing.
  */
-import type { AuthChangeEvent, Session as AuthSession, User } from '@supabase/supabase-js'
+import type { AuthChangeEvent, Session as AuthSession, User, UserIdentity } from '@supabase/supabase-js'
 import { create } from 'zustand'
 import { authRedirectUrl } from '@/config'
 import { useSession } from '@/session'
@@ -68,7 +68,7 @@ export function takeReturnedUrl(
   const search = params.toString()
   replace(`${loc.pathname}${search ? `?${search}` : ''}${hash}`)
   if (!failed) return undefined
-  return (code && MESSAGES[code]) || GITHUB_UNFINISHED
+  return messageFor(code) ?? GITHUB_UNFINISHED
 }
 
 const MESSAGES: Record<string, string> = {
@@ -89,11 +89,15 @@ const MESSAGES: Record<string, string> = {
   manual_linking_disabled: "Adding another way to sign in isn't switched on yet. Ask whoever looks after Sprawniej.",
 }
 
+/** our words for a code, which may come from the address bar ("constructor" isn't one of ours) */
+const messageFor = (code: unknown): string | undefined => (typeof code === 'string' && Object.hasOwn(MESSAGES, code) ? MESSAGES[code] : undefined)
+
 /** what to say when signing in or up fails */
 export function friendlyAuthError(e: unknown): string {
   if (e instanceof AuthProblem) return e.message
   const err = (e ?? {}) as { name?: unknown; code?: unknown; status?: unknown }
-  if (typeof err.code === 'string' && MESSAGES[err.code]) return MESSAGES[err.code]
+  const known = messageFor(err.code)
+  if (known) return known
   if (isUnreachable(e) || err.status === 0) return UNREACHABLE
   return 'Something went wrong while signing in. Try again in a moment.'
 }
@@ -126,7 +130,11 @@ function startOver() {
 const deliberate = () => Date.now() - Number(localStorage.getItem(SIGNING_OUT) ?? 0) < 10_000
 
 function setUser(user: AuthUser | null, more: Partial<AuthState> = {}) {
-  if (user) lastUserId = user.id
+  if (user) {
+    lastUserId = user.id
+    // after a reload nobody is in memory: the remembered workspaces say whose they are
+    useSession.getState().signedInAs(user.id)
+  }
   useAuth.setState({ user, ...more })
 }
 
@@ -242,11 +250,8 @@ export async function signInWithGitHub(): Promise<void> {
 /** set while you're away at GitHub to add it as a way to sign in; Settings reads it when you come back */
 export const ADDING_KEY = 'sprawniej:adding-way'
 
-export interface IdentityIn {
-  identity_id: string
-  provider: string
-  identity_data?: Record<string, unknown>
-}
+/** what signInWays needs of an identity (the client's own UserIdentity has these) */
+export type IdentityIn = Pick<UserIdentity, 'identity_id' | 'provider'> & { identity_data?: Record<string, unknown> }
 
 export interface WayRow {
   kind: 'password' | 'github' | 'google'
@@ -260,6 +265,12 @@ export interface WayRow {
 }
 
 const ONLY_WAY = "It's your only way to sign in."
+const SIGNED_UP_WITH: Record<'github' | 'google', string> = {
+  github: "You made your account with GitHub, so it can't be removed.",
+  google: "You made your account with Google, so it can't be removed.",
+}
+/** Sprawniej couldn't say which ways are switched on */
+const NOT_KNOWN = "We couldn't check this just now. Try again later."
 const OFF: Record<'github' | 'google', string> = {
   github: "Signing in with GitHub isn't switched on yet.",
   google: "Signing in with Google isn't switched on yet.",
@@ -278,10 +289,10 @@ export function signInWays(u: { email: string | null; identities: IdentityIn[]; 
     if (i) {
       const handle = kind === 'github' ? i.identity_data?.user_name : i.identity_data?.email
       const detail = typeof handle === 'string' ? (kind === 'github' ? `@${handle}` : handle) : ''
-      // the email identity is never offered for removal; GitHub or Google only when there is another way left
-      return u.identities.length >= 2
-        ? { kind, on: true, detail, action: 'remove', identityId: i.identity_id }
-        : { kind, on: true, detail, action: null, why: ONLY_WAY, identityId: i.identity_id }
+      // the email identity is never offered for removal; GitHub or Google only when there is another way left. A
+      // password set later isn't a way of its own to Sprawniej's sign-in (no email identity), so the first one stays.
+      if (u.identities.length >= 2) return { kind, on: true, detail, action: 'remove', identityId: i.identity_id }
+      return { kind, on: true, detail, action: null, why: u.passwordSet ? SIGNED_UP_WITH[kind] : ONLY_WAY, identityId: i.identity_id }
     }
     return p[kind] ? { kind, on: false, detail: '', action: 'add' } : { kind, on: false, detail: '', action: null, why: OFF[kind] }
   }
@@ -292,12 +303,13 @@ export function signInWays(u: { email: string | null; identities: IdentityIn[]; 
 export async function waysToSignIn(): Promise<WayRow[]> {
   const [{ data, error }, providers] = await Promise.all([requireClient().auth.getUser(), providersOn()])
   if (error) throw new AuthProblem(friendlyAuthError(error))
-  if (providers === 'unknown') throw new AuthProblem(UNREACHABLE)
   const u = data.user
-  return signInWays(
-    { email: u.email || null, identities: (u.identities ?? []) as IdentityIn[], passwordSet: u.user_metadata?.password_set === true },
-    providers,
+  const ways = signInWays(
+    { email: u.email || null, identities: u.identities ?? [], passwordSet: u.user_metadata?.password_set === true },
+    providers === 'unknown' ? { github: false, google: false } : providers,
   )
+  // the password still works; whether GitHub can be added isn't known
+  return providers === 'unknown' ? ways.map((w) => (w.kind !== 'password' && w.action === null && !w.on ? { ...w, why: NOT_KNOWN } : w)) : ways
 }
 
 /** sets or changes your password (no Save button: it's the dialog's own form) */
@@ -306,14 +318,14 @@ export async function setPassword(password: string): Promise<void> {
   if (error) throw new AuthProblem(friendlyAuthError(error))
 }
 
-/** leaves for GitHub and comes back with it added as a way to sign in */
-export async function addGitHub(): Promise<void> {
+/** leaves for GitHub (or Google) and comes back with it added as a way to sign in */
+export async function addWay(provider: 'github' | 'google'): Promise<void> {
   const p = await providersOn()
   if (p === 'unknown') throw new AuthProblem(UNREACHABLE)
-  if (!p.github) throw new AuthProblem(GITHUB_OFF)
+  if (!p[provider]) throw new AuthProblem(provider === 'github' ? GITHUB_OFF : OFF.google)
   sessionStorage.setItem(RETURN_KEY, location.hash || '#/settings')
-  sessionStorage.setItem(ADDING_KEY, 'github')
-  const { error } = await requireClient().auth.linkIdentity({ provider: 'github', options: { redirectTo: authRedirectUrl() } })
+  sessionStorage.setItem(ADDING_KEY, provider)
+  const { error } = await requireClient().auth.linkIdentity({ provider, options: { redirectTo: authRedirectUrl() } })
   if (error) {
     sessionStorage.removeItem(RETURN_KEY)
     sessionStorage.removeItem(ADDING_KEY)

@@ -6,14 +6,23 @@ import { useSession } from '@/session'
 
 type ProfileLoad = { uid: string; state: 'ready' | 'none' } | { uid: string; state: 'failed'; problem: string }
 
-export interface MyProfileState {
-  /** 'loading' also while signed out */
-  state: 'loading' | 'failed' | 'none' | 'ready'
-  problem?: string
-  mine: MyProfile | null
+/** where finding your profile is ('loading' also while signed out) */
+export type ProfileStage = { state: 'loading' } | { state: 'failed'; problem: string } | { state: 'none' } | { state: 'ready'; mine: MyProfile }
+
+export type MyProfileState = ProfileStage & {
+  /** your profile as last known (it stays while a sign-in that ran out is renewed) */
+  known: MyProfile | null
   /** a name was just picked (PickLogin) */
   picked: (p: MyProfile) => void
   retry: () => void
+}
+
+function stage(uid: string | undefined, load: ProfileLoad | undefined, mine: MyProfile | null): ProfileStage {
+  const now = uid && load?.uid === uid ? load : undefined
+  if (!now) return { state: 'loading' }
+  if (now.state === 'failed') return { state: 'failed', problem: now.problem }
+  if (now.state === 'none' || !mine) return { state: 'none' }
+  return { state: 'ready', mine }
 }
 
 export function useMyProfile(uid: string | undefined): MyProfileState {
@@ -41,12 +50,10 @@ export function useMyProfile(uid: string | undefined): MyProfileState {
     }
   }, [uid, attempt])
 
-  const mine = user && profileId ? { id: profileId, person: user } : null
-  const now = uid && load?.uid === uid ? load : undefined
+  const known = user && profileId ? { id: profileId, person: user } : null
   return {
-    state: !now ? 'loading' : now.state === 'ready' && !mine ? 'none' : now.state,
-    problem: now?.state === 'failed' ? now.problem : undefined,
-    mine,
+    ...stage(uid, load, known),
+    known,
     picked: (p) => {
       useSession.getState().setProfile(p.id, p.person)
       if (uid) setLoad({ uid, state: 'ready' })

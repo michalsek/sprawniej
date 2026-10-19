@@ -11,12 +11,20 @@ describe('reading an invite link', () => {
     expect(readInvitePath(`/join/${TOKEN}/`)).toEqual({ token: TOKEN })
   })
 
-  test('the older links say so; anything else is no invite', () => {
+  test('spaces around it and a ?query after it go', () => {
+    expect(readInvitePath(`/join/%20${TOKEN}%20`)).toEqual({ token: TOKEN })
+    expect(readInvitePath(`/join/${TOKEN}?utm=x`)).toEqual({ token: TOKEN })
+    expect(readInvitePath(`/join/${TOKEN}/?utm=x`)).toEqual({ token: TOKEN })
+  })
+
+  test('the older links say so; any other /join/ is a link that does not work; the rest is no invite', () => {
     expect(readInvitePath('/join/acme/data?ws=x')).toBe('old')
     expect(readInvitePath('/join/acme/data')).toBe('old')
     expect(readInvitePath('/team/ENG')).toBeNull()
-    expect(readInvitePath('/join/')).toBeNull()
-    expect(readInvitePath('/join/short')).toBeNull()
+    expect(readInvitePath('/joinery')).toBeNull()
+    for (const bad of ['/join', '/join/', '/join/short', `/join/${'z'.repeat(36)}`, `/join/${'a'.repeat(130)}`, '/join/%E0%A4%A']) {
+      expect(readInvitePath(bad)).toEqual({ token: null })
+    }
   })
 })
 

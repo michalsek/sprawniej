@@ -1,8 +1,8 @@
 /** Settings › Your account › Ways to sign in: an email and a password, GitHub (and Google, once it's switched on). */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useEffectEvent, useState } from 'react'
 import { KeyRound, Loader2, Mail, Plus, Unlink } from 'lucide-react'
 import { toast } from 'sonner'
-import { ADDING_KEY, addGitHub, friendlyAuthError, removeWay, useAuth, waysToSignIn, type WayRow } from '@/backend/auth'
+import { ADDING_KEY, addWay, friendlyAuthError, removeWay, useAuth, waysToSignIn, type WayRow } from '@/backend/auth'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Problem } from '@/features/onboarding/Step'
 import { GitHubMark } from '@/features/onboarding/Welcome'
@@ -13,7 +13,12 @@ const NAMES: Record<WayRow['kind'], string> = { password: 'Email and password', 
 
 function Icon({ kind }: { kind: WayRow['kind'] }) {
   if (kind === 'password') return <Mail className="size-5" />
-  if (kind === 'github') return <span className="size-5 [&_svg]:size-5">{<GitHubMark />}</span>
+  if (kind === 'github')
+    return (
+      <span className="size-5 [&_svg]:size-5">
+        <GitHubMark />
+      </span>
+    )
   return <KeyRound className="size-5" />
 }
 
@@ -22,7 +27,8 @@ export function SignInWays() {
   const [ways, setWays] = useState<WayRow[]>()
   const [failed, setFailed] = useState(false)
   const [problem, setProblem] = useState<string>()
-  const [password, setPassword] = useState<'set' | 'change'>()
+  /** the password dialog, for setting one or changing it */
+  const [passwordDialog, setPasswordDialog] = useState<'set' | 'change'>()
   const [removing, setRemoving] = useState<WayRow>()
   const [busy, setBusy] = useState<WayRow['kind'] | null>(null)
 
@@ -39,7 +45,13 @@ export function SignInWays() {
     }
   }, [])
 
-  // back from GitHub, after adding it (or not)
+  // back from GitHub after adding it (or not): say how it went, with the problem as it was when Settings opened
+  const cameBack = useEffectEvent((adding: string | null, w: WayRow[] | undefined) => {
+    if (!adding) return
+    if (w?.some((r) => r.kind === adding && r.on)) toast(`${NAMES[adding === 'google' ? 'google' : 'github']} added. You can sign in with it from now on.`)
+    else if (urlProblem) setProblem(urlProblem)
+  })
+
   useEffect(() => {
     let adding: string | null = null
     try {
@@ -48,20 +60,28 @@ export function SignInWays() {
     } catch {
       // nothing was being added
     }
-    void load().then((w) => {
-      if (!adding) return
-      if (w?.some((r) => r.kind === 'github' && r.on)) toast('GitHub added. You can sign in with it from now on.')
-      else if (urlProblem) setProblem(urlProblem)
-    })
-    // once, when Settings opens
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    let stop = false
+    waysToSignIn().then(
+      (w) => {
+        if (stop) return
+        setWays(w)
+        cameBack(adding, w)
+      },
+      (e: unknown) => {
+        console.warn('Sprawniej couldn’t read your ways to sign in', e)
+        if (!stop) setFailed(true)
+      },
+    )
+    return () => {
+      stop = true
+    }
   }, [])
 
-  async function add() {
-    setBusy('github')
+  async function add(kind: 'github' | 'google') {
+    setBusy(kind)
     setProblem(undefined)
     try {
-      await addGitHub() // leaves for GitHub
+      await addWay(kind) // leaves for GitHub or Google
     } catch (e) {
       setProblem(friendlyAuthError(e))
       setBusy(null)
@@ -101,27 +121,29 @@ export function SignInWays() {
       {ways && (
         <ul className="flex max-w-xl flex-col gap-1">
           {ways.map((w) => (
-            <li key={w.kind} className="flex items-center gap-3 py-1.5" data-way={w.kind}>
+            <li key={w.kind} className="flex flex-wrap items-center gap-3 py-1.5" data-way={w.kind}>
               <span className="flex size-8 items-center justify-center text-muted-foreground">
                 <Icon kind={w.kind} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{NAMES[w.kind]}</span>
-                {(w.detail || w.why) && <span className="block truncate text-sm text-muted-foreground">{w.action ? w.detail : [w.detail, w.why].filter(Boolean).join(' · ')}</span>}
+                <span className="block font-medium">{NAMES[w.kind]}</span>
+                {(w.detail || w.why) && (
+                  <span className="block text-sm break-words text-muted-foreground">{w.action ? w.detail : [w.detail, w.why].filter(Boolean).join(' · ')}</span>
+                )}
               </span>
               {w.action === 'set-password' && (
-                <Button variant="outline" size="sm" onClick={() => setPassword('set')}>
+                <Button variant="outline" size="sm" onClick={() => setPasswordDialog('set')}>
                   Set a password
                 </Button>
               )}
               {w.action === 'change-password' && (
-                <Button variant="outline" size="sm" onClick={() => setPassword('change')}>
+                <Button variant="outline" size="sm" onClick={() => setPasswordDialog('change')}>
                   Change password
                 </Button>
               )}
-              {w.action === 'add' && w.kind === 'github' && (
-                <Button variant="outline" size="sm" disabled={!!busy} onClick={() => void add()}>
-                  {busy === 'github' ? <Loader2 className="animate-spin" /> : <Plus />} Add GitHub
+              {w.action === 'add' && w.kind !== 'password' && (
+                <Button variant="outline" size="sm" disabled={!!busy} onClick={() => void add(w.kind === 'google' ? 'google' : 'github')}>
+                  {busy === w.kind ? <Loader2 className="animate-spin" /> : <Plus />} Add {NAMES[w.kind]}
                 </Button>
               )}
               {w.action === 'remove' && (
@@ -134,12 +156,12 @@ export function SignInWays() {
         </ul>
       )}
       <Problem>{problem}</Problem>
-      {password && (
+      {passwordDialog && (
         <PasswordDialog
-          change={password === 'change'}
+          change={passwordDialog === 'change'}
           email={email}
           onDone={(saved) => {
-            setPassword(undefined)
+            setPasswordDialog(undefined)
             if (saved) void load()
           }}
         />
@@ -152,7 +174,7 @@ export function SignInWays() {
         keep="Cancel"
         onConfirm={() => removing && void remove(removing)}
       >
-        <span>You can still sign in with your email and password, and add {removing ? NAMES[removing.kind] : 'GitHub'} again later.</span>
+        <span>You can still sign in another way, and add {removing ? NAMES[removing.kind] : 'GitHub'} again later.</span>
       </ConfirmDialog>
     </div>
   )

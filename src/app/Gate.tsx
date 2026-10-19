@@ -5,13 +5,12 @@
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { useLocation } from 'wouter'
-import { Loader2 } from 'lucide-react'
 import { backend, useBackend } from '@/backend'
 import { useAuth } from '@/backend/auth'
 import type { MyProfile } from '@/backend/profiles'
 import { useSaveStatus } from '@/backend/status'
-import { useSignOut } from '@/components/SignOut'
 import { useData } from '@/data/store'
+import { ProfileFailed, Waiting } from '@/features/onboarding/Gatekeeping'
 import { readInvitePath } from '@/features/onboarding/invite'
 import { JoinFlow } from '@/features/onboarding/JoinFlow'
 import { PickLogin } from '@/features/onboarding/PickLogin'
@@ -23,17 +22,6 @@ import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog'
 import { useMyProfile } from './useMyProfile'
 
-/** a title and a spinner; `line`: how far it got, when there's something to say */
-export function Waiting({ title, line }: { title: string; line?: string }) {
-  return (
-    <Step title={title}>
-      <p className="flex items-center gap-2 text-muted-foreground" role="status">
-        <Loader2 className="size-4 animate-spin" aria-label="Loading" /> {line}
-      </p>
-    </Step>
-  )
-}
-
 /** a dialog that stays until its own button is used (nothing else may close it) */
 function Blocking({ title, text, children }: { title: string; text: string; children: ReactNode }) {
   return (
@@ -44,28 +32,6 @@ function Blocking({ title, text, children }: { title: string; text: string; chil
         {children}
       </DialogContent>
     </Dialog>
-  )
-}
-
-export function ProfileFailed({ problem, onRetry }: { problem: string; onRetry: () => void }) {
-  const { signOut, dialog } = useSignOut()
-  return (
-    <Step
-      title="We couldn't sign you in"
-      footer={
-        <>
-          <Button size="lg" onClick={onRetry}>
-            Try again
-          </Button>
-          <Button variant="outline" size="lg" onClick={signOut}>
-            Sign out
-          </Button>
-        </>
-      }
-    >
-      {dialog}
-      <Problem>{problem}</Problem>
-    </Step>
   )
 }
 
@@ -88,11 +54,24 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
   const [attempt, setAttempt] = useState(0)
   // the person as they were when it opened: a new name from the database shows through the store, not by reopening
   const [person] = useState(me.person)
+  // signed out (it ran out) before it opened, say after an invite link: it opens once you're signed in again; one
+  // that is open stays open while you sign in
+  const [start, setStart] = useState(signedIn)
+  if (signedIn && !start) setStart(true)
 
   useEffect(() => {
+    if (!start) return
     void backend.open(workspaceId, { id: me.id, person })
     return () => void backend.close()
-  }, [workspaceId, me.id, person, attempt])
+  }, [workspaceId, me.id, person, attempt, start])
+
+  // it failed while signed out: signing in again tries once more
+  const [failedSignedOut, setFailedSignedOut] = useState(false)
+  if (phase === 'failed' && !signedIn && !failedSignedOut) setFailedSignedOut(true)
+  if (failedSignedOut && signedIn) {
+    setFailedSignedOut(false)
+    setAttempt((n) => n + 1)
+  }
 
   // the list of workspaces shows each with its name as it is now
   useEffect(() => {
@@ -106,6 +85,20 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
     else useSession.getState().close()
   }
 
+  const signInAgain = (
+    <Blocking title="Please sign in again" text="You were signed out, maybe because it's been a while. Sign in to carry on; everything here stays as it is.">
+      <SignInForm />
+    </Blocking>
+  )
+  // couldn't open because the sign-in ran out: sign in, and it tries again by itself
+  if (phase === 'failed' && !signedIn) {
+    return (
+      <>
+        <Waiting title="Opening your workspace…" />
+        {signInAgain}
+      </>
+    )
+  }
   if (phase === 'failed') {
     return (
       <Step
@@ -135,7 +128,14 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
       </Step>
     )
   }
-  if (phase !== 'open' && phase !== 'gone') return <Waiting title="Opening your workspace…" line={progress} />
+  if (phase !== 'open' && phase !== 'gone') {
+    return (
+      <>
+        <Waiting title="Opening your workspace…" line={progress} />
+        {!signedIn && signInAgain}
+      </>
+    )
+  }
   const ended = phase === 'gone' && gone ? GONE[gone] : null
   return (
     <>
@@ -147,11 +147,7 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
           </div>
         </Blocking>
       )}
-      {!signedIn && !ended && (
-        <Blocking title="Please sign in again" text="You were signed out, maybe because it's been a while. Sign in to carry on; everything here stays as it is.">
-          <SignInForm />
-        </Blocking>
-      )}
+      {!signedIn && !ended && signInAgain}
     </>
   )
 }
@@ -163,7 +159,7 @@ export function Gate({ children }: { children: ReactNode }) {
   const lost = useAuth((s) => s.lost)
   const workspaceId = useSession((s) => s.workspaceId)
   const profile = useMyProfile(authUser?.id)
-  const { mine } = profile
+  const mine = profile.known
 
   if (!ready) return <Waiting title="Just a moment…" />
   // an invite link comes before an open workspace (which closes meanwhile, and opens again back at the start)
@@ -179,7 +175,7 @@ export function Gate({ children }: { children: ReactNode }) {
   }
   if (!authUser) return <SignIn />
   if (profile.state === 'loading') return <Waiting title="Signing you in…" />
-  if (profile.state === 'failed') return <ProfileFailed problem={profile.problem ?? ''} onRetry={profile.retry} />
+  if (profile.state === 'failed') return <ProfileFailed problem={profile.problem} onRetry={profile.retry} />
   if (profile.state === 'none') return <PickLogin onDone={profile.picked} />
   return <PickWorkspace />
 }

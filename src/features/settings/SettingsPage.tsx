@@ -2,7 +2,7 @@
  * Settings: the workspace (its name, leaving it), its members and invite links, people from Linear, labels, the
  * archive, the import, and your account.
  */
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { Loader2, LogOut, Repeat } from 'lucide-react'
 import { toast } from 'sonner'
 import { Link } from 'wouter'
@@ -12,8 +12,8 @@ import { useSignOut, useSwitchWorkspace } from '@/components/SignOut'
 import { PersonAvatar } from '@/components/Avatar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { leaveWorkspace, renameMe, renameWorkspace, setAutoArchive } from '@/data/actions'
-import { canLeave } from '@/data/roles'
-import { isAdmin, ownerCount, roleOf } from '@/data/select'
+import { canLeave, myWho } from '@/data/roles'
+import { isAdmin, ownerCount } from '@/data/select'
 import { AUTO_ARCHIVE_MONTHS, type Person } from '@/model/schema'
 import { useData } from '@/data/store'
 import { useSession } from '@/session'
@@ -25,25 +25,16 @@ import { InviteDialog } from './InviteDialog'
 import { InviteLinks } from './InviteLinks'
 import { LabelsSettings } from './LabelsSettings'
 import { Members } from './Members'
+import { Section } from './Section'
 import { SignInWays } from './SignInWays'
 import { useInvites } from './useInvites'
-
-function Section({ title, children, description }: { title: string; description?: string; children: ReactNode }) {
-  return (
-    <section className="border-b py-8 last:border-0">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      {description && <p className="mt-1 text-[15px] text-muted-foreground">{description}</p>}
-      <div className="mt-5">{children}</div>
-    </section>
-  )
-}
 
 function WorkspaceName({ admin }: { admin: boolean }) {
   const name = useData((s) => s.workspace?.name ?? '')
   if (!admin) {
     return (
       <>
-        <Input aria-label="Workspace name" aria-readonly className="h-10 max-w-sm" readOnly value={name} />
+        <Input aria-label="Workspace name" className="h-10 max-w-sm" readOnly value={name} />
         <p className="mt-1.5 text-sm text-muted-foreground">Only admins and owners can rename the workspace.</p>
       </>
     )
@@ -72,10 +63,9 @@ function NameField({ name }: { name: string }) {
 
 function Leave() {
   const name = useData((s) => s.workspace?.name ?? '')
-  const role = useData(roleOf)
-  const login = useData((s) => s.me?.login)
+  const me = useData(useShallow(myWho))
   const owners = useData(ownerCount)
-  const can = canLeave(role && login ? { login, role } : null, owners)
+  const can = canLeave(me, owners)
   const [asking, setAsking] = useState(false)
   const [busy, setBusy] = useState(false)
 
@@ -93,7 +83,7 @@ function Leave() {
   return (
     <div className="mt-5">
       <Button variant="outline" disabled={!can.ok || busy} onClick={() => setAsking(true)}>
-        {busy ? <Loader2 className="animate-spin" /> : <LogOut />} Leave {name}
+        {busy ? <Loader2 className="animate-spin" /> : <LogOut />} Leave workspace
       </Button>
       {can.why && <p className="mt-1.5 text-sm text-muted-foreground">{can.why}</p>}
       <ConfirmDialog open={asking} onOpenChange={setAsking} title={`Leave ${name}?`} confirm="Leave workspace" keep="Stay" onConfirm={() => void leave()}>
