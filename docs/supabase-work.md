@@ -26,8 +26,8 @@ Status: `todo`, `doing`, `done`.
 | # | Phase | Status | Notes |
 | --- | --- | --- | --- |
 | 0 | Plan merged into `main`, Supabase CLI as a dev dependency | done | |
-| 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | todo | parallel with 2 |
-| 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | todo | parallel with 1 |
+| 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | doing | parallel with 2 |
+| 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | doing | parallel with 1 |
 | 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | todo | after 1 |
 | 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | todo | after 3 |
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | todo | after 4 |
@@ -76,6 +76,18 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E6 | roadmap planner | `Markdown.tsx:24` runs `linkReferences`/`findByRef` (a scan of all issues per reference) in a store selector on every change | open | |
 | E7 | roadmap planner | `linearMap.ts:74` the accent-stripping regex uses invisible literal combining characters instead of `\u0300-\u036f` | open | |
 | E8 | roadmap planner | `joinLink.ts:17` + `config.ts:14`: no join link at all on localhost, so stage A can't make invite links | open | |
+| E9 | phase 2 planner | `linearMap.ts:141-146,326` links are rewritten against Linear refs: after renumbering (ENG-2 to ENG-4) or a changed key, a link points at the wrong issue or isn't rewritten | open |  |
+| E10 | phase 2 planner | `linearMap.ts:305` re-importing only some teams drops the other teams from a project's `teams` | open |  |
+| E11 | phase 2 planner | `linearMap.ts:402` re-importing only some teams clears `parent` for sub-issues whose parent is in a team not picked this time | open |  |
+| E12 | phase 2 planner | `linearMap.ts:415` the import archives by `completedAt ?? updatedAt`, `tidyArchive` by the later of the two | open | phase 2 (amendment A2) |
+| E13 | phase 2 planner | `linearMap.ts:250` a team taking a different Linear team overwrites `linearId`, so the earlier one is no longer pre-picked | open |  |
+| E14 | phase 2 planner | `linearMap.ts:275-279` a label matched by name never records its `linearId`, so a rename in Linear makes a second label | open | phase 2 (amendment A3) |
+| E15 | phase 2 planner | `linearMap.ts:226` a guest's name and picture are never refreshed on re-import | open |  |
+| E16 | phase 2 planner | `linearFilters.ts:15` circular import with `linearMap.ts` (works only because `mapStatus` is used at call time) | open |  |
+| E17 | phase 2 planner | `linearApi.ts:205` (`labels(first: 50)`) and `:173` (`teams(first: 20)`) silently cut off longer lists | open |  |
+| E18 | phase 2 planner | `src/lib/plain.ts:8` same invisible combining-character regex as E7 | open | phase 2 (amendment A4) |
+| E19 | phase 2 planner | `tests/fixtures/linear.ts:1` mentions a browser test's pretend Linear that doesn't exist | open |  |
+| E20 | phase 2 planner | `tests/linearImport.test.ts:123,274,283,295,302` invalid `now` values silently switch the archive rule off | open | phase 2 (amendment A5) |
 
 ## Waiting on the user
 

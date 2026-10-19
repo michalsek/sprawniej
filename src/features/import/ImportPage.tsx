@@ -1,6 +1,7 @@
 /**
  * Settings › Import from Linear: a short wizard. Key → teams → people → check → import → done.
- * Reading happens straight from Linear; the import is written like any other change (actions.importFiles).
+ * Reading happens straight from Linear. Saving the import is switched off until it moves to the database
+ * (docs/supabase-work.md, phase 6): the check step shows what would come over.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link } from 'wouter'
@@ -8,9 +9,8 @@ import { ulid } from 'ulid'
 import { CheckCircle2, ExternalLink, Loader2 } from 'lucide-react'
 import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
-import { importFiles } from '@/data/actions'
 import { loadArchive } from '@/data/project'
-import { useData } from '@/data/store'
+import { useData, type DataState } from '@/data/store'
 import { useSync } from '@/sync/engine'
 import { Problem } from '@/features/onboarding/Step'
 import { cn } from '@/lib/utils'
@@ -18,7 +18,7 @@ import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { LinearError, readBasics, readTeams, type LinearData } from './linearApi'
-import { buildImport, emojiFor, guessPerson, guestLogins, involvedUsers, linearName, type ImportChoices, type ImportResult } from './linearMap'
+import { buildImport, emojiFor, guessPerson, guestLogins, involvedUsers, linearName, type Existing, type ImportResult } from './linearMap'
 import { isGuest } from '@/model/schema'
 
 type Stage =
@@ -66,6 +66,33 @@ function doneText(c: ImportResult['counts']): string {
   return `${parts.slice(0, -1).join(', ')} and ${parts.at(-1)} are here.`
 }
 
+/** the workspace as the import needs it: archived issues by Linear id, and every number each team has used */
+function existingFrom(ws: DataState, me: string): Existing {
+  const archivedByLinear: Existing['archivedByLinear'] = {}
+  const usedNumbers: Record<string, number[]> = {}
+  const mark = (team: string, n: number) => (usedNumbers[team] ??= []).push(n)
+  const archived = Object.values(ws.archive).filter((a) => !ws.issues[a.id])
+  for (const a of archived) {
+    mark(a.team, a.number)
+    if (typeof a.linearId === 'string') archivedByLinear[a.linearId] = { id: a.id, team: a.team, number: a.number }
+  }
+  for (const i of Object.values(ws.issues)) mark(i.team, i.number)
+  // lastNumber remembers numbers of issues deleted since
+  for (const t of Object.values(ws.teams)) for (let n = 1; n <= (t.lastNumber ?? 0); n++) mark(t.key, n)
+  return {
+    me,
+    people: ws.people,
+    teams: ws.teams,
+    issues: ws.issues,
+    labels: ws.labels,
+    projects: ws.projects,
+    views: ws.views,
+    comments: { ...ws.comments, ...Object.fromEntries(archived.map((a) => [a.id, a.comments])) },
+    archivedByLinear,
+    usedNumbers,
+  }
+}
+
 export function ImportPage() {
   useCrumbs([{ label: 'Settings', href: '/settings' }, { label: 'Import from Linear' }])
   const [stage, setStage] = useState<Stage>({ at: 'key' })
@@ -91,9 +118,8 @@ export function ImportPage() {
     }
   }
 
-  const choices: ImportChoices = { teamKeys: picked, people }
   const plan = useMemo(
-    () => (stage.at === 'check' && ws.me ? buildImport(stage.data, { teamKeys: picked, people }, { ...ws, me: ws.me.login }, ulid, new Date().toISOString()) : null),
+    () => (stage.at === 'check' && ws.me ? buildImport(stage.data, { teamKeys: picked, people }, existingFrom(ws, ws.me.login), ulid, new Date().toISOString(), () => crypto.randomUUID()) : null),
     // the plan is made once when you reach the check step
     // oxlint-disable-next-line react-hooks/exhaustive-deps
     [stage],
@@ -295,22 +321,13 @@ export function ImportPage() {
             <Button variant="outline" onClick={() => setStage({ at: 'people', data: stage.data })}>
               Back
             </Button>
-            <Button
-              disabled={!plan.files.size}
-              onClick={() => {
-                const keys = [...new Set(Object.values(choices.teamKeys))]
-                setStage({ at: 'saving', saved: 0, total: plan.files.size })
-                // everything is kept on this device as it goes; if sending stalls, it carries on by itself like any change
-                void importFiles(plan.files, `Import from Linear: ${c.issues} issues`, (saved, total) => setStage({ at: 'saving', saved, total }))
-                  .catch((e: unknown) => console.warn('Sprawniej: the import is still being saved', e))
-                  .finally(() => setStage({ at: 'done', result: plan, keys }))
-              }}
-            >
-              Import
-            </Button>
+            <Button disabled>Import</Button>
           </>
         }
       >
+        <p className="mb-5 text-sm text-muted-foreground">
+          Importing is switched off for now, while Sprawniej moves to its new home. This page shows what would come over, but nothing is saved yet.
+        </p>
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {rows.map(([one, many, n]) => (
             <li key={many} className="rounded-lg border px-4 py-3">
