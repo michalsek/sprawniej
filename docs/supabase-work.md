@@ -38,7 +38,7 @@ Status: `todo`, `doing`, `done`.
 | 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | done | 2b367bd + fix round; QA probes re-run |
 | 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | done | 537747e + fix round; 23/23 browser scenarios, 59/59 DB tests |
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | done | 80d144b + fix round; QA's Q1-Q15 and 22 browser cases pass |
-| 6 | Linear import end to end (`import_rows`) | doing | built on its branch (cf67730); QA and review in; fix round running |
+| 6 | Linear import end to end (`import_rows`) | done | cf67730 + fix round, merged in 38797db; 88/88 DB tests; every step-kind failure recovers |
 | 7 | History and pictures | done | 773dc82 + fix round, merged in cca59f9 |
 | 8 | Team features: invites, members and roles, people from Linear, ways to sign in | done | 632eef6 + fix round, merged; 82/82 DB tests, browser cases pass |
 | 9 | Read cache and catch-up from IndexedDB | doing | built on its branch (5770657); QA and review running |
@@ -97,23 +97,23 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | P24 | roadmap planner | The plan text still mentions pgTAP, `seed.sql`, the local stack and `importRepo.ts`; update it for the no-Docker decision | fixed | 95beeff: docs/supabase-plan.md updated |
 | E1 | roadmap planner | `tsconfig.app.json:28` only includes `src`, so `tests/` are never type-checked by `tsc -b` | open | |
 | E2 | roadmap planner | `package.json`: the `cn` package is unused (`src/lib/utils.ts` defines its own `cn`) | open | |
-| E3 | roadmap planner | `ImportPage.tsx:78` subscribes to the whole store (`useData((s) => s)`), redrawing the wizard on every change | open | |
-| E4 | roadmap planner | `ImportPage.tsx:304-306` a failed import still shows "done" with only a console warning | open | |
+| E3 | roadmap planner | `ImportPage.tsx:78` subscribes to the whole store (`useData((s) => s)`), redrawing the wizard on every change | fixed | phase 6 (merged in 38797db) |
+| E4 | roadmap planner | `ImportPage.tsx:304-306` a failed import still shows "done" with only a console warning | fixed | phase 6 (merged in 38797db) |
 | E5 | roadmap planner | `actions.ts` `createLabel` accepts a duplicate name while `updateLabel` refuses it | fixed | phase 5: returns the existing same-name label |
 | E6 | roadmap planner | `Markdown.tsx:24` runs `linkReferences`/`findByRef` (a scan of all issues per reference) in a store selector on every change | open | |
 | E7 | roadmap planner | `linearMap.ts:74` the accent-stripping regex uses invisible literal combining characters instead of `\u0300-\u036f` | fixed | 70b978b (amendment A4) |
 | E8 | roadmap planner | `joinLink.ts:17` + `config.ts:14`: no join link at all on localhost, so stage A can't make invite links | fixed | phase 8 (merged) |
-| E9 | phase 2 planner | `linearMap.ts:141-146,326` links are rewritten against Linear refs: after renumbering (ENG-2 to ENG-4) or a changed key, a link points at the wrong issue or isn't rewritten | open |  |
-| E10 | phase 2 planner | `linearMap.ts:305` re-importing only some teams drops the other teams from a project's `teams` | open |  |
+| E9 | phase 2 planner | `linearMap.ts:141-146,326` links are rewritten against Linear refs: after renumbering (ENG-2 to ENG-4) or a changed key, a link points at the wrong issue or isn't rewritten | fixed | phase 6 (merged in 38797db) |
+| E10 | phase 2 planner | `linearMap.ts:305` re-importing only some teams drops the other teams from a project's `teams` | fixed | phase 6 (merged in 38797db) |
 | E11 | phase 2 planner | `linearMap.ts:402` re-importing only some teams clears `parent` for sub-issues whose parent is in a team not picked this time | fixed | 2nd phase 2 commit (parent falls back to issues already here) |
 | E12 | phase 2 planner | `linearMap.ts:415` the import archives by `completedAt ?? updatedAt`, `tidyArchive` by the later of the two | fixed | 70b978b (amendment A2) |
-| E13 | phase 2 planner | `linearMap.ts:250` a team taking a different Linear team overwrites `linearId`, so the earlier one is no longer pre-picked | open |  |
+| E13 | phase 2 planner | `linearMap.ts:250` a team taking a different Linear team overwrites `linearId`, so the earlier one is no longer pre-picked | won't do | the database allows one Linear id per team; ticking the other team again works |
 | E14 | phase 2 planner | `linearMap.ts:275-279` a label matched by name never records its `linearId`, so a rename in Linear makes a second label | fixed | 70b978b (amendment A3) |
-| E15 | phase 2 planner | `linearMap.ts:226` a guest's name and picture are never refreshed on re-import | open |  |
-| E16 | phase 2 planner | `linearFilters.ts:15` circular import with `linearMap.ts` (works only because `mapStatus` is used at call time) | open |  |
-| E17 | phase 2 planner | `linearApi.ts:205` (`labels(first: 50)`) and `:173` (`teams(first: 20)`) silently cut off longer lists | open |  |
+| E15 | phase 2 planner | `linearMap.ts:226` a guest's name and picture are never refreshed on re-import | fixed | phase 6 (merged in 38797db) |
+| E16 | phase 2 planner | `linearFilters.ts:15` circular import with `linearMap.ts` (works only because `mapStatus` is used at call time) | fixed | phase 6 (merged in 38797db) |
+| E17 | phase 2 planner | `linearApi.ts:205` (`labels(first: 50)`) and `:173` (`teams(first: 20)`) silently cut off longer lists | won't do | raising the nested list sizes multiplies the cost of every Linear query; no team here has that many labels or teams per item |
 | E18 | phase 2 planner | `src/lib/plain.ts:8` same invisible combining-character regex as E7 | fixed | 70b978b (amendment A4) |
-| E19 | phase 2 planner | `tests/fixtures/linear.ts:1` mentions a browser test's pretend Linear that doesn't exist | open |  |
+| E19 | phase 2 planner | `tests/fixtures/linear.ts:1` mentions a browser test's pretend Linear that doesn't exist | fixed | phase 6 (merged in 38797db) |
 | E20 | phase 2 planner | `tests/linearImport.test.ts:123,274,283,295,302` invalid `now` values silently switch the archive rule off | fixed | 70b978b (amendment A5) |
 | E21 | phase 1 planner | `vite.config.ts:20` the app's install description still says the workspace is kept in a GitHub repo | open | phase 10 |
 | E22 | phase 1 planner | `src/data/select.ts:192` `isUnread` compares ISO strings, so database times must come in `toISOString` form (P19) | fixed | 2b367bd: `iso()` on every model time |
@@ -123,9 +123,9 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E26 | phase 1 planner | Labels added right after an issue is created will write history rows (today none); history folding or one-call create should hide them | fixed | phase 7 (merged in cca59f9) |
 | E27 | phase 1 planner | Someone with a fresh profile who later links GitHub should have their old imported profile merged into theirs (needs a cross-workspace move) | won't do | no import from a GitHub workspace in this run, so no such profiles exist |
 | E28 | phase 2 implementer | `linearMap.ts` `orderKeys`: when two Linear teams join one team here, their issues can get the same `sortOrder` | fixed | phase 2 fix round (F4) |
-| E29 | phase 2 implementer | `linearMap.ts` comment loop: `archivedHere` doesn't check the team, so a comment on an archived issue of a team not chosen could be added (low risk) | open |  |
-| E30 | phase 2 implementer | `ImportPage.tsx` saving/done stages, `doneText`, `saveState` and some imports are unreachable while Import is off | open | phase 6 |
-| E31 | phase 2 implementer | `ImportPage.tsx` `existingFrom` turns `lastNumber` into 1..lastNumber, keeping the old rule until real used numbers come in | open | phase 6 |
+| E29 | phase 2 implementer | `linearMap.ts` comment loop: `archivedHere` doesn't check the team, so a comment on an archived issue of a team not chosen could be added (low risk) | won't do | comments are only read for the picked teams, so it can't happen |
+| E30 | phase 2 implementer | `ImportPage.tsx` saving/done stages, `doneText`, `saveState` and some imports are unreachable while Import is off | fixed | phase 6 (merged in 38797db) |
+| E31 | phase 2 implementer | `ImportPage.tsx` `existingFrom` turns `lastNumber` into 1..lastNumber, keeping the old rule until real used numbers come in | fixed | phase 6 (merged in 38797db) |
 | E32 | phase 2 code review | Row types accept misspelled keys because `.passthrough()` types have an index signature | fixed | phase 2 fix round (F3) |
 | E33 | phase 2 code review | `isNew` and guest `email` travel inside rows though they aren't columns; an existing team re-sends its whole row | fixed | phase 2 fix round (F1) |
 | E34 | phase 2 code review | The archive rule is copied between `linearMap.ts` and `actions.ts` `tidyArchive` | fixed | phase 2 fix round (F5) |
@@ -143,7 +143,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E46 | phase 2 QA | `setMonth` rolls past month end (Aug 31 minus 6 months is Mar 3), in both the import and `tidyArchive` | fixed | phase 2 fix round (F5, UTC with day clamp) |
 | E47 | phase 2 QA | The renumbered note shows the key here, not Linear's identifier | fixed | phase 2 fix round (F7) |
 | E48 | phase 2 QA | Import page copy says "Ready to import" and "run the import again later" while saving is off | fixed | phase 2 fix round (F9) |
-| E49 | phase 2 implementer | `docs/user-guide.md:258` says the import can be run again later while Import is off | open | phase 6 (Import comes back) / phase 10 docs |
+| E49 | phase 2 implementer | `docs/user-guide.md:258` says the import can be run again later while Import is off | fixed | phase 6 (merged in 38797db) |
 | E50 | phase 2 implementer | `tests/linearImport.test.ts` `native()` makes sort orders like `a50`, not valid fractional keys; a future test adding issues would throw | fixed | phase 2 QA re-check (`native()` makes valid keys) |
 | E51 | phase 2 implementer | `monthsBefore` now uses UTC; the nightly cut-off moves by a few hours at most | won't do | a few hours either way is harmless, and UTC matches the database job |
 | E52 | phase 2 QA re-check | Two teams here swapping their Linear teams emitted two non-null links, colliding on the unique Linear id | fixed | phase 2 last fix (release first) |
@@ -216,7 +216,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E119 | phase 5 planner | docs/architecture.md and docs/design.md still describe file merging and changes kept on the device | open | phase 10 |
 | E120 | phase 6 planner | Views can't change `team_id` through `import_rows` | won't do | a Linear view moving teams is rare; recreate it by hand |
 | E121 | phase 6 planner | `loadTable` reloads only active issues, so a big catch-up misses archived rows | open | phase 9 (catch-up pages every changed row) |
-| E122 | phase 6 planner | Existing teams never get newly matched people as members on re-import | open | phase 6 |
+| E122 | phase 6 planner | Existing teams never get newly matched people as members on re-import | fixed | phase 6 (merged in 38797db) |
 | E123 | phase 7 planner | `statusOf` uses a non-null assertion: an unknown status crashes a screen | fixed | phase 7 (merged in cca59f9) |
 | E124 | phase 7 planner | Every description save writes its own history row | won't do | folded on screen; about 100 bytes a row is fine for 8 people |
 | E125 | phase 7 planner | The nightly archive doesn't take sub-issues along, while archiving by hand does | won't do | each finished issue goes on its own, as the old tidy-up did |
@@ -257,9 +257,9 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E160 | phase 7 QA | Clicking into a description and out saves a tidied version and writes a history line | fixed | phase 7 (merged in cca59f9) |
 | E161 | phase 7 QA | After removal, signed picture addresses stay in memory for up to a day | fixed | phase 7 (merged in cca59f9) |
 | E162 | phase 7 review | Every history line subscribes to the whole people/projects/labels/issues maps | open |  |
-| E163 | phase 6 review | Database and network error text can reach the import screen | open | phase 6 fix round |
-| E164 | phase 6 review | `carry` for Try again has two sources of truth and is lost on reload; a simpler rule exists | open | phase 6 fix round |
-| E165 | phase 6 review | `buildImport` is ~360 lines; the kept-order rule is written twice | open | phase 6 fix round |
+| E163 | phase 6 review | Database and network error text can reach the import screen | fixed | phase 6 (merged in 38797db) |
+| E164 | phase 6 review | `carry` for Try again has two sources of truth and is lost on reload; a simpler rule exists | fixed | phase 6 (merged in 38797db) |
+| E165 | phase 6 review | `buildImport` is ~360 lines; the kept-order rule is written twice | fixed | phase 6 (merged in 38797db) |
 | E166 | phase 6 review | `paged` runs an exact count query on every page | open |  |
 | E167 | phase 5 fix round | `bunx supabase db query` sometimes fails to log in to the pooler under load (parallel runs); retrying works | won't do | a CLI hiccup, not app code; scripts retry |
 | E168 | phase 5 fix round | Cleanup must delete workspaces before profiles (the last-owner rule refuses the other order) | fixed | briefs updated |
@@ -271,15 +271,17 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E174 | phase 8 QA | A different person signing in after a reload inherits the previous person's last workspace | fixed | phase 8 (merged) |
 | E175 | phase 8 review | `ConfirmDialog` always uses the red button, also for "Make owner" | open |  |
 | E176 | phase 9 implementer | The 10 s look-back re-reads rows changed just before the mark (harmless, some egress) | won't do | small and it makes catching up safe; fine for 8 people |
-| E177 | phase 6 QA | Try again after a partial import loses guests' emails, and after a reload leaves a new team with no members | open | phase 6 fix round (I1) |
-| E178 | phase 6 QA | After a team swap, re-imports never settle (views re-sent every time) | open | phase 6 fix round (I2) |
-| E179 | phase 6 QA + review | A dropped connection during the check step shows "Something went wrong: [object Object]" | open | phase 6 fix round (I3) |
-| E180 | phase 6 QA | A teammate with the archive open sees only part of an imported archive until a reload | open | phase 6 fix round (I4) |
-| E181 | phase 6 QA | The check step counts fewer comments on a second import (archived issues' comments left out) | open | phase 6 fix round (I6) |
+| E177 | phase 6 QA | Try again after a partial import loses guests' emails, and after a reload leaves a new team with no members | fixed | phase 6 (merged in 38797db) |
+| E178 | phase 6 QA | After a team swap, re-imports never settle (views re-sent every time) | fixed | phase 6 (merged in 38797db) |
+| E179 | phase 6 QA + review | A dropped connection during the check step shows "Something went wrong: [object Object]" | fixed | phase 6 (merged in 38797db) |
+| E180 | phase 6 QA | A teammate with the archive open sees only part of an imported archive until a reload | fixed | phase 6 (merged in 38797db) |
+| E181 | phase 6 QA | The check step counts fewer comments on a second import (archived issues' comments left out) | fixed | phase 6 (merged in 38797db) |
 | E182 | phase 9 review | Opening from the copy never loads the archive (archived issues stay "Loading") | open | phase 9 fix round |
 | E183 | phase 9 review | A copy that reads back but crashes blocks the workspace for good | open | phase 9 fix round |
 | E184 | phase 9 review | A tab that hasn't heard about the sign-out can write the copy back after it was deleted | open | phase 9 fix round |
 | E185 | phase 9 review | A copy that's too big is encoded again on every change | open | phase 9 fix round |
+| E186 | phase 6 fix round | `tests/actions.test.ts` "archiving takes sub-issues along" failed about 1 in 4 full runs before the merge | open | phase 10 (check for flakiness) |
+| E187 | phase 6 fix round | Leaving the import's done screen through Settings forgets the finished import | won't do | harmless: the import is saved; the done screen is only a summary |
 
 ## Waiting on the user
 
@@ -288,6 +290,6 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | GitHub OAuth app for sign-in (homepage `https://michalsek.github.io/sprawniej/`, callback `https://wkqofiacqfuxowavuqxj.supabase.co/auth/v1/callback`); id and secret stay in the user's shell | asked 2026-10-19 |
 | `bunx supabase login` once, so the CLI can push the schema and auth settings | done 2026-10-19 |
 | Realtime "Allow public access" off (dashboard, Realtime, Settings) | done 2026-10-19 |
-| Run the Linear import with your own Linear key (phase 6) | later |
+| Run the Linear import with your own Linear key (phase 6) | ready: Settings, Import from Linear |
 | Database password for `db push`, approve the final wipe (phase 11) | later |
 | Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | done 2026-10-19 |
