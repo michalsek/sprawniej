@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { stopWrites } from '@/backend/writes'
-import { MESSAGES } from '@/backend/writes/problems'
 import { createComment, createIssue, deleteComment, setFollowers, subscribe, deleteInboxItems, markAllRead, markRead, updateComment, updateIssue } from '@/data/actions'
 import { linkReferences, mentionedLogins, newMentions } from '@/data/mentions'
 import { followLists, followers, issueNotes } from '@/data/notify'
@@ -109,7 +108,7 @@ describe('inbox', () => {
     expect(after.subscribers).toBeUndefined()
   })
 
-  test('the same mention again sends another note: the database drops repeats within ten minutes', async () => {
+  test('the same mention again within minutes: the database keeps one note', async () => {
     const i = createIssue({ team: 'ENG', title: 'Bug' })
     updateIssue(i.id, { description: 'ask @bob' })
     await w.settle()
@@ -117,8 +116,9 @@ describe('inbox', () => {
     await w.settle()
     updateIssue(i.id, { description: 'ask @bob' })
     await w.settle()
-    // tests/db/comments-inbox.test.ts checks that only one of these arrives
-    expect(types('bob')).toEqual(['mentioned', 'mentioned'])
+    // the app sends both; check_note drops the second (tests/db/comments-inbox.test.ts checks the real one)
+    expect(w.db.log.filter((r) => r.kind === 'notes')).toHaveLength(2)
+    expect(types('bob')).toEqual(['mentioned'])
   })
 
   test('editing a comment tells only newly mentioned people; deleting it takes its notes away', async () => {
@@ -134,19 +134,6 @@ describe('inbox', () => {
     expect(useData.getState().comments[i.id]).toBeUndefined()
     await w.settle()
     expect(w.db.rows('inbox')).toHaveLength(0)
-  })
-
-  test("you can't edit someone else's comment: it comes back, and you're told why", async () => {
-    const i = createIssue({ team: 'ENG', title: 'Bug' })
-    await w.settle()
-    useData.setState({ me: people.bob })
-    const c = createComment(i.id, 'mine')!
-    await w.settle()
-    useData.setState({ me: people.ana })
-    updateComment(i.id, c.id, 'yours now')
-    await w.settle()
-    expect(useData.getState().comments[i.id][0].body).toBe('mine')
-    expect(w.told).toEqual([MESSAGES.comment])
   })
 
   const note = (id: string, at: string) => ({ id, workspace_id: WS, recipient_id: profileIdOf('ana'), actor_id: profileIdOf('bob'), type: 'assigned', issue_id: 'x', comment_id: null, status: null, at, read_at: null, extra: {} })

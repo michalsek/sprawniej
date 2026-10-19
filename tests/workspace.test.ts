@@ -357,3 +357,99 @@ describe('the writer and the open workspace', () => {
     expect(changed).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('reading the workspace again', () => {
+  test('a quiet workspace (its newest change is old) still catches up; 44 days without catching up reads it again', async () => {
+    const changed = mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false }))
+    const reopen = mock(() => {})
+    const s = setup({ changed })
+    s.env.reopen = reopen
+    await s.ws.open()
+    s.ws.live = { ...s.ws.live, mark: '2025-01-01T00:00:00.000000+00:00' }
+    await s.ws.catchUp()
+    expect(changed).toHaveBeenCalledTimes(1)
+    expect(reopen).not.toHaveBeenCalled()
+    const later = Date.now() + 45 * 86_400_000
+    s.env.now = () => later
+    await s.ws.catchUp()
+    expect(reopen).toHaveBeenCalledTimes(1)
+    expect(changed).toHaveBeenCalledTimes(1)
+  })
+
+  test('what is on screen and the ids it names stay until the new copy is in', async () => {
+    const load = deferred<Incoming[]>()
+    const made: ReturnType<typeof setup>[] = []
+    const data = createStore<DataState>()(() => ({ ...EMPTY }))
+    const registry = new Registry()
+    const backend = createStore<BackendState>()(() => ({ phase: 'closed' }))
+    const life = new Lifecycle(
+      () => {
+        const s = setup(made.length ? { all: () => load.promise } : {})
+        Object.assign(s.env, { data, registry, backend })
+        made.push(s)
+        return s.ws
+      },
+      backend,
+      registry,
+    )
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    expect(data.getState().issues['i-1']).toBeDefined()
+    life.reopen(made[0].ws)
+    await sleep(5)
+    expect(made).toHaveLength(2)
+    expect(data.getState().issues['i-1'].title).toBe('First')
+    expect(registry.teamId('ENG')).toBe('t-eng')
+    load.resolve(world().map((i) => (i.from === 'fetch' && i.table === 'issues' ? fetch('issues', [issueRow('i-1', 'Read again', 3)]) : i)))
+    await sleep(5)
+    expect(data.getState().issues['i-1'].title).toBe('Read again')
+    expect(backend.getState().phase).toBe('open')
+  })
+
+  test('a failed open keeps what waits for "Try again"; opening another workspace sends it first', async () => {
+    const calls: string[] = []
+    const hooks: WritesHooks = {
+      attach: (t) => calls.push(`attach ${t.workspaceId}`),
+      detach: () => calls.push('detach'),
+      finish: async () => {
+        calls.push('finish')
+      },
+      stop: () => calls.push('stop'),
+      status: () => ({ pending: 0, waiting: false }),
+    }
+    let fail = true
+    const backend = createStore<BackendState>()(() => ({ phase: 'closed' }))
+    const life = new Lifecycle(
+      (id) => {
+        const s = setup({
+          all: async () => {
+            if (fail) throw new TypeError('Failed to fetch')
+            return world()
+          },
+        }, Promise.resolve('up'), hooks)
+        Object.assign(s.env, { backend })
+        return new LiveWorkspace(s.env, id, { id: ME, person: ANA })
+      },
+      backend,
+      new Registry(),
+      hooks,
+    )
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    expect(backend.getState().phase).toBe('failed')
+    // "Try again": the screen closes it and opens it once more
+    await life.close()
+    fail = false
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    expect(calls).toEqual(['detach', `attach ${WS}`])
+    // failed again, then another workspace
+    fail = true
+    await life.open('ws-2', { id: ME, person: ANA })
+    await sleep(5)
+    await life.close()
+    await life.open(WS, { id: ME, person: ANA })
+    await sleep(5)
+    expect(calls).toEqual(['detach', `attach ${WS}`, 'finish', 'detach', 'finish'])
+  })
+})

@@ -34,9 +34,9 @@ Status: `todo`, `doing`, `done`.
 | 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | done | 70b978b, be04249 and a last fix; QA and code review passed |
 | 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | done | 2b367bd + fix round; QA probes re-run |
 | 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | done | 537747e + fix round; 23/23 browser scenarios, 59/59 DB tests |
-| 5 | Saving: `writes.ts` and `actions.ts` on rows | doing | built; 22/22 browser cases, 71/71 DB tests; QA and review running |
-| 6 | Linear import end to end (`import_rows`) | todo | after 2 and 5; parallel with 7, 8, 9 |
-| 7 | History and pictures | todo | after 5 |
+| 5 | Saving: `writes.ts` and `actions.ts` on rows | done | 80d144b + fix round; QA's Q1-Q15 and 22 browser cases pass |
+| 6 | Linear import end to end (`import_rows`) | doing | being built in its own worktree |
+| 7 | History and pictures | doing | built on its branch (773dc82); QA and review in; fix round running |
 | 8 | Team features: invites, members and roles, people from Linear, ways to sign in | todo | after 5 |
 | 9 | Read cache and catch-up from IndexedDB | todo | after 5 |
 | 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | todo | after 6 to 9 |
@@ -236,6 +236,30 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E142 | phase 5 implementer | PostgREST answers P0002 with HTTP 500, so retrying by status alone would retry a missing row forever | fixed | phase 5 (`problems.ts` reads the code first) |
 | E143 | phase 5 implementer | `SetupWorkspace.tsx:29` dead GitHub-era screen ignores `startWorkspace`'s promise | open | phase 10 |
 | E144 | phase 5 implementer | `select.ts:214` `isUnread` still checks `read.includes` though `read` is always empty | open | phase 10 |
+| E145 | phase 5 QA + review | A retried insert batched with fresh inserts makes the fresh ones undone (and fresh inbox notes silently dropped) | fixed | phase 5 fix round (W1) |
+| E146 | phase 5 QA | Changes made while the workspace re-opens are lost (also typed text handed over on unmount) | fixed | phase 5 fix round (W2) |
+| E147 | phase 5 QA | "Too far back" uses the newest row's time, so a quiet workspace re-opens on every catch-up | fixed | phase 5 fix round (W3) |
+| E148 | phase 5 QA | A refused team delete still saves its view-filter changes | fixed | phase 5 fix round (W4) |
+| E149 | phase 5 review | A failed reopen followed by Try again drops what's waiting | fixed | phase 5 fix round (W5) |
+| E150 | phase 5 review + QA | The test fake isn't faithful (duplicates, foreign keys, column grants, note filters), so writer tests miss real failures | fixed | phase 5 fix round (W8) |
+| E151 | phase 5 QA | "It was deleted meanwhile" doesn't say what was deleted | fixed | phase 5 fix round (W10) |
+| E152 | phase 5 QA | Deleting test users leaves their profiles behind; the cleanup recipe in the briefs was incomplete | fixed | briefs now delete profiles first |
+| E153 | phase 7 QA | Pasting a picture right after another replaces the first; only one of several pasted files is kept; a slow upload replaces a later selection | open | phase 7 fix round (P1) |
+| E154 | phase 7 review | A shown picture whose re-sign fails is asked for again every 30 ms (empty store updates wake every listener) | open | phase 7 fix round (P2) |
+| E155 | phase 7 QA + review | Pictures in comments never retry, and a page left open hands out expired addresses | open | phase 7 fix round (P3) |
+| E156 | phase 7 QA + review | History opened while offline never recovers once back online | open | phase 7 fix round (P4) |
+| E157 | phase 7 QA | A guest linked to a member reads as "someone" in history until a reload | open | phase 7 fix round (P5) |
+| E158 | phase 7 QA | Any change made with nobody signed in reads as "Archived automatically" | open | phase 7 fix round (P6) |
+| E159 | phase 7 review | The history signature claims reordering doesn't reload history, but `updatedAt` makes it | open | phase 7 fix round (P7) |
+| E160 | phase 7 QA | Clicking into a description and out saves a tidied version and writes a history line | open | phase 7 fix round (P8) |
+| E161 | phase 7 QA | After removal, signed picture addresses stay in memory for up to a day | open | phase 7 fix round (P9) |
+| E162 | phase 7 review | Every history line subscribes to the whole people/projects/labels/issues maps | open |  |
+| E163 | phase 6 review | Database and network error text can reach the import screen | open | phase 6 fix round |
+| E164 | phase 6 review | `carry` for Try again has two sources of truth and is lost on reload; a simpler rule exists | open | phase 6 fix round |
+| E165 | phase 6 review | `buildImport` is ~360 lines; the kept-order rule is written twice | open | phase 6 fix round |
+| E166 | phase 6 review | `paged` runs an exact count query on every page | open |  |
+| E167 | phase 5 fix round | `bunx supabase db query` sometimes fails to log in to the pooler under load (parallel runs); retrying works | won't do | a CLI hiccup, not app code; scripts retry |
+| E168 | phase 5 fix round | Cleanup must delete workspaces before profiles (the last-owner rule refuses the other order) | fixed | briefs updated |
 
 ## Waiting on the user
 

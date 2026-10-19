@@ -7,14 +7,18 @@ import {
   createProject,
   createView,
   deleteProject,
+  followerChanges,
   followNumber,
   issueColumns,
+  labelChanges,
   moveIssueToTeam,
   nextNumber,
+  noteRows,
   restoreIssue,
   setFollowers,
   updateIssue,
   updateView,
+  viewsWithout,
 } from '@/data/actions'
 import { DEFAULT_DISPLAY } from '@/data/displays'
 import { useData } from '@/data/store'
@@ -33,11 +37,6 @@ afterEach(() => {
 })
 
 const state = () => useData.getState()
-const from = () => {
-  const n = w.db.log.length
-  return () => w.db.log.slice(n)
-}
-
 /** a pretend address bar for followNumber */
 function addressBar(hash: string) {
   const loc = { hash, replace: (url: string) => (loc.hash = url) }
@@ -55,7 +54,7 @@ describe('views', () => {
   test('an edit sends only what changed', async () => {
     const v = createView({ name: 'All', emoji: '🔍', team: null, display: DEFAULT_DISPLAY })
     await w.settle()
-    const sent = from()
+    const sent = w.since()
     updateView(v.id, { name: 'All', filters: { statuses: [], labels: ['l1'] } })
     await w.settle()
     expect(sent()).toEqual([{ kind: 'update', table: 'views', fields: { filters: { labels: ['l1'] } }, keys: [{ id: v.id }] }])
@@ -68,7 +67,7 @@ test('deleting a project: its issues stay, without it, at once; one request', as
   const i = createIssue({ team: 'ENG', title: 'Write the post', project: p.id })
   await w.settle()
   expect(state().issues[i.id].project).toBe(p.id)
-  const sent = from()
+  const sent = w.since()
   deleteProject(p.id)
   expect(state().projects[p.id]).toBeUndefined()
   expect(state().issues[i.id].project).toBeNull()
@@ -119,7 +118,7 @@ describe('issue numbers', () => {
     const i = createIssue({ team: 'ENG', title: 'Wanders off' })
     await w.settle()
     w.db.numberOffset(2)
-    const sent = from()
+    const sent = w.since()
     const moved = moveIssueToTeam(i.id, 'DES')!
     expect(moved).toMatchObject({ team: 'DES', number: 1, formerRefs: [`ENG-${i.number}`] })
     await w.settle()
@@ -131,7 +130,7 @@ describe('issue numbers', () => {
 test('a label with a name that is taken is the one already there, and nothing is sent (E5)', async () => {
   const bug = createLabel('Bug')
   await w.settle()
-  const sent = from()
+  const sent = w.since()
   expect(createLabel(' bug ').id).toBe(bug.id)
   await w.settle()
   expect(sent()).toEqual([])
@@ -151,7 +150,7 @@ test('labels and followers: only the rows that change are sent', async () => {
   const c = createLabel('C')
   const i = createIssue({ team: 'ENG', title: 'Tagged', labels: [a.id, b.id] })
   await w.settle()
-  const sent = from()
+  const sent = w.since()
   updateIssue(i.id, { labels: [b.id, c.id, c.id] })
   await w.settle()
   expect(sent().map((r) => [r.kind, r.kind === 'insert' ? r.rows.map((x) => x.label_id) : r.kind === 'delete' ? r.keys.map((k) => k.label_id) : null])).toEqual([
@@ -162,11 +161,11 @@ test('labels and followers: only the rows that change are sent', async () => {
   // labels don't count as an edit of the issue itself
   expect(sent().some((r) => r.kind === 'update')).toBe(false)
 
-  const follow = from()
+  const follow = w.since()
   setFollowers(i.id, ['ana', 'bob'])
   await w.settle()
   expect(follow()).toEqual([{ kind: 'insert', table: 'issue_followers', rows: [{ workspace_id: 'ws-1', issue_id: i.id, profile_id: profileIdOf('bob'), following: true }] }])
-  const unfollow = from()
+  const unfollow = w.since()
   setFollowers(i.id, ['bob'])
   await w.settle()
   expect(unfollow()).toEqual([{ kind: 'insert', table: 'issue_followers', rows: [{ workspace_id: 'ws-1', issue_id: i.id, profile_id: profileIdOf('ana'), following: false }] }])
@@ -177,7 +176,7 @@ test('archiving takes sub-issues along, restoring brings them back; one request 
   const parent = createIssue({ team: 'ENG', title: 'Parent' })
   const child = createIssue({ team: 'ENG', title: 'Child', parent: parent.id })
   await w.settle()
-  const sent = from()
+  const sent = w.since()
   expect(archiveIssues([parent.id])).toBe(2)
   expect(Object.keys(state().archive).sort()).toEqual([parent.id, child.id].sort())
   expect(state().issues[parent.id]).toBeUndefined()
@@ -208,4 +207,61 @@ test('an issue’s fields as columns', () => {
   // someone nobody knows is left out, not saved as no one
   expect(issueColumns({ assignee: 'nobody' }, { registry: r })).toEqual({})
   expect(issueColumns({ assignee: null }, { registry: r })).toEqual({ assignee_id: null })
+})
+
+describe('the rows behind an issue', () => {
+  const ctx = () => {
+    const r = new Registry()
+    for (const l of ['ana', 'bob', 'cy']) r.learnProfile(`p-${l}`, l)
+    return { workspaceId: 'w', registry: r }
+  }
+
+  test('labelChanges: only what was added and taken away', () => {
+    expect(labelChanges('i', ['a', 'b'], ['b', 'c'], ctx())).toEqual([
+      { table: 'issue_labels', key: { issue_id: 'i', label_id: 'c' }, op: 'insert', fields: { workspace_id: 'w', issue_id: 'i', label_id: 'c' } },
+      { table: 'issue_labels', key: { issue_id: 'i', label_id: 'a' }, op: 'delete' },
+    ])
+    expect(labelChanges('i', ['a'], ['a'], ctx())).toEqual([])
+  })
+
+  test('followerChanges: a new one is added, one turned round is changed, one left out is removed', () => {
+    const issue = { id: 'i', subscribers: ['bob', 'ana'], unsubscribed: ['cy'] }
+    const out = followerChanges(issue, new Map([['bob', false], ['cy', false], ['dee', true]]), ctx())
+    expect(out).toEqual([
+      { table: 'issue_followers', key: { issue_id: 'i', profile_id: 'p-bob' }, op: 'update', fields: { following: false } },
+      { table: 'issue_followers', key: { issue_id: 'i', profile_id: 'p-ana' }, op: 'delete' },
+    ])
+    expect(warn).toHaveBeenCalled() // dee is nobody we know: left out
+  })
+
+  test('noteRows: one row per note, people we do not know are left out', () => {
+    const rows = noteRows('i', [{ to: 'bob', type: 'mentioned', comment: 'c1' }, { to: 'nobody', type: 'assigned' }, { to: 'cy', type: 'status', status: 'done' }], ctx())
+    expect(rows.map(({ id: _id, ...r }) => r)).toEqual([
+      { workspace_id: 'w', recipient_id: 'p-bob', type: 'mentioned', issue_id: 'i', comment_id: 'c1', status: null },
+      { workspace_id: 'w', recipient_id: 'p-cy', type: 'status', issue_id: 'i', comment_id: null, status: 'done' },
+    ])
+    expect(new Set(rows.map((r) => r.id)).size).toBe(2)
+  })
+
+  test('viewsWithout: the id comes out where others are left; a view about only it, or being deleted, stays', () => {
+    const view = (id: string, teams: string[]) => ({ id, name: id, emoji: '', description: '', owner: 'ana', team: null, filters: { teams, statuses: ['todo'] }, display: DEFAULT_DISPLAY, createdAt: '' }) as never
+    const views = { a: view('a', ['ENG', 'DES']), b: view('b', ['DES']), c: view('c', ['DES', 'OPS']) }
+    expect(viewsWithout(views, 'teams', 'DES', new Set(['c']))).toEqual([{ table: 'views', key: { id: 'a' }, op: 'update', fields: { filters: { teams: ['ENG'], statuses: ['todo'] } } }])
+  })
+})
+
+test('deleting a label or a project changes views only once it is deleted', async () => {
+  const label = createLabel('Gone')
+  const keep = createLabel('Kept')
+  const v = createView({ name: 'Mixed', emoji: '🧪', team: null, filters: { labels: [label.id, keep.id] }, display: DEFAULT_DISPLAY })
+  await w.settle()
+  w.db.failNext('42501')
+  const { deleteLabel } = await import('@/data/actions')
+  const sent = w.since()
+  deleteLabel(label.id)
+  expect(state().views[v.id].filters).toEqual({ labels: [keep.id] })
+  await w.settle()
+  expect(sent().map((r) => r.kind !== 'notes' && r.kind !== 'call' && r.table)).toEqual(['labels'])
+  expect(state().views[v.id].filters).toEqual({ labels: [label.id, keep.id] })
+  expect(state().labels[label.id]).toBeDefined()
 })

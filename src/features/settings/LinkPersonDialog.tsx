@@ -93,10 +93,10 @@ export function LinkPersonDialog(props: Props) {
     setBusy(true)
     try {
       if (props.from === 'invite') {
-        linkPerson(choice.key, account ?? (await accountOf(token, props.login)))
+        if (!linkPerson(choice.key, account ?? (await accountOf(token, props.login)))) return
         toast(`${choice.person.name} is now @${props.login}`, { description: 'Their issues, comments and views are theirs.' })
       } else {
-        linkPerson(props.guest.login, await accountOf(token, choice.key))
+        if (!linkPerson(props.guest.login, await accountOf(token, choice.key))) return
         toast(`${props.guest.name} is now @${choice.key}`, { description: 'Their issues, comments and views are theirs.' })
       }
       props.onClose()

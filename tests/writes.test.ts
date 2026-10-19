@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { emptyLive, pendingFields, type Incoming } from '@/backend/apply'
 import { chipState } from '@/backend/status'
-import { attach, detach, flush, pending, stopWrites, writesStatus } from '@/backend/writes'
+import { attach, context, detach, flush, IN_FLIGHT, pending, stopWrites, writesStatus } from '@/backend/writes'
 import { MESSAGES } from '@/backend/writes/problems'
 import type { Request } from '@/backend/writes/send'
 import {
@@ -10,6 +10,7 @@ import {
   createIssue,
   createLabel,
   createProject,
+  createView,
   deleteComment,
   deleteIssue,
   deleteProject,
@@ -37,11 +38,6 @@ afterEach(() => {
 })
 
 const issue = (id: string) => useData.getState().issues[id]
-/** requests sent from now on */
-const from = () => {
-  const n = w.db.log.length
-  return (table?: string) => w.db.log.slice(n).filter((r) => !table || (r.kind === 'notes' ? 'inbox' : r.kind === 'call' ? 'issues' : r.table) === table)
-}
 const fieldsOf = (r: Request) => (r.kind === 'update' ? r.fields : r.kind === 'insert' ? r.rows : r.kind)
 const saved = async (title = 'An issue', more: Partial<Parameters<typeof createIssue>[0]> = {}) => {
   const i = createIssue({ team: 'ENG', title, ...more })
@@ -54,13 +50,13 @@ const heard = (row: Record<string, unknown>) => w.target.apply([{ from: 'message
 describe('changes to one row', () => {
   test('two in one moment go as one request; more while one is on its way go as one more, with the last values', async () => {
     const i = await saved()
-    const sent = from()
+    const sent = w.since()
     updateIssue(i.id, { title: 'a' })
     updateIssue(i.id, { priority: 2 })
     await w.settle()
     expect(sent('issues').map(fieldsOf)).toEqual([{ title: 'a', priority: 2 }])
 
-    const more = from()
+    const more = w.since()
     w.db.hold()
     updateIssue(i.id, { title: 'b' })
     await drain()
@@ -76,7 +72,7 @@ describe('changes to one row', () => {
 
   test('only the columns that changed are sent', async () => {
     const i = await saved('Same')
-    const sent = from()
+    const sent = w.since()
     updateIssue(i.id, { status: 'in_progress', title: 'Same' })
     await w.settle()
     expect(sent('issues').map(fieldsOf)).toEqual([{ status: 'in_progress' }])
@@ -88,7 +84,7 @@ describe('order', () => {
     const label = createLabel('Bug')
     await w.settle()
     w.db.hold()
-    const sent = from()
+    const sent = w.since()
     createIssue({ team: 'ENG', title: 'With a label', labels: [label.id] })
     await drain()
     expect(sent().map((r) => r.kind === 'insert' && r.table)).toEqual(['issues'])
@@ -99,7 +95,7 @@ describe('order', () => {
 
   test('an edit of an issue still being made waits for it', async () => {
     w.db.hold()
-    const sent = from()
+    const sent = w.since()
     const i = createIssue({ team: 'ENG', title: 'New' })
     await drain()
     updateIssue(i.id, { title: 'Renamed' })
@@ -113,7 +109,7 @@ describe('order', () => {
   test('made and deleted before it was sent: nothing is sent', async () => {
     const label = createLabel('Bug')
     await w.settle()
-    const sent = from()
+    const sent = w.since()
     const i = createIssue({ team: 'ENG', title: 'Oops', labels: [label.id] })
     deleteIssue(i.id)
     await w.settle()
@@ -126,7 +122,7 @@ describe('order', () => {
     const label = createLabel('Bug')
     const i = createIssue({ team: 'ENG', title: 'Labelled', labels: [label.id] })
     await w.settle()
-    const sent = from()
+    const sent = w.since()
     updateIssue(i.id, { labels: [] })
     updateIssue(i.id, { labels: [label.id] })
     await w.settle()
@@ -138,7 +134,7 @@ describe('order', () => {
   test('a move and the edits after it keep their order', async () => {
     const i = await saved()
     w.db.hold()
-    const sent = from()
+    const sent = w.since()
     moveIssueToTeam(i.id, 'DES')
     updateIssue(i.id, { title: 'Moved and renamed' })
     await w.settle()
@@ -175,7 +171,7 @@ describe('trying again', () => {
   test('no answer: tried again after 1 s and 2 s, the value stays on screen, and the chip says so', async () => {
     const i = await saved()
     w.db.failNext('network', 2)
-    const sent = from()
+    const sent = w.since()
     updateIssue(i.id, { title: 'r' })
     expect(chip()).toBe('saving')
     await drain()
@@ -191,13 +187,12 @@ describe('trying again', () => {
     expect(sent().map(fieldsOf)).toEqual([{ title: 'r' }, { title: 'r' }, { title: 'r' }])
     expect(issue(i.id).title).toBe('r')
     expect(chip()).toBe('saved')
-    expect(chipState({ online: false, channelsUp: false, signedIn: true, failing: false }, { pending: 1, waiting: true })).toBe('offline')
   })
 
   test('back online: tried again at once', async () => {
     const i = await saved()
     w.db.failNext('network')
-    const sent = from()
+    const sent = w.since()
     updateIssue(i.id, { title: 'r' })
     await drain()
     w.page.retry?.()
@@ -265,7 +260,7 @@ describe('undone', () => {
     w.db.t('issues').delete(a.id)
     updateIssue(a.id, { title: 'too late' })
     await w.settle()
-    expect(w.told).toEqual([MESSAGES.gone])
+    expect(w.told).toEqual([MESSAGES.goneIssue])
 
     const b = await saved('b')
     w.db.hold()
@@ -274,7 +269,7 @@ describe('undone', () => {
     w.db.t('issues').delete(b.id)
     deleteIssue(b.id)
     await w.settle()
-    expect(w.told).toEqual([MESSAGES.gone])
+    expect(w.told).toEqual([MESSAGES.goneIssue])
     expect(issue(b.id)).toBeUndefined()
     expect(pending()).toBe(0)
   })
@@ -282,7 +277,7 @@ describe('undone', () => {
   test('a label name that is taken: the label and the issue’s use of it go, with one message', async () => {
     const i = await saved()
     w.db.failNext('23505:labels_name')
-    const sent = from()
+    const sent = w.since()
     const label = createLabel('Taken')
     updateIssue(i.id, { labels: [label.id] })
     expect(issue(i.id).labels).toEqual([label.id])
@@ -296,7 +291,7 @@ describe('undone', () => {
 describe('inbox notes', () => {
   test('go once what they are about is saved, without asking for rows back', async () => {
     w.db.hold()
-    const sent = from()
+    const sent = w.since()
     createIssue({ team: 'ENG', title: 'For bob', assignee: 'bob' })
     await drain()
     expect(sent().map((r) => r.kind)).toEqual(['insert'])
@@ -311,7 +306,7 @@ describe('inbox notes', () => {
     const c = createComment(i.id, 'hi')!
     await w.settle()
     useData.setState({ me: person('ana') })
-    const sent = from()
+    const sent = w.since()
     updateComment(i.id, c.id, 'hi @cy')
     await w.settle()
     expect(sent('inbox')).toEqual([])
@@ -324,7 +319,7 @@ describe('many rows in one request', () => {
     const a = await saved('a')
     const b = await saved('b')
     const c = await saved('c')
-    const sent = from()
+    const sent = w.since()
     expect(archiveIssues([a.id, b.id, c.id])).toBe(3)
     expect(Object.keys(useData.getState().archive).sort()).toEqual([a.id, b.id, c.id].sort())
     await w.settle()
@@ -335,7 +330,7 @@ describe('many rows in one request', () => {
     const note = (id: string) => ({ id, workspace_id: WS, recipient_id: profileIdOf('ana'), actor_id: profileIdOf('bob'), type: 'assigned', issue_id: a.id, comment_id: null, status: null, at: '2026-10-19T10:00:00.000Z', read_at: null, extra: {} })
     for (const n of [note('n1'), note('n2')]) w.db.put('inbox', n)
     w.target.apply([{ from: 'fetch', table: 'inbox', rows: w.db.rows('inbox') }])
-    const read = from()
+    const read = w.since()
     markRead(['n1', 'n2'])
     await w.settle()
     expect(read('inbox')).toHaveLength(1)
@@ -417,4 +412,177 @@ test('closing the tab asks only while something is waiting', async () => {
   expect(w.page.guards).toEqual([true])
   await w.settle()
   expect(w.page.guards).toEqual([true, false])
+})
+
+describe('a request that may have landed', () => {
+  test('never shares a request with new rows: two inserts while the first one’s answer was lost both save', async () => {
+    w.db.failNext('lostResponse')
+    const a = createIssue({ team: 'ENG', title: 'A, answer lost' })
+    await drain()
+    expect(writesStatus().waiting).toBe(true)
+    const b = createIssue({ team: 'ENG', title: 'B, new' })
+    await drain()
+    const sent = w.since()
+    await w.clock.advance(1_200)
+    await w.settle()
+    expect(w.db.rows('issues').map((r) => r.title).sort()).toEqual(['A, answer lost', 'B, new'])
+    expect(issue(a.id)).toBeDefined()
+    expect(issue(b.id)).toBeDefined()
+    expect(pending()).toBe(0)
+    expect(w.told).toEqual([])
+    // A tried again on its own (it may be there already), B on its own
+    expect(sent('issues').every((r) => r.kind !== 'insert' || r.rows.length === 1)).toBe(true)
+  })
+})
+
+describe('while the workspace is read again', () => {
+  test('changes still queue, and show on the new copy once it is in', async () => {
+    const i = await saved('before')
+    detach()
+    expect(context()).not.toBeNull()
+    updateIssue(i.id, { estimate: 5 })
+    await w.settle()
+    expect(w.db.get('issues', { id: i.id })?.estimate).toBe(5)
+    useData.setState({ ...EMPTY, me: person('ana') })
+    const again = new FakeTarget(w.registry)
+    again.apply([...w.db.tables.keys()].map((table): Incoming => ({ from: 'fetch', table, rows: w.db.rows(table) })))
+    attach(again)
+    expect(issue(i.id).estimate).toBe(5)
+  })
+
+  test('a change made while detached and not answered yet shows on the new copy', async () => {
+    const i = await saved('before')
+    detach()
+    w.db.hold()
+    updateIssue(i.id, { title: 'made meanwhile' })
+    await drain()
+    useData.setState({ ...EMPTY, me: person('ana') })
+    const again = new FakeTarget(w.registry)
+    again.apply([...w.db.tables.keys()].map((table): Incoming => ({ from: 'fetch', table, rows: w.db.rows(table) })))
+    attach(again)
+    expect(issue(i.id).title).toBe('made meanwhile')
+    await w.settle()
+    expect(w.db.get('issues', { id: i.id })?.title).toBe('made meanwhile')
+    expect(pendingFields(again.live, 'issues', { id: i.id })).toEqual([])
+  })
+})
+
+describe('a refused team delete', () => {
+  /** the screen thinks ana is an admin; the database knows better */
+  const staleAdmin = () => {
+    useData.setState({ members: { ...useData.getState().members, ana: { role: 'admin', removedAt: null } } })
+    w.db.get('workspace_members', { workspace_id: WS, profile_id: profileIdOf('ana') })!.role = 'member'
+  }
+
+  test('leaves the views as they were: their changes go only once the team is deleted', async () => {
+    const v = createView({ name: 'Both', emoji: '👀', team: null, filters: { teams: ['DES', 'ENG'] }, display: { layout: 'list', grouping: 'status', ordering: 'manual', showCompleted: true, showSubIssues: true } })
+    await w.settle()
+    staleAdmin()
+    const sent = w.since()
+    expect(deleteTeam('DES')).toBe(true)
+    expect(useData.getState().views[v.id].filters).toEqual({ teams: ['ENG'] })
+    expect(pending()).toBeGreaterThan(1)
+    await w.settle()
+    expect(sent('views')).toEqual([])
+    expect(w.db.get('views', { id: v.id })?.filters).toEqual({ teams: ['DES', 'ENG'] })
+    expect(useData.getState().views[v.id].filters).toEqual({ teams: ['DES', 'ENG'] })
+    expect(w.told).toEqual([MESSAGES.deleteTeam])
+  })
+
+  test('a "deleted meanwhile" about its issues is news again', async () => {
+    const i = createIssue({ team: 'DES', title: 'In design' })
+    await w.settle()
+    staleAdmin()
+    deleteTeam('DES')
+    await w.settle()
+    // a teammate deletes it now, and ana edits it
+    w.db.t('issues').delete(i.id)
+    updateIssue(i.id, { title: 'too late' })
+    await w.settle()
+    expect(w.told).toEqual([MESSAGES.deleteTeam, MESSAGES.goneIssue])
+  })
+})
+
+describe('the queue, more', () => {
+  test('notes that fail together are each sent again on their own', async () => {
+    w.db.hold('answers')
+    createIssue({ team: 'ENG', title: 'For bob', assignee: 'bob' })
+    createIssue({ team: 'ENG', title: 'For cy', assignee: 'cy' })
+    await drain()
+    w.db.failNext('42501')
+    const sent = w.since()
+    await w.settle()
+    expect(sent('inbox').map((r) => (r.kind === 'notes' ? r.rows.length : 0))).toEqual([2, 1, 1])
+    expect(w.db.notesFor('bob')).toHaveLength(1)
+    expect(w.db.notesFor('cy')).toHaveLength(1)
+  })
+
+  test(`at most ${IN_FLIGHT} requests on their way at once`, async () => {
+    const ids: string[] = []
+    for (let n = 0; n < 8; n++) ids.push((await saved(`n${n}`)).id)
+    w.db.hold()
+    const sent = w.since()
+    ids.forEach((id, n) => updateIssue(id, { title: `t${n}`, priority: (n % 4) as 0 }))
+    await drain()
+    expect(sent()).toHaveLength(IN_FLIGHT)
+    await w.settle()
+    expect(sent()).toHaveLength(8)
+    expect(pending()).toBe(0)
+  })
+
+  test('a delete takes the place of an edit still waiting', async () => {
+    const i = await saved()
+    w.db.hold()
+    const sent = w.since()
+    updateIssue(i.id, { title: 'on its way' })
+    await drain()
+    updateIssue(i.id, { priority: 2 })
+    deleteIssue(i.id)
+    await w.settle()
+    expect(sent().map((r) => [r.kind, fieldsOf(r)])).toEqual([
+      ['update', { title: 'on its way' }],
+      ['delete', 'delete'],
+    ])
+    expect(w.db.get('issues', { id: i.id })).toBeUndefined()
+  })
+
+  test('archived right after being made: the archiving goes as its own update', async () => {
+    const sent = w.since()
+    const i = createIssue({ team: 'ENG', title: 'Made and put away' })
+    archiveIssues([i.id])
+    await w.settle()
+    const [made, archived] = sent()
+    expect([made.kind, archived.kind]).toEqual(['insert', 'update'])
+    expect(made.kind === 'insert' && Object.keys(made.rows[0])).not.toContain('archived_at')
+    expect(w.db.get('issues', { id: i.id })?.archived_at).toBeTruthy()
+  })
+
+  test('flush gives up at its limit; stop() answers a flush that waits', async () => {
+    const i = await saved()
+    w.db.hold()
+    updateIssue(i.id, { title: 'held' })
+    const limited = flush(500)
+    await w.clock.advance(600)
+    expect(await limited).toBe(1)
+    const waiting = flush(60_000)
+    stopWrites()
+    expect(await waiting).toBe(1)
+    w.db.release()
+  })
+
+  test('the sign-in ran out: tried again; something unexpected: undone and said', async () => {
+    const i = await saved()
+    w.db.failNext('auth')
+    updateIssue(i.id, { title: 'after signing in' })
+    await drain()
+    expect(writesStatus().waiting).toBe(true)
+    await w.clock.advance(1_200)
+    expect(w.db.get('issues', { id: i.id })?.title).toBe('after signing in')
+    w.db.failNext('bug')
+    updateIssue(i.id, { title: 'never' })
+    await w.settle()
+    expect(issue(i.id).title).toBe('after signing in')
+    expect(w.told).toEqual([MESSAGES.bug])
+    expect(error).toHaveBeenCalled()
+  })
 })

@@ -1,8 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import type { Db } from '@/backend/client'
-import { classify, MESSAGES } from '@/backend/writes/problems'
+import { ownWords } from '@/backend/problem'
+import { classify, goneMessage, MESSAGES } from '@/backend/writes/problems'
 import { parentsOf, plan, type Sendable } from '@/backend/writes/requests'
 import { postgrest, type Answer } from '@/backend/writes/send'
+import { FakeClock, FakeDb, profileIdOf, teamIdOf, WS } from './support/fakeDb'
 
 type Call = [string, unknown[]]
 interface Result {
@@ -110,7 +112,7 @@ describe('requests, as sent', () => {
     ])
     expect(outcome(a, 'a')).toEqual({ ok: true, row: { id: 'a' } })
     expect(outcome(a, 'b')).toEqual({ ok: false, why: 'refused', message: MESSAGES.comment })
-    expect(outcome(a, 'c')).toEqual({ ok: false, why: 'gone', message: MESSAGES.gone })
+    expect(outcome(a, 'c')).toEqual({ ok: false, why: 'gone', message: MESSAGES.goneEditedComment })
   })
 
   test('a delete: refused when it is still there, fine when it is gone', async () => {
@@ -131,6 +133,33 @@ describe('requests, as sent', () => {
     const a = await postgrest(r.db).run({ kind: 'call', fn: 'move_issue_to_team', args: { p_issue: 'i', p_team: 't' }, key: { id: 'i' } }, { retry: false })
     expect(r.chains[0]).toEqual([['rpc', ['move_issue_to_team', { p_issue: 'i', p_team: 't' }]]])
     expect(outcome(a, 'i')).toEqual({ ok: true, row: { id: 'i', number: 3 } })
+  })
+
+  test('trying again a request where only some rows landed: those are read back, the rest sent again', async () => {
+    const db = new FakeDb(() => profileIdOf('ana'), new FakeClock())
+    db.put('workspace_members', { workspace_id: WS, profile_id: profileIdOf('ana'), role: 'owner' })
+    db.put('teams', { id: teamIdOf('ENG'), workspace_id: WS, key: 'ENG', name: 'Eng', last_number: 0 })
+    const row = (id: string) => ({ id, workspace_id: WS, team_id: teamIdOf('ENG'), title: id, sort_order: 'a0' })
+    const t = postgrest(db.client())
+    await t.run({ kind: 'insert', table: 'issues', rows: [row('A')] }, { retry: false })
+    const a = await t.run({ kind: 'insert', table: 'issues', rows: [row('A'), row('B')] }, { retry: true })
+    expect(outcome(a, 'A')).toMatchObject({ ok: true, row: { id: 'A', number: 1 } })
+    expect(outcome(a, 'B')).toMatchObject({ ok: true, row: { id: 'B', number: 2 } })
+    expect(db.rows('issues')).toHaveLength(2)
+  })
+
+  test('inbox notes tried again after a lost answer: one by one, so the ones that never landed still go', async () => {
+    const db = new FakeDb(() => profileIdOf('ana'), new FakeClock())
+    for (const l of ['ana', 'bob']) db.put('workspace_members', { workspace_id: WS, profile_id: profileIdOf(l), role: 'member' })
+    for (const l of ['ana', 'bob']) db.put('profiles', { id: profileIdOf(l), login: l })
+    db.put('teams', { id: teamIdOf('ENG'), workspace_id: WS, key: 'ENG', name: 'Eng', last_number: 0 })
+    db.put('issues', { id: 'I', workspace_id: WS, team_id: teamIdOf('ENG'), number: 1, title: 'x' })
+    const note = (id: string, type: string) => ({ id, workspace_id: WS, recipient_id: profileIdOf('bob'), type, issue_id: 'I', comment_id: null, status: null })
+    const t = postgrest(db.client())
+    await t.run({ kind: 'notes', rows: [note('n1', 'assigned')] }, { retry: false })
+    const again = await t.run({ kind: 'notes', rows: [note('n1', 'assigned'), note('n2', 'mentioned')] }, { retry: true })
+    expect(outcome(again, 'notes')).toEqual({ ok: true })
+    expect(db.notesFor('bob').map((n) => n.id).sort()).toEqual(['n1', 'n2'])
   })
 
   test('the same new row again, when trying again: it landed, so it is read back', async () => {
@@ -161,10 +190,17 @@ describe('what an answer means', () => {
     expect(k('PGRST301', 'JWT expired', 401).kind).toBe('auth')
   })
 
-  test('gone', () => {
-    expect(k('23503', 'insert or update on table "issue_labels" violates foreign key constraint', 409)).toEqual({ kind: 'gone', message: MESSAGES.gone })
-    expect(k('P0002', 'There is no such issue.', 500)).toEqual({ kind: 'gone', message: MESSAGES.gone })
-    expect(classify({ code: '23503', message: '' }, 409, { table: 'comments', op: 'insert' }).message).toBe(MESSAGES.goneComment)
+  test('gone, named for what went', () => {
+    const fk = (col: string, table = 'issue_labels') => `insert or update on table "${table}" violates foreign key constraint "${table}_workspace_id_${col}_fkey"`
+    expect(classify({ code: '23503', message: fk('label_id') }, 409, { table: 'issue_labels', op: 'insert' }).message).toBe(MESSAGES.goneLabelAdded)
+    expect(classify({ code: '23503', message: fk('issue_id') }, 409, { table: 'issue_labels', op: 'insert' }).message).toBe(MESSAGES.goneIssue)
+    expect(classify({ code: '23503', message: fk('project_id', 'issues') }, 409, { table: 'issues', op: 'update' }).message).toBe(MESSAGES.goneProject)
+    expect(classify({ code: '23503', message: 'There is no such team.' }, 409, { table: 'issues', op: 'insert' }).message).toBe(MESSAGES.goneTeam)
+    expect(k('P0002', 'There is no such issue.', 500)).toEqual({ kind: 'gone', message: MESSAGES.goneIssue })
+    expect(classify({ code: '23503', message: fk('issue_id', 'comments') }, 409, { table: 'comments', op: 'insert' }).message).toBe(MESSAGES.goneComment)
+    expect(goneMessage({ table: 'comments', op: 'update' })).toBe(MESSAGES.goneEditedComment)
+    expect(goneMessage({ table: 'views', op: 'update' })).toBe(MESSAGES.goneView)
+    expect(goneMessage({ table: 'read_state', op: 'update' })).toBe(MESSAGES.gone)
   })
 
   test('refused, in our words or the database’s own when they read as a sentence', () => {
@@ -179,6 +215,13 @@ describe('what an answer means', () => {
     expect(k('P0001', 'Nope.').kind).toBe('refused')
   })
 
+  test("the database's own words, only when they read as a sentence", () => {
+    expect(ownWords("That person isn't in this workspace.")).toBe("That person isn't in this workspace.")
+    expect(ownWords('duplicate key value violates unique constraint "x"')).toBeUndefined()
+    expect(ownWords('Use "this" instead.')).toBeUndefined()
+    expect(ownWords('')).toBeUndefined()
+  })
+
   test('anything else is a mistake of ours', () => {
     expect(k('PGRST204', "Could not find the 'x' column")).toEqual({ kind: 'bug', message: MESSAGES.bug })
     expect(k('XX000', 'internal error', 500).kind).toBe('bug')
@@ -190,7 +233,7 @@ describe('what an answer means', () => {
 })
 
 describe('which changes wait, and which go together', () => {
-  const s = (seq: number, more: Partial<Sendable>): Sendable => ({ seq, table: 'issues', key: { id: `i${seq}` }, op: 'update', fields: {}, ...more })
+  const s = (seq: number, more: Partial<Sendable>): Sendable => ({ seq, table: 'issues', key: { id: `i${seq}` }, op: 'update', fields: {}, tries: 0, ...more })
 
   test('a row points at the rows it needs first', () => {
     expect(parentsOf({ table: 'issue_labels', key: { issue_id: 'i', label_id: 'l' }, fields: {} })).toEqual(['issues:i', 'labels:l'])
@@ -209,6 +252,11 @@ describe('which changes wait, and which go together', () => {
     ])
     expect(out.map((o) => o.items.map((i) => i.seq))).toEqual([[1, 2], [3], [4], [5], [6]])
     expect(out[0].req).toEqual({ kind: 'update', table: 'issues', fields: { archived_at: 'x' }, keys: [{ id: 'i1' }, { id: 'i2' }] })
+  })
+
+  test('an insert or notes tried before never go with new ones (they may have landed, and fail the request)', () => {
+    const out = plan([s(1, { op: 'insert', tries: 1 }), s(2, { op: 'insert' }), s(3, { op: 'insert', tries: 2 }), s(4, { op: 'notes', notes: [], tries: 1 }), s(5, { op: 'notes', notes: [] })])
+    expect(out.map((o) => o.items.map((i) => i.seq))).toEqual([[1, 3], [2], [4], [5]])
   })
 
   test('inserts into one table together, a hundred at most; one batch’s notes stay together', () => {

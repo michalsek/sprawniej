@@ -10,7 +10,8 @@
  */
 import { generateKeyBetween } from 'fractional-indexing'
 import { ulid } from 'ulid'
-import type { AnyChange, Change, Writable } from '@/backend/changes'
+import { localKey } from '@/backend/apply/take'
+import type { AnyChange, Call, Change, Writable } from '@/backend/changes'
 import type { Json } from '@/backend/database.types'
 import type { KeyOf, LiveTable, Row } from '@/backend/tables'
 import { context, tell, write, type NoteRow, type WriteContext } from '@/backend/writes'
@@ -33,12 +34,21 @@ const now = () => new Date().toISOString()
 type Ctx = Pick<WriteContext, 'workspaceId' | 'registry'>
 
 /** typed by table where it's made; one change of some table where it's handed on */
-const any = <N extends LiveTable>(c: Change<N>): AnyChange => c as unknown as AnyChange
+const erase = <N extends LiveTable>(c: Change<N>): AnyChange => c as unknown as AnyChange
 const ins = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'insert'>, guess?: Partial<Row<N>>): AnyChange =>
-  any<N>({ table, key, op: 'insert', fields, ...(guess && { guess }) })
-const upd = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'update'>, guess?: Partial<Row<N>>): AnyChange =>
-  any<N>({ table, key, op: 'update', fields, ...(guess && { guess }) })
-const del = <N extends LiveTable>(table: N, key: KeyOf<N>): AnyChange => any<N>({ table, key, op: 'delete' })
+  erase<N>({ table, key, op: 'insert', fields, ...(guess && { guess }) })
+const upd = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'update'>, guess?: Partial<Row<N>>, call?: Call): AnyChange =>
+  erase<N>({ table, key, op: 'update', fields, ...(guess && { guess }), ...(call && { call }) })
+const del = <N extends LiveTable>(table: N, key: KeyOf<N>): AnyChange => erase<N>({ table, key, op: 'delete' })
+
+/** one update of a row, if anything in it changed */
+const updated = <N extends LiveTable>(table: N, key: KeyOf<N>, fields: Writable<N, 'update'>): AnyChange[] => (Object.keys(fields).length ? [upd(table, key, fields)] : [])
+
+/** filters and display as the database keeps them */
+const toJson = (v: object): Json => v as Json
+
+/** every issue we have, archived ones too */
+const allIssues = (s: ReturnType<typeof useData.getState>): Issue[] => [...Object.values(s.issues), ...Object.values(s.archive)]
 
 /** a person's profile id; null for no one; undefined (and a warning) for a login nobody knows */
 function pid(c: Pick<WriteContext, 'registry'>, login: string | null | undefined): string | null | undefined {
@@ -277,7 +287,7 @@ export function createIssue(input: NewIssue): Issue {
   }
   const team = c && tid(c, input.team)
   if (!c || !s.me || !team) {
-    if (c) console.warn(`Sprawniej doesn’t know the team ${input.team} here, so the issue wasn’t saved`)
+    console.warn(c ? `Sprawniej doesn’t know the team ${input.team} here, so the issue wasn’t saved` : 'No workspace is open, so the issue wasn’t saved')
     return issue
   }
   const id = issue.id
@@ -314,7 +324,7 @@ export function createIssue(input: NewIssue): Issue {
     changes: [ins('issues', { id }, fields, guess), ...labelChanges(id, [], issue.labels, c)],
     notes: noteRows(id, issueNotes(null, issue, s.me.login, s.people), c),
     done: (r) => {
-      const real = r.ok ? r.rows.get(`issues:${id}`)?.number : undefined
+      const real = r.ok ? r.rows.get(localKey('issues', { id }))?.number : undefined
       if (typeof real === 'number') followNumber(input.team, number, real)
     },
   })
@@ -326,7 +336,7 @@ export function deleteIssue(id: string) {
   const c = context()
   const s = useData.getState()
   if (!c || !s.issues[id]) return
-  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  const all = allIssues(s)
   write({
     changes: [del('issues', { id })],
     // the database deletes its comments, labels, followers and notes along with it
@@ -349,9 +359,9 @@ export function moveIssueToTeam(id: string, team: string): Issue | undefined {
   const number = nextNumber(team)
   const guess: Partial<Row<'issues'>> = { team_id: to, number, former_refs: [...(old.formerRefs ?? []), issueRef(old)], updated_at: now() }
   write({
-    changes: [{ table: 'issues', key: { id }, op: 'update', fields: {}, guess, call: { fn: 'move_issue_to_team', args: { p_issue: id, p_team: to } } }],
+    changes: [upd('issues', { id }, {}, guess, { fn: 'move_issue_to_team', args: { p_issue: id, p_team: to } })],
     done: (r) => {
-      const real = r.ok ? r.rows.get(`issues:${id}`)?.number : undefined
+      const real = r.ok ? r.rows.get(localKey('issues', { id }))?.number : undefined
       if (typeof real === 'number') followNumber(team, number, real)
     },
   })
@@ -511,7 +521,8 @@ export function updateLabel(id: string, patch: Partial<Pick<Label, 'name' | 'col
   const fields: Writable<'labels', 'update'> = {}
   if (patch.name !== undefined && patch.name.trim() !== label.name) fields.name = patch.name.trim()
   if (patch.color !== undefined && patch.color !== label.color) fields.color = patch.color
-  if (Object.keys(fields).length) write({ changes: [upd('labels', { id }, fields)] })
+  const changes = updated('labels', { id }, fields)
+  if (changes.length) write({ changes })
 }
 
 /**
@@ -526,7 +537,7 @@ export function viewsWithout(views: Record<string, View>, field: 'labels' | 'pro
     const list = v.filters[field] as (string | null)[] | undefined
     if (!list?.includes(id)) continue
     const rest = list.filter((x) => x !== id)
-    if (rest.length) out.push(upd('views', { id: v.id }, { filters: { ...v.filters, [field]: rest } as Json }))
+    if (rest.length) out.push(upd('views', { id: v.id }, { filters: toJson({ ...v.filters, [field]: rest }) }))
   }
   return out
 }
@@ -536,9 +547,11 @@ export function deleteLabel(id: string) {
   const c = context()
   const s = useData.getState()
   if (!c || !s.labels[id]) return
-  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  const all = allIssues(s)
   write({
-    changes: [del('labels', { id }), ...viewsWithout(s.views, 'labels', id)],
+    changes: [del('labels', { id })],
+    // only once the label is gone: a refused delete leaves the views as they were
+    after: viewsWithout(s.views, 'labels', id),
     cascade: all.filter((i) => i.labels.includes(id)).map((i) => del('issue_labels', { issue_id: i.id, label_id: id })),
   })
 }
@@ -586,8 +599,8 @@ export function createView(input: NewView): View {
           name: view.name,
           emoji: view.emoji,
           description: view.description,
-          filters: view.filters as Json,
-          display: view.display as Json,
+          filters: toJson(view.filters),
+          display: toJson(view.display),
         },
         { owner_id: c.meId, created_at: view.createdAt, linear_id: null, extra: {} },
       ),
@@ -608,9 +621,10 @@ export function updateView(id: string, patch: ViewPatch) {
   if (next.name !== view.name) fields.name = next.name
   if (next.emoji !== view.emoji) fields.emoji = next.emoji
   if (next.description !== view.description) fields.description = next.description
-  if (!equal(next.filters, view.filters)) fields.filters = next.filters as Json
-  if (!equal(next.display, view.display)) fields.display = next.display as Json
-  if (Object.keys(fields).length) write({ changes: [upd('views', { id }, fields)] })
+  if (!equal(next.filters, view.filters)) fields.filters = toJson(next.filters)
+  if (!equal(next.display, view.display)) fields.display = toJson(next.display)
+  const changes = updated('views', { id }, fields)
+  if (changes.length) write({ changes })
 }
 
 export function deleteView(id: string) {
@@ -687,7 +701,7 @@ export function updateProject(id: string, patch: ProjectPatch) {
     if (lead !== undefined) fields.lead_id = lead
   }
   if (patch.targetDate !== undefined && patch.targetDate !== project.targetDate) fields.target_date = patch.targetDate
-  const changes = [...(Object.keys(fields).length ? [upd('projects', { id }, fields)] : []), ...(patch.teams ? projectTeamChanges(id, project.teams, patch.teams, c) : [])]
+  const changes = [...updated('projects', { id }, fields), ...(patch.teams ? projectTeamChanges(id, project.teams, patch.teams, c) : [])]
   if (changes.length) write({ changes })
 }
 
@@ -698,12 +712,13 @@ export function deleteProject(id: string) {
   const project = s.projects[id]
   if (!c || !project) return
   write({
-    changes: [del('projects', { id }), ...viewsWithout(s.views, 'projects', id)],
+    changes: [del('projects', { id })],
+    after: viewsWithout(s.views, 'projects', id),
     cascade: project.teams.flatMap((key) => {
       const team_id = tid(c, key)
       return team_id ? [del('project_teams', { project_id: id, team_id })] : []
     }),
-    untilEcho: [...Object.values(s.issues), ...Object.values(s.archive)].filter((i) => i.project === id).map((i) => upd('issues', { id: i.id }, { project_id: null })),
+    untilEcho: allIssues(s).filter((i) => i.project === id).map((i) => upd('issues', { id: i.id }, { project_id: null })),
   })
 }
 
@@ -733,7 +748,7 @@ export function setAutoArchive(key: string, months: number) {
   const c = context()
   const team = useData.getState().teams[key]
   const id = c && tid(c, key)
-  if (!id || !team || (team.autoArchive ?? AUTO_ARCHIVE_MONTHS) === months) return
+  if (!c || !id || !team || (team.autoArchive ?? AUTO_ARCHIVE_MONTHS) === months) return
   write({ changes: [upd('teams', { id }, { auto_archive: months })] })
 }
 
@@ -745,9 +760,10 @@ export function updateTeam(key: string, patch: { name?: string; emoji?: string }
   if (!id || !team) return
   const fields: Writable<'teams', 'update'> = {}
   const name = patch.name?.trim()
-  if (name !== undefined && name && name !== team.name) fields.name = name
+  if (name && name !== team.name) fields.name = name
   if (patch.emoji !== undefined && patch.emoji !== team.emoji) fields.emoji = patch.emoji
-  if (Object.keys(fields).length) write({ changes: [upd('teams', { id }, fields)] })
+  const changes = updated('teams', { id }, fields)
+  if (changes.length) write({ changes })
 }
 
 /** what deleting a team takes with it, for the warning; `archived` counts what's loaded (backend.countArchived counts all) */
@@ -778,11 +794,13 @@ export function deleteTeam(key: string): boolean {
     tell(MESSAGES.deleteTeam)
     return false
   }
-  const all = [...Object.values(s.issues), ...Object.values(s.archive)]
+  const all = allIssues(s)
   const gone = new Set(all.filter((i) => i.team === key).map((i) => i.id))
   const views = new Set(Object.values(s.views).filter((v) => v.team === key).map((v) => v.id))
   write({
-    changes: [del('teams', { id }), ...viewsWithout(s.views, 'teams', key, views)],
+    changes: [del('teams', { id })],
+    // only once the team is gone: a refused delete leaves the other views as they were
+    after: viewsWithout(s.views, 'teams', key, views),
     // all of this the database deletes along with the team
     cascade: [
       ...[...gone].map((i) => del('issues', { id: i })),
@@ -847,10 +865,11 @@ export function renameMe(name: string) {
 
 /**
  * Someone from the Linear import who hadn't joined is this person. Not here yet: the screen that offers it is hidden
- * until linking comes back.
+ * until linking comes back. Returns whether it was done (never, for now).
  */
-export function linkPerson(_guest: string, _to: Person) {
+export function linkPerson(_guest: string, _to: Person): boolean {
   tell("Linking people from Linear isn't available yet.")
+  return false
 }
 
 /** A brand-new workspace with you as its owner and its first team. Returns its id. */

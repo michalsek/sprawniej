@@ -16,8 +16,8 @@ import type { Database } from '@/backend/database.types'
 
 export const enabled = !!process.env.SPRAWNIEJ_DB_TESTS
 
-/** one run of the tests: every account, login and workspace name carries it */
-export const RUN = Date.now().toString(36) + Math.random().toString(36).slice(2, 4)
+/** one run of the tests: every account, login and workspace name carries it (SPRAWNIEJ_TEST_RUN picks it, to clean up after) */
+export const RUN = process.env.SPRAWNIEJ_TEST_RUN ?? Date.now().toString(36) + Math.random().toString(36).slice(2, 4)
 
 /** Auth refuses example and test domains, so the default is a real (throwaway) mail domain. */
 const DOMAIN = process.env.SPRAWNIEJ_TEST_EMAIL_DOMAIN ?? 'mailinator.com'

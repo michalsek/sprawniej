@@ -69,6 +69,16 @@ export const isGrouped = (t: LiveTable): t is Grouped => t in GROUPED
 /** the parent a grouped row belongs to (its issue, team or project) */
 export const parentOf = (t: Grouped, row: Readonly<Record<string, unknown>>): unknown => row[GROUPED[t][0]]
 
+/** one row of the copy by its key (a comment is found through the issue it belongs to) */
+export function mirrorRow<N extends LiveTable>(m: Mirror, t: N, key: Readonly<Record<string, unknown>>): Row<N> | undefined {
+  const table = m[t] as Rec<unknown>
+  if (!isGrouped(t)) return table[keyString(t, key)] as Row<N> | undefined
+  const p = parentOf(t, key)
+  const parent = typeof p === 'string' ? p : t === 'comments' && typeof key.id === 'string' ? m.commentIssue[key.id] : undefined
+  const group = parent === undefined ? undefined : (table[parent] as Rec<Row<N>> | undefined)
+  return group?.[String(key[GROUPED[t][1]])]
+}
+
 /** copies an object the first time it changes within one call, and hands out the same copy after that */
 export class Copier {
   private own = new WeakSet<object>()
@@ -117,10 +127,7 @@ export class MirrorDraft {
   }
 
   get<N extends LiveTable>(t: N, key: Readonly<Record<string, unknown>>): Row<N> | undefined {
-    if (!isGrouped(t)) return this.table(t)[keyString(t, key)] as Row<N> | undefined
-    const p = this.groupOf(t, key)
-    const group = p === undefined ? undefined : (this.table(t)[p] as Rec<Row<N>> | undefined)
-    return group?.[String(key[GROUPED[t][1]])]
+    return mirrorRow(this.current, t, key)
   }
 
   /** a parent's join rows or comments */

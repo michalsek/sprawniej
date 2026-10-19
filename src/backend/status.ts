@@ -25,15 +25,14 @@ export const useSaveStatus = create<SaveStatus>()(() => ({ ...START }))
 export const resetStatus = () => useSaveStatus.setState({ ...START, detail: undefined, progress: undefined, synced: undefined, caughtUpAt: undefined })
 
 /**
- * What the chip says once a workspace is open. `channelsUp`: both live channels are joined; `failing`: catching up
- * with teammates' changes keeps failing; `pending`: your changes still on their way. Not reaching
- * Sprawniej is only worth a warning when something of yours is waiting; otherwise it's a calm "Reconnecting…".
+ * What the chip says about the connection, with nothing of yours waiting (chipState puts your changes first).
+ * `channelsUp`: both live channels are joined; `failing`: catching up with teammates' changes keeps failing. Not
+ * reaching Sprawniej with nothing waiting is a calm "Reconnecting…".
  */
-export function connectionState(online: boolean, channelsUp: boolean, signedIn: boolean, failing: boolean, pending = 0): SaveState {
+export function connectionState(online: boolean, channelsUp: boolean, signedIn: boolean, failing: boolean): SaveState {
   if (!signedIn) return 'signed-out'
   if (!online) return 'offline'
-  if (failing || !channelsUp) return pending > 0 ? 'error' : 'reconnecting'
-  return pending > 0 ? 'saving' : 'saved'
+  return failing || !channelsUp ? 'reconnecting' : 'saved'
 }
 
 /**
