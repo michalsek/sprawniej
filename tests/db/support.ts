@@ -4,7 +4,8 @@
  * these files and skips them: nothing here may connect or throw at import time.
  *
  * The project comes from VITE_SUPABASE_URL and VITE_SUPABASE_KEY (the environment, or .env.local).
- * Test accounts are dbtest-<run>-<name>@<domain>; supabase/dev/cleanup-tests.sql removes them afterwards.
+ * Test accounts are dbtest-<run>-<name>@<domain>; supabase/dev/cleanup-tests.sql removes them afterwards. Set
+ * SPRAWNIEJ_TEST_RUN to name the run yourself, so only its own accounts and workspaces can be removed afterwards.
  * Only for a development or throwaway project.
  */
 import { expect } from 'bun:test'

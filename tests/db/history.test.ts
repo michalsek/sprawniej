@@ -1,4 +1,8 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { fetchIssueEvents } from '@/backend/history'
+import { Registry } from '@/backend/registry'
+import { iso } from '@/backend/rows'
+import { issueEvents } from '@/data/history'
 import { closeChannels, DISPLAY, enabled, getWorld, newIssue, newTeam, ok, ulid, type World } from './support'
 
 describe.skipIf(!enabled)('history and deletions', () => {
@@ -111,6 +115,41 @@ describe.skipIf(!enabled)('history and deletions', () => {
     expect(await deleted('views')).toContainEqual({ id: view })
     expect(await deleted('team_members')).toContainEqual({ team_id: team, profile_id: w.bob.profileId })
     expect(await deleted('project_teams')).toContainEqual({ project_id: project, team_id: team })
+  })
+
+  test('events read as the right lines', async () => {
+    const label = await newLabel()
+    const issue = await newIssue(w.ana, w.ws, w.eng, { title: 'Lines' })
+    // the app adds the labels a moment after the issue (E26)
+    await ok(w.ana.db.from('issue_labels').insert({ workspace_id: w.ws, issue_id: issue.id, label_id: label }))
+    await ok(w.ana.db.from('issues').update({ status: 'in_progress' }).eq('id', issue.id))
+    await ok(w.ana.db.from('issues').update({ status: 'done' }).eq('id', issue.id))
+    await ok(w.ana.db.from('issues').update({ title: 'Renamed' }).eq('id', issue.id))
+    await ok(w.bob.db.from('issues').update({ assignee_id: w.guest }).eq('id', issue.id))
+    await ok(w.ana.db.rpc('move_issue_to_team', { p_issue: issue.id, p_team: w.des }))
+    await ok(w.bob.db.from('issues').update({ archived_at: new Date().toISOString() }).eq('id', issue.id))
+    await ok(w.ana.db.from('issues').update({ archived_at: null }).eq('id', issue.id))
+    const moved = await issueRow(issue.id)
+
+    const rows = await fetchIssueEvents(w.ana.db, w.ws, issue.id)
+    expect(rows.every((r) => r.at.endsWith('Z'))).toBe(true)
+    const known = new Registry()
+    for (const p of [w.ana, w.bob]) known.learnProfile(p.profileId, p.login)
+    known.learnProfile(w.guest, w.guestLogin)
+    const lines = issueEvents(rows, { login: (id) => known.login(id), createdBy: w.ana.login, createdAt: iso(issue.created_at) })
+    expect(lines.map((l) => [l.by, l.change])).toEqual([
+      [w.ana.login, { kind: 'status', from: 'todo', to: 'done' }],
+      [w.ana.login, { kind: 'title', from: 'Lines', to: 'Renamed' }],
+      [w.bob.login, { kind: 'assignee', from: null, to: w.guestLogin }],
+      [w.ana.login, { kind: 'team', from: `ENG-${issue.number}`, to: `DES-${moved.number}` }],
+      [w.bob.login, { kind: 'archived' }],
+      [w.ana.login, { kind: 'restored' }],
+    ])
+
+    const later = await fetchIssueEvents(w.ana.db, w.ws, issue.id, rows[2].id)
+    expect(later.map((r) => r.id)).toEqual(rows.slice(3).map((r) => r.id))
+    // someone outside the workspace reads nothing
+    expect(await fetchIssueEvents(w.cy.db, w.ws, issue.id)).toEqual([])
   })
 
   test('a sub-issue whose parent is deleted loses its parent, and says so', async () => {

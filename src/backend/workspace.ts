@@ -506,14 +506,20 @@ export class Lifecycle {
   private backend: Store<BackendState>
   private registry: Registry
   private writes: WritesHooks
+  private onClosed: () => void
   /** the workspace whose unsaved changes the writer still holds, detached (it opens again next, or it failed to open) */
   private kept: string | null = null
 
-  constructor(make: Lifecycle['make'], backend: Store<BackendState>, registry: Registry, writes: WritesHooks = NO_WRITES) {
+  /**
+   * `writes`: the writer (none in some tests); `closed`: a workspace closed for good (not when it's read again from
+   * the start), so what belonged to it is forgotten
+   */
+  constructor(make: Lifecycle['make'], backend: Store<BackendState>, registry: Registry, more: { writes?: WritesHooks; closed?: () => void } = {}) {
     this.make = make
     this.backend = backend
     this.registry = registry
-    this.writes = writes
+    this.writes = more.writes ?? NO_WRITES
+    this.onClosed = more.closed ?? (() => {})
   }
 
   private queue(job: () => Promise<void>): Promise<void> {
@@ -565,5 +571,7 @@ export class Lifecycle {
     // the same workspace read again keeps the ids it knows (changes made meanwhile name them)
     if (!keep) this.registry.clear()
     this.backend.setState({ phase: 'closed', workspaceId: undefined, failure: undefined, gone: undefined })
+    // once nothing shows it as open any more, so nothing asks for its pictures again
+    if (!keep) this.onClosed()
   }
 }
