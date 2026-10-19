@@ -23,6 +23,7 @@ with a reason.
 - 2026-10-19: Accepted advisor warnings: "signed-in users can execute SECURITY DEFINER function" for the 11 public functions (they are the API, each checks the caller, `anon` can't run them); leaked-password protection (paid plan); "insufficient MFA options" (no MFA in stage A).
 - 2026-10-19: Sign-out keeps only `sprawniej-chrome` (whether the sidebar is open): it says nothing about the person or the work.
 - 2026-10-19: GitHub Pages is on for the fork (source: GitHub Actions, https://michalsek.github.io/sprawniej/). The build's public settings are repository variables `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key) and `VITE_PUBLIC_URL`. The user approved releasing 2.0.0 and starting the Pages build once everything is green.
+- 2026-10-19: Catching up reads every changed row, archived ones too, so an open archive gets imported or archived issues without reading the archive again.
 - 2026-10-19: Work happens in the session's worktree; `main` is fast-forwarded to it after each step (the session
   can't write in the main checkout directly).
 
@@ -41,8 +42,8 @@ Status: `todo`, `doing`, `done`.
 | 6 | Linear import end to end (`import_rows`) | done | cf67730 + fix round, merged in 38797db; 88/88 DB tests; every step-kind failure recovers |
 | 7 | History and pictures | done | 773dc82 + fix round, merged in cca59f9 |
 | 8 | Team features: invites, members and roles, people from Linear, ways to sign in | done | 632eef6 + fix round, merged; 82/82 DB tests, browser cases pass |
-| 9 | Read cache and catch-up from IndexedDB | doing | built on its branch (5770657); QA and review running |
-| 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | todo | after 6 to 9 |
+| 9 | Read cache and catch-up from IndexedDB | done | 5770657 + fix round, merged in 80b8021; a reload reads 0 issue rows |
+| 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | doing | |
 | 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | todo | last |
 
 ## Two people at once (checked in phase 5, browser)
@@ -215,7 +216,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E118 | phase 5 planner | Switching workspace has no "not saved yet" warning like signing out | fixed | phase 5 (`useSwitchWorkspace` asks) |
 | E119 | phase 5 planner | docs/architecture.md and docs/design.md still describe file merging and changes kept on the device | open | phase 10 |
 | E120 | phase 6 planner | Views can't change `team_id` through `import_rows` | won't do | a Linear view moving teams is rare; recreate it by hand |
-| E121 | phase 6 planner | `loadTable` reloads only active issues, so a big catch-up misses archived rows | open | phase 9 (catch-up pages every changed row) |
+| E121 | phase 6 planner | `loadTable` reloads only active issues, so a big catch-up misses archived rows | fixed | phase 9 (merged in 80b8021) |
 | E122 | phase 6 planner | Existing teams never get newly matched people as members on re-import | fixed | phase 6 (merged in 38797db) |
 | E123 | phase 7 planner | `statusOf` uses a non-null assertion: an unknown status crashes a screen | fixed | phase 7 (merged in cca59f9) |
 | E124 | phase 7 planner | Every description save writes its own history row | won't do | folded on screen; about 100 bytes a row is fine for 8 people |
@@ -226,8 +227,8 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E129 | phase 8 planner | `invites.for_login` is no longer written | open | phase 10 |
 | E130 | phase 8 planner | GitHub added later never fills `github_id` or an empty avatar | won't do | no import from a GitHub workspace in this run, nothing to claim |
 | E131 | phase 8 planner | There is no way in the app to delete a workspace | won't do | not needed for the first team; owners can ask |
-| E132 | phase 9 planner | Catch-up reads changed profiles across all your workspaces and filters in the browser | open | phase 9 |
-| E133 | phase 9 planner | Inbox deletions leave no note, so catch-ups in memory miss notes removed meanwhile | open | phase 9 (inbox checked at open) |
+| E132 | phase 9 planner | Catch-up reads changed profiles across all your workspaces and filters in the browser | fixed | phase 9 (merged in 80b8021) |
+| E133 | phase 9 planner | Inbox deletions leave no note, so catch-ups in memory miss notes removed meanwhile | fixed | phase 9 (merged in 80b8021) |
 | E134 | phase 9 planner | `profileId` isn't kept across reloads, so even a cached open waits for one request | won't do | one small request; keeping it adds a stale-profile case |
 | E135 | phase 4 QA | A deep link is lost after signing in and picking a workspace | fixed | phase 4 fix round |
 | E136 | phase 4 QA | Waiting screens repeat their title as their text | fixed | phase 4 fix round |
@@ -276,12 +277,13 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E179 | phase 6 QA + review | A dropped connection during the check step shows "Something went wrong: [object Object]" | fixed | phase 6 (merged in 38797db) |
 | E180 | phase 6 QA | A teammate with the archive open sees only part of an imported archive until a reload | fixed | phase 6 (merged in 38797db) |
 | E181 | phase 6 QA | The check step counts fewer comments on a second import (archived issues' comments left out) | fixed | phase 6 (merged in 38797db) |
-| E182 | phase 9 review | Opening from the copy never loads the archive (archived issues stay "Loading") | open | phase 9 fix round |
-| E183 | phase 9 review | A copy that reads back but crashes blocks the workspace for good | open | phase 9 fix round |
-| E184 | phase 9 review | A tab that hasn't heard about the sign-out can write the copy back after it was deleted | open | phase 9 fix round |
-| E185 | phase 9 review | A copy that's too big is encoded again on every change | open | phase 9 fix round |
+| E182 | phase 9 review | Opening from the copy never loads the archive (archived issues stay "Loading") | fixed | phase 9 (merged in 80b8021) |
+| E183 | phase 9 review | A copy that reads back but crashes blocks the workspace for good | fixed | phase 9 (merged in 80b8021) |
+| E184 | phase 9 review | A tab that hasn't heard about the sign-out can write the copy back after it was deleted | fixed | phase 9 (merged in 80b8021) |
+| E185 | phase 9 review | A copy that's too big is encoded again on every change | fixed | phase 9 (merged in 80b8021) |
 | E186 | phase 6 fix round | `tests/actions.test.ts` "archiving takes sub-issues along" failed about 1 in 4 full runs before the merge | open | phase 10 (check for flakiness) |
 | E187 | phase 6 fix round | Leaving the import's done screen through Settings forgets the finished import | won't do | harmless: the import is saved; the done screen is only a summary |
+| E188 | phase 9 fix round | `tests/workspace.test.ts:356` calls `.subscribe` on a store type without it (hidden because tests aren't type-checked) | open | phase 10 (E1) |
 
 ## Waiting on the user
 
