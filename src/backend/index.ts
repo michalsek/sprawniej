@@ -18,6 +18,7 @@ import type { MyProfile } from './profiles'
 import { registry } from './registry'
 import { useSaveStatus } from './status'
 import { DELAYS, Lifecycle, LiveWorkspace, type BackendState, type WritesHooks } from './workspace'
+import { leaveWorkspace } from './workspaces'
 import { attach, debugWrites, detach, flush, pending, startWrites, started, stopWrites, writesStatus } from './writes'
 import { postgrest } from './writes/send'
 
@@ -99,6 +100,8 @@ export const backend = {
   open: (workspaceId: string, me: MyProfile): Promise<void> => life.open(workspaceId, me),
   /** closing: what's waiting gets a moment to be sent first */
   close: (): Promise<void> => life.close(),
+  /** you leave the open workspace, and it closes (no "You're no longer in this workspace" for your own leaving) */
+  leave: (): Promise<void> => life.leave(leaveWorkspace),
   /** read what changed since the last change we know of (scripted checks call it too) */
   catchUp: (): Promise<void> => life.current?.catchUp() ?? Promise.resolve(),
   /** archived issues into the store, once per opening */

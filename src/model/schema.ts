@@ -61,9 +61,14 @@ export function linearIdsOf(p: Person | undefined): string[] {
   return [...new Set([...own, ...linked])]
 }
 
+/** what someone may do in a workspace (src/data/roles.ts) */
+export const ROLES = ['owner', 'admin', 'member'] as const
+export type Role = (typeof ROLES)[number]
+export const isRole = (v: unknown): v is Role => (ROLES as readonly unknown[]).includes(v)
+
 /** someone's place in a workspace (only the database keeps this; a workspace repo has none) */
 export interface Member {
-  role: 'owner' | 'admin' | 'member'
+  role: Role
   /** when they left or were removed; their name still shows on old work */
   removedAt: string | null
 }

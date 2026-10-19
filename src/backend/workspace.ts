@@ -119,6 +119,8 @@ export class LiveWorkspace implements WriteTarget {
   readonly workspaceId: string
   readonly me: MyProfile
   closed = false
+  /** you are leaving it yourself (backend.leave) */
+  leaving = false
   catchUps = 0
   live: LiveState = emptyLive()
   channels: ChannelsLike | null = null
@@ -486,7 +488,8 @@ export class LiveWorkspace implements WriteTarget {
 
   /** deleted or left while open: say so, and keep what's on screen until they choose another workspace */
   private goneAway(gone: 'deleted' | 'removed' | 'missing') {
-    if (this.closed) return
+    // leaving on purpose: no "You're no longer in this workspace" for it (it closes next)
+    if (this.closed || this.leaving) return
     // nothing of yours can be saved there any more, and saying so for each change helps nobody
     this.env.writes.stop()
     void this.close()
@@ -529,6 +532,23 @@ export class Lifecycle {
 
   open(workspaceId: string, me: MyProfile): Promise<void> {
     return this.queue(() => this.start(workspaceId, me, false))
+  }
+
+  /**
+   * You leave the open workspace (`call` tells the database), and it closes. Your own leaving gets no "You're no
+   * longer in this workspace": the message saying you left may come before it closes.
+   */
+  async leave(call: (workspaceId: string) => Promise<void>): Promise<void> {
+    const ws = this.current
+    if (!ws) return
+    ws.leaving = true
+    try {
+      await call(ws.workspaceId)
+    } catch (e) {
+      ws.leaving = false
+      throw e
+    }
+    await this.close()
   }
 
   /** a workspace that failed to open keeps what's waiting: "Try again" opens it once more */

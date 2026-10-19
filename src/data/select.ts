@@ -2,7 +2,7 @@
  * Pure helpers that turn the store into what a list or board shows: filter, sort, group. No React, no store
  * access, so they are easy to test (tests/select.test.ts).
  */
-import type { Comment, Display, Filters, InboxItem, Issue, Ordering, Person, Project, ReadState } from '@/model/schema'
+import type { Comment, Display, Filters, InboxItem, Issue, Member, Ordering, Person, Project, ReadState } from '@/model/schema'
 import { followers } from './notify'
 import { PRIORITY_NAMES, PRIORITY_ORDER, STATUSES, TAB_GROUPS, statusOf, type IssueTab, type Priority } from '@/model/status'
 
@@ -212,3 +212,19 @@ export function projectProgress(projectId: string, issues: Issue[]): { done: num
 /** not marked as read yet (state/<login>.json, or read_at in the database) */
 export const isUnread = (n: Pick<InboxItem, 'id' | 'at' | 'readAt'>, r: ReadState) =>
   !n.readAt && !r.read.includes(n.id) && (!r.readUntil || n.at > r.readUntil)
+
+type WithMembers = { members: Record<string, Member>; me: Person | null }
+
+/** your role in the open workspace (null: not in it, or not known yet) */
+export const roleOf = (s: WithMembers): Member['role'] | null => {
+  const m = s.me ? s.members[s.me.login] : undefined
+  return m && !m.removedAt ? m.role : null
+}
+
+/** admins and owners invite people, change roles, rename the workspace, delete teams and import */
+export const isAdmin = (s: WithMembers): boolean => {
+  const r = roleOf(s)
+  return r === 'owner' || r === 'admin'
+}
+
+export const ownerCount = (s: Pick<WithMembers, 'members'>): number => Object.values(s.members).filter((m) => m.role === 'owner' && !m.removedAt).length

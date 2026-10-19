@@ -1,4 +1,4 @@
-/** People the Linear import brought who aren't linked to a GitHub account yet, and what they have here. */
+/** People the Linear import brought who haven't joined yet (not linked to a member), and what they have here. */
 import { useShallow } from 'zustand/react/shallow'
 import { useData, type DataState } from '@/data/store'
 import { isGuest, type Person } from '@/model/schema'
@@ -11,7 +11,7 @@ export function workOf(s: Pick<DataState, 'issues' | 'comments'>, login: string)
   return [...n(issues, 'issue'), ...n(comments, 'comment')].join(' and ')
 }
 
-/** the people from Linear who aren't linked to a GitHub account yet */
+/** the people from Linear who haven't joined yet */
 export function useUnlinked(): Person[] {
   return useData(useShallow((s) => Object.values(s.people).filter((p) => isGuest(p.login)).sort((a, b) => a.name.localeCompare(b.name))))
 }

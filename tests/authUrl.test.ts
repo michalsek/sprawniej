@@ -44,6 +44,21 @@ describe('coming back from GitHub', () => {
   test('a kept route that is not a route is not put back', () => {
     expect(run({}, 'javascript:alert(1)').replaced).toBe('/#/')
   })
+
+  test('adding a GitHub account that belongs to someone else says so, and goes back to Settings', () => {
+    const r = run({ search: '?error=server_error&error_code=identity_already_exists&error_description=x' }, '#/settings')
+    expect(r.replaced).toBe('/#/settings')
+    expect(r.problem).toBe(
+      'This GitHub account already belongs to another Sprawniej account. Sign in with GitHub to use that one, or add a different GitHub account.',
+    )
+    expect(run({ hash: '#error=x&error_code=manual_linking_disabled' }).problem).toContain("isn't switched on yet")
+    expect(run({ search: '?error=x&error_code=something_new' }).problem).toBe("Signing in with GitHub didn't finish. Try again, or use your email.")
+    // only our own words, never what an object has by itself
+    for (const code of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      expect(run({ search: `?error=x&error_code=${code}` }).problem).toBe("Signing in with GitHub didn't finish. Try again, or use your email.")
+      expect(friendlyAuthError({ code, status: 400 })).toBe('Something went wrong while signing in. Try again in a moment.')
+    }
+  })
 })
 
 describe('sign-in problems in plain words', () => {
@@ -53,6 +68,13 @@ describe('sign-in problems in plain words', () => {
 
   test('no answer at all', () => {
     expect(friendlyAuthError({ name: 'AuthRetryableFetchError', status: 0 })).toBe("Can't reach Sprawniej. Check your internet connection and try again.")
+  })
+
+  test('ways to sign in', () => {
+    expect(friendlyAuthError({ code: 'same_password', status: 422 })).toBe("That's the password you have now. Pick a new one.")
+    expect(friendlyAuthError({ code: 'single_identity_not_deletable', status: 422 })).toBe("It's your only way to sign in, so it can't be removed.")
+    expect(friendlyAuthError({ code: 'identity_already_exists', status: 422 })).toContain('already belongs to another Sprawniej account')
+    expect(friendlyAuthError({ code: 'manual_linking_disabled', status: 404 })).toContain("isn't switched on yet")
   })
 
   test('anything else, and our own problems as they are', () => {
