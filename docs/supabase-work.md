@@ -27,7 +27,7 @@ Status: `todo`, `doing`, `done`.
 | --- | --- | --- | --- |
 | 0 | Plan merged into `main`, Supabase CLI as a dev dependency | done | |
 | 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | doing | parallel with 2 |
-| 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | doing | built in 70b978b; QA passed; fix round running |
+| 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | done | 70b978b, be04249 and a last fix; QA and code review passed |
 | 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | todo | after 1 |
 | 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | todo | after 3 |
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | todo | after 4 |
@@ -117,8 +117,10 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E47 | phase 2 QA | The renumbered note shows the key here, not Linear's identifier | fixed | phase 2 fix round (F7) |
 | E48 | phase 2 QA | Import page copy says "Ready to import" and "run the import again later" while saving is off | fixed | phase 2 fix round (F9) |
 | E49 | phase 2 implementer | `docs/user-guide.md:258` says the import can be run again later while Import is off | open | phase 6 (Import comes back) / phase 10 docs |
-| E50 | phase 2 implementer | `tests/linearImport.test.ts` `native()` makes sort orders like `a50`, not valid fractional keys; a future test adding issues would throw | open |  |
-| E51 | phase 2 implementer | `monthsBefore` now uses UTC; the nightly cut-off moves by a few hours at most | open | accept |
+| E50 | phase 2 implementer | `tests/linearImport.test.ts` `native()` makes sort orders like `a50`, not valid fractional keys; a future test adding issues would throw | fixed | phase 2 QA re-check (`native()` makes valid keys) |
+| E51 | phase 2 implementer | `monthsBefore` now uses UTC; the nightly cut-off moves by a few hours at most | won't do | a few hours either way is harmless, and UTC matches the database job |
+| E52 | phase 2 QA re-check | Two teams here swapping their Linear teams emitted two non-null links, colliding on the unique Linear id | fixed | phase 2 last fix (release first) |
+| E53 | phase 2 QA re-check | An invalid sort key in a team made the import wizard's Continue button silently do nothing | fixed | phase 2 last fix (error shown on the people step) |
 
 ## Waiting on the user
 

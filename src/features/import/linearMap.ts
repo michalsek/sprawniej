@@ -373,11 +373,12 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
     } satisfies Known<TeamRow>)
     counts.teams++
   })
-  // a team here that stood for one of these Linear teams before, and doesn't now, lets go of it
+  // a team here that stood for one of these Linear teams before, and doesn't now, lets go of it first (also when two
+  // teams swap, so no Linear team is ever held twice)
   const linearTeams = new Set(standsFor.values())
   for (const t of Object.values(ws.teams)) {
     const id = linearIdOf(t)
-    if (id && linearTeams.has(id) && !standsFor.has(t.key)) out.teamLinks.push({ key: t.key, linearId: null })
+    if (id && linearTeams.has(id) && standsFor.get(t.key) !== id) out.teamLinks.push({ key: t.key, linearId: null })
   }
   out.teamLinks.push(...relinkedTeams)
 

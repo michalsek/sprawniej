@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { generateNKeysBetween } from 'fractional-indexing'
 import { linearIdsOf } from '@/data/relink'
 import { EMPTY } from '@/data/store'
 import { buildImport, existingFrom, guestLogins, emojiFor, freeKey, guessPerson, involvedUsers, mapStatus, rewriteLinks, type Existing, type ImportChoices, type ImportResult, type IssueRow } from '@/features/import/linearMap'
@@ -84,7 +85,9 @@ const uuids = () => {
 const run = (d = data, c = choices, ws = empty(), now = NOW) => buildImport(d, c, ws, { newId: ids(), newGuestId: uuids(), now })
 const byTitle = (t: string, rows: IssueRow[]) => rows.find((i) => i.title === t)!
 const eng: Team = { key: 'ENG', name: 'Eng', emoji: '🛠️', members: ['mikolaj'], createdAt: NOW }
-const native = (n: number): Issue => ({ id: `mine${n}`, team: 'ENG', number: n, title: `Made here ${n}`, description: '', status: 'todo', priority: 0, assignee: null, labels: [], project: null, parent: null, sortOrder: `a${n}`, createdBy: 'mikolaj', createdAt: NOW, updatedAt: NOW })
+/** real order keys, so an import that puts new issues above these can work out keys between them */
+const KEYS = generateNKeysBetween(null, null, 100)
+const native = (n: number): Issue => ({ id: `mine${n}`, team: 'ENG', number: n, title: `Made here ${n}`, description: '', status: 'todo', priority: 0, assignee: null, labels: [], project: null, parent: null, sortOrder: KEYS[n], createdBy: 'mikolaj', createdAt: NOW, updatedAt: NOW })
 /** a workspace's issues, top of the list first */
 const issuesIn = (ws: Existing) => Object.values(ws.issues).sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1))
 
@@ -408,6 +411,16 @@ describe('teams here', () => {
     ])
   })
 
+  test('two teams here swap their Linear teams: both let go first, so none is held twice', () => {
+    const des: Team = { ...eng, key: 'DES', name: 'Design', linearId: 't-des' }
+    const existing = { ...empty(), teams: { ENG: { ...eng, linearId: 't-eng' }, DES: des } }
+    const r = run(data, { ...choices, teamKeys: { 't-eng': 'DES', 't-des': 'ENG' } }, existing)
+    const firstSet = r.teamLinks.findIndex((l) => l.linearId !== null)
+    expect(r.teamLinks.slice(0, firstSet)).toEqual(expect.arrayContaining([{ key: 'ENG', linearId: null }, { key: 'DES', linearId: null }]))
+    expect(r.teamLinks.slice(firstSet)).toEqual(expect.arrayContaining([{ key: 'DES', linearId: 't-eng' }, { key: 'ENG', linearId: 't-des' }]))
+    expect(r.teamLinks).toHaveLength(4)
+  })
+
   test('into a team that already has issues: clashing numbers move up, past the highest used', () => {
     const existing = { ...empty(), teams: { ENG: eng }, issues: { mine2: native(2) }, usedNumbers: { ENG: [2] } }
     const r2 = run(data, choices, existing)
@@ -455,6 +468,25 @@ describe('teams here', () => {
     expect(byTitle('New logo', both.issues).parent).toBe(byTitle('Charts are slow', both.issues).id)
     const alone = run(cross, { ...choices, teamKeys: { 't-des': 'DES' } })
     expect(byTitle('New logo', alone.issues).parent).toBeNull()
+  })
+
+  test('importing only one team again keeps parents in a team that came over before', () => {
+    const both = { ...choices, teamKeys: { 't-eng': 'ENG', 't-des': 'DES' } }
+    const desOnly = { ...choices, teamKeys: { 't-des': 'DES' } }
+    const rename = (d: typeof data) => ({ ...d, issues: d.issues.map((i) => (i.id === 'i-9' ? { ...i, title: 'New logo, again' } : i)) })
+    const cross = { ...data, issues: data.issues.map((i) => (i.id === 'i-9' ? { ...i, parent: { id: 'i-1' } } : i)) }
+    const ws = apply(empty(), run(cross, both))
+    const charts = Object.values(ws.issues).find((i) => i.linearId === 'i-1')!
+    // nothing changed: the sub-issue isn't written again (so its parent isn't cleared)
+    expect(run(cross, desOnly, ws, '2026-03-02T00:00:00.000Z').issues).toEqual([])
+    expect(run(rename(cross), desOnly, ws, '2026-03-02T00:00:00.000Z').issues).toMatchObject([{ title: 'New logo, again', parent: charts.id }])
+    // a parent in the archive counts too
+    const open = { name: 'Todo', type: 'unstarted' }
+    const underAxis = { ...data, issues: data.issues.map((i) => (i.id === 'i-9' ? { ...i, parent: { id: 'i-2' }, state: open, canceledAt: null } : i)) }
+    const archived = apply(empty(), run(underAxis, both, empty(), '2026-10-07T00:00:00.000Z'))
+    expect(archived.archivedByLinear['i-2']).toBeDefined()
+    const again = run(rename(underAxis), desOnly, archived, '2026-10-08T00:00:00.000Z')
+    expect(again.issues).toMatchObject([{ title: 'New logo, again', parent: archived.archivedByLinear['i-2'].id }])
   })
 })
 

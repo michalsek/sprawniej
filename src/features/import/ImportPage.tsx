@@ -234,12 +234,17 @@ export function ImportPage() {
               onClick={() => {
                 if (!ws.me) return
                 // what would come over is worked out once, when you go on to the check step
-                const plan = buildImport(stage.data, { teamKeys: picked, people }, existingFrom(ws, ws.me.login), {
-                  newId: ulid,
-                  newGuestId: () => crypto.randomUUID(),
-                  now: new Date().toISOString(),
-                })
-                setStage({ at: 'check', data: stage.data, plan })
+                try {
+                  const plan = buildImport(stage.data, { teamKeys: picked, people }, existingFrom(ws, ws.me.login), {
+                    newId: ulid,
+                    newGuestId: () => crypto.randomUUID(),
+                    now: new Date().toISOString(),
+                  })
+                  setProblem(null)
+                  setStage({ at: 'check', data: stage.data, plan })
+                } catch (e) {
+                  setProblem(`Something went wrong: ${e instanceof Error ? e.message : String(e)}`)
+                }
               }}
             >
               Continue
@@ -251,6 +256,7 @@ export function ImportPage() {
           We matched people by name. Fix anyone we got wrong. Someone who isn't here yet still comes over with their name, so their issues, comments
           and views stay theirs. Once you invite them, link them in Settings and everything moves to their account.
         </p>
+        <Problem>{problem}</Problem>
         <ul className="mt-5 flex flex-col divide-y rounded-lg border">
           {users.map((u) => (
             <li key={u.id} className="flex items-center gap-3 px-4 py-2.5">
