@@ -298,4 +298,4 @@ so only your teammates can see it. Pictures can be up to 10 MB.
 - **"You don't have access to this workspace"**: ask the person who invited you to invite you again, then accept the
   invitation on GitHub.
 - **Using a shared computer?** Open the menu under your name at the bottom left, choose **Sign out**, and confirm on
-  the page that opens. It removes your key and the workspace from that browser.
+  the page that opens. It signs you out in that browser and removes the copy of your workspaces it kept there.

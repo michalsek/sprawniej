@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'wouter'
 import { Boxes, Plus } from 'lucide-react'
+import { pruneCaches } from '@/backend/cacheStore'
 import { myWorkspaces, type WorkspaceInfo } from '@/backend/workspaces'
 import { EmptyState } from '@/components/EmptyState'
 import { Logo } from '@/components/Logo'
@@ -26,7 +27,12 @@ export function PickWorkspace() {
   useEffect(() => {
     let stop = false
     myWorkspaces().then(
-      (l) => !stop && setList(l),
+      (l) => {
+        // the copies kept of workspaces you're no longer in go
+        const me = useSession.getState().profileId
+        if (me) void pruneCaches(me, l.map((w) => w.id))
+        if (!stop) setList(l)
+      },
       () => !stop && setFailed(true),
     )
     return () => {

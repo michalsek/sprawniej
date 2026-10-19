@@ -1,5 +1,6 @@
 import { backend } from '@/backend'
 import { signOutLocally } from '@/backend/auth'
+import { wipeCaches } from '@/backend/cacheStore'
 import { resetProjection } from '@/data/project'
 import { useData, EMPTY } from '@/data/store'
 import { useSession } from '@/session'
@@ -37,6 +38,8 @@ export async function signOutOfThisBrowser(then = '#/') {
   // the sign-out dialog already asked about anything that couldn't be sent
   await backend.flush(3_000).catch(() => {})
   await signOutLocally()
+  // the copies of your workspaces kept in this browser
+  await wipeCaches()
   useSession.getState().signOut()
   resetProjection()
   useData.setState({ ...EMPTY })

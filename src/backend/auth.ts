@@ -9,6 +9,7 @@ import type { AuthChangeEvent, Session as AuthSession, User } from '@supabase/su
 import { create } from 'zustand'
 import { authRedirectUrl } from '@/config'
 import { useSession } from '@/session'
+import { stopCaching } from './cacheStore'
 import { backendConfig, getClient, requireClient } from './client'
 import { isUnreachable, UNREACHABLE } from './problem'
 
@@ -110,6 +111,8 @@ let started = false
 function startOver() {
   if (leaving) return
   leaving = true
+  // nothing of the last person may be kept again while the page goes
+  stopCaching()
   useSession.getState().signOut()
   location.hash = '#/'
   location.reload()
@@ -225,6 +228,8 @@ export async function signInWithGitHub(): Promise<void> {
  */
 export async function signOutLocally(): Promise<void> {
   leaving = true
+  // nothing of the last person may be kept again while the page goes
+  stopCaching()
   localStorage.setItem(SIGNING_OUT, String(Date.now()))
   const db = getClient()
   // the sign-in is forgotten here even when Sprawniej can't be reached (it only fails to end it there too)

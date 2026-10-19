@@ -329,7 +329,7 @@ function Account() {
           {busy ? <Loader2 className="animate-spin" /> : <LogOut />} Sign out
         </Button>
       </div>
-      <p className="text-sm text-muted-foreground">Signing out forgets you in this browser, in every tab. Do it on shared computers.</p>
+      <p className="text-sm text-muted-foreground">Signing out forgets you in this browser, in every tab, and removes the copy of your workspaces kept here. Do it on shared computers.</p>
       {dialog}
       {switching.dialog}
     </div>

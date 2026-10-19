@@ -7,6 +7,8 @@ import { create } from 'zustand'
 import { useData } from '@/data/store'
 import { handOver } from '@/lib/beforeHide'
 import { useAuth } from './auth'
+import { encode, inputsOf, type CacheId } from './cache'
+import { cacheProject, cacheState, dropCache, readCache, writeCache } from './cacheStore'
 import { getClient } from './client'
 import { watchConnection } from './connection'
 import { Channels, type ChannelStatus, type Topic } from './live'
@@ -14,7 +16,7 @@ import { Loader } from './load'
 import type { MyProfile } from './profiles'
 import { registry } from './registry'
 import { useSaveStatus } from './status'
-import { DELAYS, Lifecycle, LiveWorkspace, type BackendState, type WritesHooks } from './workspace'
+import { DELAYS, Lifecycle, LiveWorkspace, type BackendState, type CopyHooks, type WritesHooks } from './workspace'
 import { attach, debugWrites, detach, flush, pending, startWrites, started, stopWrites, writesStatus } from './writes'
 import { postgrest } from './writes/send'
 
@@ -44,6 +46,36 @@ const writes: WritesHooks = {
   status: writesStatus,
 }
 
+/** why the last opening read everything (scripted checks read it) */
+let lastMiss: string | null = null
+
+/** the copy of one workspace kept in this browser, for one person */
+function keptCopy(workspaceId: string, profileId: string): CopyHooks {
+  const id: CacheId = { project: cacheProject(), profileId, workspaceId }
+  return {
+    quiet: 3_000,
+    most: 30_000,
+    async read() {
+      const r = await readCache(id, Date.now())
+      lastMiss = 'miss' in r ? r.miss : null
+      if ('miss' in r) return null
+      return { inputs: inputsOf(r.body), mark: r.meta.mark, caughtUpAt: r.meta.caughtUpAt, archive: r.meta.archive }
+    },
+    async write({ live, mark, caughtUpAt, archive }) {
+      // signed out (or "Please sign in again"): nothing more is kept
+      if (!useAuth.getState().user || cacheState().off) return false
+      const o = { id, mark, caughtUpAt, archive, now: Date.now() }
+      const entry = encode(live, o)
+      if (!entry) {
+        await dropCache(id)
+        return false
+      }
+      return (await writeCache(entry, () => encode(live, { ...o, small: true }))) !== 'off'
+    },
+    drop: () => dropCache(id),
+  }
+}
+
 const life: Lifecycle = new Lifecycle(
   (workspaceId: string, me: MyProfile) => {
     const db = getClient()
@@ -63,6 +95,7 @@ const life: Lifecycle = new Lifecycle(
         delays: DELAYS,
         writes,
         now: () => Date.now(),
+        copy: keptCopy(workspaceId, me.id),
       },
       workspaceId,
       me,
@@ -101,8 +134,14 @@ export const backend = {
       channels: ws?.channels && !ws.closed ? { ...ws.channels.status } : { ...CLOSED_CHANNELS },
       catchUps: ws?.catchUps ?? 0,
       writes: debugWrites(),
+      cache: { source: ws?.source ?? null, savedAt: ws?.keptAt ?? null, miss: lastMiss, ...cacheState() },
     }
   },
+  /** keep the copy of the open workspace now (scripted checks) */
+  saveCache: (): Promise<void> => life.current?.keepNow() ?? Promise.resolve(),
 }
 
 export const loadArchive = backend.loadArchive
+
+// closing the tab: the copy is kept (hiding it already started that; this is for browsers that skip it)
+if (typeof window !== 'undefined') window.addEventListener('pagehide', () => void life.current?.keepNow())

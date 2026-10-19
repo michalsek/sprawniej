@@ -955,8 +955,9 @@ create policy "members listen to their workspace" on realtime.messages for selec
 2. Join both channels (`supabase.channel('ws:…', { config: { private: true } })`, after `supabase.realtime.setAuth()`).
    Messages that arrive before step 3 finishes are held.
 3. Fetch what changed since the cache's mark: for each table `select … where workspace_id = $1 and changed_at > $mark`,
-   plus `deletions where deleted_at > $mark`, plus your whole inbox. No cache, or a mark older than 45 days (deletions
-   are forgotten then): load everything that isn't archived.
+   plus `deletions where deleted_at > $mark`, plus the ids of your whole inbox (notes that go leave no deletions). No
+   cache, or one this browser last had up to date more than 44 days ago (deletions are kept 45 days): load everything
+   that isn't archived.
 4. Apply the held messages, then keep applying messages as they come.
 
 The mark is the highest `changed_at` the browser has seen, minus 10 seconds. `changed_at` is set when a row is written,

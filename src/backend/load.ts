@@ -43,7 +43,6 @@ const fetched = (table: LiveTable, rows: readonly Loose[], keys?: Record<string,
 /** an issue's labels, followers and comments, read through their issue (to tell open issues from archived ones) */
 const ISSUE_PARTS = ['issue_labels', 'issue_followers', 'comments'] as const
 type IssuePart = (typeof ISSUE_PARTS)[number]
-const isIssuePart = (t: LiveTable): t is IssuePart => (ISSUE_PARTS as readonly string[]).includes(t)
 const WITH_ISSUE = '*, issues!inner(archived_at)'
 const dropIssue = (rows: Loose[]): Loose[] => rows.map(({ issues: _issues, ...row }) => row)
 
@@ -135,53 +134,47 @@ export class Loader {
     ])
   }
 
-  /** one table again, whole (catching up found too many changes in it to read them one by one) */
-  async table(t: LiveTable): Promise<Incoming[]> {
-    if (t === 'profiles') {
-      const members = await this.paged('workspace_members', KEYS.workspace_members, 'workspace_id,profile_id', this.scope('workspace_members'))
-      return [await this.profiles(memberIdsOf(members))]
-    }
-    if (t === 'issues') return [await this.issues(false)]
-    if (isIssuePart(t)) return [await this.parts(t, false)]
-    return [await this.whole(t)]
-  }
-
   /** archived issues with their labels, followers and comments */
   archived(): Promise<Incoming[]> {
     return Promise.all([this.issues(true), ...ISSUE_PARTS.map((t) => this.parts(t, true))])
   }
 
   /**
-   * What changed since `since`: changed rows of every table (archived issues too), deletions, and the workspace row
-   * itself. `full`: tables with more changes than one request brings (read them whole with table()); `gone`: the
-   * workspace isn't there for you any more (deleted, or you're no longer in it).
+   * What changed since `since`: every changed row of every table (archived issues too, page after page), deletions,
+   * and the workspace row itself. `members`: the people we know are in the workspace (their profiles are read if they
+   * changed; people who joined meanwhile are read whole). `gone`: the workspace isn't there for you any more (deleted,
+   * or you're no longer in it).
    */
-  async changed(since: string, members: ReadonlySet<string>): Promise<{ inputs: Incoming[]; full: LiveTable[]; gone: boolean }> {
-    const full: LiveTable[] = []
-    const changed = async (t: LiveTable, filter: (q: Query) => Query) => {
-      const { data, error, count } = await filter(this.from(t).select('*', { count: 'exact' })).gt('changed_at', since).order('changed_at').limit(this.page)
-      if (error) throw error
-      const rows = data as unknown as Loose[]
-      if (count === null ? rows.length >= this.page : count > rows.length) full.push(t)
-      return rows
-    }
+  async changed(since: string, members: ReadonlySet<string>): Promise<{ inputs: Incoming[]; gone: boolean }> {
+    const changed = (t: LiveTable, filter: (q: Query) => Query) => this.paged(t, KEYS[t], '*', (q) => filter(q).gt('changed_at', since))
     const tables = LIVE_TABLES.filter((t) => t !== 'workspaces' && t !== 'profiles')
-    const [workspace, people, deletions, ...rest] = await Promise.all([
+    // only this workspace's people: its members and its people from Linear (the rules also let through your other
+    // workspaces' people)
+    const people = Promise.all([
+      ...chunks([...members]).map((ids) => changed('profiles', (q) => q.in('id', ids))),
+      changed('profiles', (q) => q.eq('guest_of', this.ws)),
+    ])
+    const [workspace, known, deletions, ...rest] = await Promise.all([
       this.paged('workspaces', ['id'], '*', (q) => q.eq('id', this.ws)),
-      // the rules also let through people from your other workspaces: only this one's are kept
-      changed('profiles', (q) => q),
+      people,
       this.paged('deletions', ['id'], '*', (q) => q.eq('workspace_id', this.ws).gt('deleted_at', since)),
       ...tables.map((t) => changed(t, this.scope(t))),
     ])
-    const joined = new Set(members)
-    tables.forEach((t, n) => t === 'workspace_members' && rest[n].forEach((r) => joined.add(String(r.profile_id))))
+    const joined = [...new Set(rest[tables.indexOf('workspace_members')].map((r) => String(r.profile_id)))].filter((id) => !members.has(id))
+    const newcomers = await Promise.all(chunks(joined).map((ids) => this.paged('profiles', ['id'], '*', (q) => q.in('id', ids))))
     const inputs: Incoming[] = [
       fetched('workspaces', workspace),
-      fetched('profiles', people.filter((p) => p.guest_of === this.ws || joined.has(String(p.id)))),
+      fetched('profiles', [...known.flat(), ...newcomers.flat()]),
       { from: 'deletions', rows: deletions as unknown as DeletionRow[] },
       ...tables.map((t, n) => fetched(t, rest[n])),
     ]
-    return { inputs, full, gone: workspace.length === 0 }
+    return { inputs, gone: workspace.length === 0 }
+  }
+
+  /** the ids of every note in your inbox (notes that went leave nothing behind, so a kept copy is compared with them) */
+  async inboxIds(): Promise<Set<string>> {
+    const rows = await this.paged('inbox', KEYS.inbox, 'id', this.scope('inbox'))
+    return new Set(rows.map((r) => String(r.id)))
   }
 
   /** what the groups ask for; new issues (ones we didn't have) come with their labels, followers and comments */
@@ -227,7 +220,7 @@ export class Loader {
 }
 
 /** what a Loader reads with (LiveWorkspace's tests give it a pretend one) */
-export type Reader = Pick<Loader, 'all' | 'table' | 'archived' | 'changed' | 'byKeys' | 'partsOf' | 'exists' | 'countArchived'>
+export type Reader = Pick<Loader, 'all' | 'archived' | 'changed' | 'inboxIds' | 'byKeys' | 'partsOf' | 'exists' | 'countArchived'>
 
 /** rows asked for by key, grouped so each group is one request */
 export interface FetchGroup {

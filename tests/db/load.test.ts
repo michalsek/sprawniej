@@ -65,7 +65,6 @@ describe.skipIf(!enabled)('reading a workspace', () => {
     const members = new Set([w.ana.profileId])
     const changed = await as(w.ana).changed(since, members)
     expect(changed.gone).toBe(false)
-    expect(changed.full).toEqual([])
     const issues = changed.inputs.find((i) => i.from === 'fetch' && i.table === 'issues')
     // archived issues count too: archiving one came after everything the first read saw
     const titles = issues?.from === 'fetch' ? issues.rows.map((r) => r.title) : []
@@ -76,6 +75,37 @@ describe.skipIf(!enabled)('reading a workspace', () => {
     const next = applyRows(first.state, { ...fresh(), ...first.patch } as StoreSlice, changed.inputs, { workspaceId: ws, meId: w.ana.profileId, registry })
     expect(next.patch.issues?.[open]?.title).toBe('Renamed')
     expect(next.patch.issues?.[open]?.labels).toEqual([])
+  })
+
+  test('catching up reads every changed row page after page, archived ones too, and only this workspace’s people', async () => {
+    const first = apply(emptyLive(), await as(w.ana).all())
+    const since = sinceMark(first.state.mark!, 0)
+    const made = await Promise.all([1, 2, 3, 4, 5].map((n) => newIssue(w.ana, ws, eng, { title: `Changed ${n}` })))
+    const archived = made.slice(0, 2).map((i) => i.id)
+    await ok(w.ana.db.from('issues').update({ archived_at: new Date().toISOString() }).in('id', archived))
+    // bob is in ana's other workspace only: his change isn't this one's
+    await ok(w.bob.db.from('profiles').update({ name: 'Bob elsewhere' }).eq('id', w.bob.profileId))
+    const changed = await as(w.ana, 2).changed(since, new Set([w.ana.profileId]))
+    const rows = (t: string) => changed.inputs.flatMap((i) => (i.from === 'fetch' && i.table === t ? i.rows : []))
+    const ids = rows('issues').map((r) => String(r.id))
+    for (const i of made) expect(ids).toContain(i.id)
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(rows('issues').filter((r) => archived.includes(String(r.id))).every((r) => r.archived_at !== null)).toBe(true)
+    expect(rows('profiles').map((r) => r.id)).not.toContain(w.bob.profileId)
+  })
+
+  test('the inbox’s note ids, page after page', async () => {
+    // notes go to teammates: ana tells bob, in the workspace they share
+    const issues = await Promise.all([1, 2, 3].map(() => newIssue(w.ana, w.ws, w.eng)))
+    const notes = [ulid(), ulid(), ulid()]
+    await ok(w.ana.db.from('inbox').insert(notes.map((id, n) => ({ id, workspace_id: w.ws, recipient_id: w.bob.profileId, type: 'assigned', issue_id: issues[n].id }))))
+    await ok(w.bob.db.from('inbox').delete().eq('id', notes[1]))
+    const bob = (page?: number) => new Loader(w.bob.db, w.ws, w.bob.profileId, { page })
+    const ids = await bob(1).inboxIds()
+    expect(ids.has(notes[0]) && ids.has(notes[2])).toBe(true)
+    expect(ids.has(notes[1])).toBe(false)
+    const all = (await bob().all()).flatMap((i) => (i.from === 'fetch' && i.table === 'inbox' ? i.rows.map((r) => String(r.id)) : []))
+    expect([...ids].sort()).toEqual(all.sort())
   })
 
   test('rows asked for by key, a new issue with its parts', async () => {

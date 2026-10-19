@@ -7,7 +7,7 @@ import { sinceMark, type Reader } from '@/backend/load'
 import { Registry } from '@/backend/registry'
 import type { SaveStatus } from '@/backend/status'
 import type { Message } from '@/backend/tables'
-import { Lifecycle, LiveWorkspace, NO_WRITES, type BackendState, type Delays, type WorkspaceEnv, type WritesHooks } from '@/backend/workspace'
+import { Lifecycle, LiveWorkspace, NO_WRITES, type BackendState, type CopyHooks, type Delays, type KeptCopy, type WorkspaceEnv, type WritesHooks } from '@/backend/workspace'
 import { EMPTY, type DataState } from '@/data/store'
 import type { Person } from '@/model/schema'
 
@@ -77,13 +77,13 @@ function deferred<T>() {
   return { promise, resolve, reject }
 }
 
-function setup(reader: Partial<Reader> = {}, joined: Promise<'up' | 'slow' | 'denied'> = Promise.resolve('up'), writes: WritesHooks = NO_WRITES) {
+function setup(reader: Partial<Reader> = {}, joined: Promise<'up' | 'slow' | 'denied'> = Promise.resolve('up'), writes: WritesHooks = NO_WRITES, copy?: CopyHooks) {
   const channels: FakeChannels[] = []
   let events: ConnectionEvents | undefined
   const r: Reader = {
     all: mock(async () => world()),
-    changed: mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false })),
-    table: async () => [],
+    changed: mock(async () => ({ inputs: [] as Incoming[], gone: false })),
+    inboxIds: async () => new Set<string>(),
     archived: async () => [],
     byKeys: mock(async () => [] as Incoming[]),
     partsOf: async () => [],
@@ -111,6 +111,7 @@ function setup(reader: Partial<Reader> = {}, joined: Promise<'up' | 'slow' | 'de
     reopen: () => {},
     delays: DELAYS,
     writes,
+    copy,
   }
   const ws = new LiveWorkspace(env, WS, { id: ME, person: ANA })
   return { ws, env, reader: r, channels, events: () => events }
@@ -172,18 +173,18 @@ describe('keeping up', () => {
   }
 
   test('a drop while catching up keeps where to catch up from, and catches up again once back', async () => {
-    const first = deferred<{ inputs: Incoming[]; full: never[]; gone: boolean }>()
+    const first = deferred<{ inputs: Incoming[]; gone: boolean }>()
     const calls: string[] = []
     const s = await opened({
       changed: (since) => {
         calls.push(since)
-        return calls.length === 1 ? first.promise : Promise.resolve({ inputs: [], full: [], gone: false })
+        return calls.length === 1 ? first.promise : Promise.resolve({ inputs: [], gone: false })
       },
     })
     const mark = s.ws.live.mark!
     const running = s.ws.catchUp()
     s.channels[0].say('ws', 'CHANNEL_ERROR')
-    first.resolve({ inputs: [fetch('issues', [issueRow('i-1', 'Newer', 9)])], full: [], gone: false })
+    first.resolve({ inputs: [fetch('issues', [issueRow('i-1', 'Newer', 9)])], gone: false })
     await running
     expect(s.env.data.getState().issues['i-1'].title).toBe('Newer')
     expect(s.env.status.getState().state).toBe('reconnecting')
@@ -198,7 +199,7 @@ describe('keeping up', () => {
     const s = await opened({
       changed: async () => {
         if (++n === 1) throw new TypeError('Failed to fetch')
-        return { inputs: [], full: [], gone: false }
+        return { inputs: [], gone: false }
       },
     })
     await s.ws.catchUp()
@@ -216,7 +217,7 @@ describe('keeping up', () => {
       changed: async () => {
         n++
         await gate.promise
-        return { inputs: [], full: [], gone: false }
+        return { inputs: [], gone: false }
       },
     })
     for (let k = 0; k < 5; k++) s.channels[0].on.message({ op: 'catch_up' })
@@ -349,7 +350,7 @@ describe('the writer and the open workspace', () => {
   })
 
   test('a deleted team catches up a moment later, for the messages its many rows may have missed', async () => {
-    const changed = mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false }))
+    const changed = mock(async () => ({ inputs: [] as Incoming[], gone: false }))
     const s = setup({ changed })
     await s.ws.open()
     s.channels[0].on.message({ table: 'teams', op: 'DELETE', row: { id: 't-eng' } })
@@ -360,7 +361,7 @@ describe('the writer and the open workspace', () => {
 
 describe('reading the workspace again', () => {
   test('a quiet workspace (its newest change is old) still catches up; 44 days without catching up reads it again', async () => {
-    const changed = mock(async () => ({ inputs: [] as Incoming[], full: [], gone: false }))
+    const changed = mock(async () => ({ inputs: [] as Incoming[], gone: false }))
     const reopen = mock(() => {})
     const s = setup({ changed })
     s.env.reopen = reopen
@@ -451,5 +452,184 @@ describe('reading the workspace again', () => {
     await life.open(WS, { id: ME, person: ANA })
     await sleep(5)
     expect(calls).toEqual(['detach', `attach ${WS}`, 'finish', 'detach', 'finish'])
+  })
+})
+
+describe('the copy kept in this browser', () => {
+  const inbox = (id: string, s: number) => ({ id, workspace_id: WS, recipient_id: ME, type: 'comment', issue_id: 'i-1', comment_id: null, actor_id: ME, status: null, at: T(s), read_at: null, changed_at: T(s), extra: {} })
+  /** the world as kept a while ago: complete up to T(30), with two inbox notes */
+  const keptCopy = (more: Partial<KeptCopy> = {}): KeptCopy => ({
+    inputs: [...world(), fetch('inbox', [inbox('n-1', 3), inbox('n-2', 4)])],
+    mark: T(30),
+    caughtUpAt: Date.now() - 86_400_000,
+    archive: false,
+    ...more,
+  })
+  /** copy hooks that hand out `kept` and write down what they were asked to keep */
+  function keeping(kept: KeptCopy | null = keptCopy()) {
+    const written: { mark: string; caughtUpAt: number; archive: boolean; issues: string[]; local: number }[] = []
+    let dropped = 0
+    const hooks: CopyHooks = {
+      read: async () => kept,
+      write: async (c) => {
+        written.push({ mark: c.mark, caughtUpAt: c.caughtUpAt, archive: c.archive, issues: Object.keys(c.live.server.issues), local: Object.keys(c.live.local).length })
+        return true
+      },
+      drop: async () => {
+        dropped++
+      },
+      quiet: 5,
+      most: 20,
+    }
+    return { hooks, written, dropped: () => dropped }
+  }
+
+  test('it shows at once; what changed since it comes next, then what was held meanwhile', async () => {
+    const changes = deferred<{ inputs: Incoming[]; gone: boolean }>()
+    const changed = mock((_since: string, _members: ReadonlySet<string>) => changes.promise)
+    const s = setup({ changed }, Promise.resolve('up'), NO_WRITES, keeping().hooks)
+    const opened = s.ws.open()
+    await sleep(2)
+    // the copy shows, and the chip says the latest is still coming
+    expect(s.env.backend.getState().phase).toBe('open')
+    expect(s.env.data.getState().issues['i-1'].title).toBe('First')
+    expect(s.env.status.getState()).toMatchObject({ state: 'loading', synced: false })
+    expect(s.ws.source).toBe('copy')
+    expect(changed).toHaveBeenCalledWith(sinceMark(T(30)), new Set([ME]))
+    expect(s.reader.all).not.toHaveBeenCalled()
+    // deleted while the changes were read: the delete wins over the row read before it
+    s.channels[0].on.message({ table: 'issues', op: 'DELETE', row: { id: 'i-2' } })
+    changes.resolve({ inputs: [fetch('issues', [issueRow('i-1', 'Renamed while away', 40), issueRow('i-2', 'New, then deleted', 41)])], gone: false })
+    await opened
+    await sleep(2)
+    expect(s.env.data.getState().issues['i-1'].title).toBe('Renamed while away')
+    expect(s.env.data.getState().issues['i-2']).toBeUndefined()
+    expect(s.env.status.getState()).toMatchObject({ state: 'saved', synced: true })
+  })
+
+  test('while the channels are still joining, the copy shows and the chip says Loading', async () => {
+    const joined = deferred<'up' | 'slow' | 'denied'>()
+    const s = setup({}, joined.promise, NO_WRITES, keeping().hooks)
+    const opened = s.ws.open()
+    await sleep(2)
+    expect(s.env.backend.getState().phase).toBe('open')
+    expect(s.env.status.getState().state).toBe('loading')
+    joined.resolve('up')
+    await opened
+    expect(s.env.status.getState()).toMatchObject({ state: 'saved', synced: true })
+  })
+
+  test('inbox notes that went while away go (they leave nothing behind)', async () => {
+    const s = setup({ inboxIds: async () => new Set(['n-1']) }, Promise.resolve('up'), NO_WRITES, keeping().hooks)
+    await s.ws.open()
+    await sleep(2)
+    expect(s.env.data.getState().inbox.map((n) => n.id)).toEqual(['n-1'])
+  })
+
+  test('the changes can’t be read: the copy stays on screen, and catching up from it is tried again', async () => {
+    const calls: string[] = []
+    const s = setup(
+      {
+        changed: async (since) => {
+          calls.push(since)
+          if (calls.length === 1) throw new TypeError('Failed to fetch')
+          return { inputs: [fetch('issues', [issueRow('i-1', 'Later', 40)])], gone: false }
+        },
+      },
+      Promise.resolve('up'),
+      NO_WRITES,
+      keeping().hooks,
+    )
+    await s.ws.open()
+    expect(s.env.backend.getState().phase).toBe('open')
+    expect(s.env.status.getState().state).toBe('reconnecting')
+    expect(s.env.data.getState().issues['i-1'].title).toBe('First')
+    await sleep(20)
+    expect(calls).toEqual([sinceMark(T(30)), sinceMark(T(30))])
+    expect(s.env.data.getState().issues['i-1'].title).toBe('Later')
+    expect(s.env.status.getState()).toMatchObject({ state: 'saved', synced: true })
+  })
+
+  test('your unsaved changes show on the copy before the changes since it are in', async () => {
+    const changes = deferred<{ inputs: Incoming[]; gone: boolean }>()
+    const calls: string[] = []
+    const hooks: WritesHooks = { ...NO_WRITES, attach: () => calls.push(`attach, copy shown: ${String(!!s.env.data.getState().issues['i-1'])}`) }
+    const s = setup({ changed: () => changes.promise }, Promise.resolve('up'), hooks, keeping().hooks)
+    void s.ws.open()
+    await sleep(2)
+    expect(calls).toEqual(['attach, copy shown: true'])
+    changes.resolve({ inputs: [], gone: false })
+  })
+
+  test('the workspace went while away: its copy goes too', async () => {
+    const k = keeping()
+    const s = setup({ exists: async () => false }, Promise.resolve('denied'), NO_WRITES, k.hooks)
+    await s.ws.open()
+    expect(s.env.backend.getState()).toMatchObject({ phase: 'failed', failure: 'gone' })
+    expect(k.dropped()).toBe(1)
+    const g = keeping()
+    const t = setup({ changed: async () => ({ inputs: [], gone: true }) }, Promise.resolve('up'), NO_WRITES, g.hooks)
+    await t.ws.open()
+    expect(t.env.backend.getState()).toMatchObject({ phase: 'gone', gone: 'missing' })
+    expect(g.dropped()).toBe(1)
+    await sleep(30)
+    expect(g.written).toEqual([])
+  })
+
+  test('kept a moment after things change, never twice the same; a gap keeps its mark', async () => {
+    const k = keeping(null)
+    const s = setup({}, Promise.resolve('up'), NO_WRITES, k.hooks)
+    await s.ws.open()
+    expect(s.ws.source).toBe('full')
+    await sleep(15)
+    expect(k.written).toEqual([{ mark: T(2), caughtUpAt: expect.any(Number), archive: false, issues: ['i-1'], local: 0 }])
+    await s.ws.keepNow()
+    expect(k.written).toHaveLength(1)
+    // a drop: messages may be missed from T(2) on, so a later change can't move the copy's mark past it
+    s.channels[0].say('ws', 'CHANNEL_ERROR')
+    s.channels[0].on.message(update('i-1', 'Later', 9))
+    await sleep(15)
+    expect(k.written.map((w) => w.mark)).toEqual([T(2), T(2)])
+  })
+
+  test('hidden for a moment with the channels up: nothing was missed, so the copy’s mark moves on', async () => {
+    const k = keeping(null)
+    const s = setup({}, Promise.resolve('up'), NO_WRITES, k.hooks)
+    await s.ws.open()
+    s.events()!.hidden()
+    await sleep(2)
+    s.channels[0].on.message(update('i-1', 'While hidden', 9))
+    await sleep(2)
+    s.events()!.visible(1_000)
+    await s.ws.keepNow()
+    expect(k.written.map((w) => w.mark)).toEqual([T(2), T(9)])
+  })
+
+  test('closing keeps the copy first; a workspace still opening keeps none', async () => {
+    const k = keeping(null)
+    const s = setup({}, Promise.resolve('up'), NO_WRITES, k.hooks)
+    await s.ws.open()
+    s.channels[0].on.message(update('i-1', 'Just now', 9))
+    await sleep(2)
+    await s.ws.close()
+    expect(k.written.map((w) => w.mark)).toEqual([T(9)])
+    const load = deferred<Incoming[]>()
+    const o = keeping(null)
+    const t = setup({ all: () => load.promise }, Promise.resolve('up'), NO_WRITES, o.hooks)
+    const opened = t.ws.open()
+    await sleep(1)
+    await t.ws.close()
+    load.resolve(world())
+    await opened
+    expect(o.written).toEqual([])
+  })
+
+  test('the archive in the copy counts as read', async () => {
+    const archived = mock(async () => [] as Incoming[])
+    const s = setup({ archived }, Promise.resolve('up'), NO_WRITES, keeping(keptCopy({ archive: true })).hooks)
+    await s.ws.open()
+    expect(s.env.data.getState().archiveLoaded).toBe(true)
+    s.ws.loadArchive()
+    expect(archived).not.toHaveBeenCalled()
   })
 })
