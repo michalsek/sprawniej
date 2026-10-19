@@ -18,7 +18,10 @@ const login = z.string() // GitHub login
 export const workspaceSchema = z
   .object({
     name: z.string(),
-    format: z.number().int(),
+    /** the file format (sprawniej.json only; the database has none) */
+    format: z.number().int().optional(),
+    /** the workspace's id in the database (none in a workspace repo) */
+    id: z.string().optional(),
     createdAt: iso,
   })
   .passthrough()
@@ -225,6 +228,8 @@ export const inboxItemSchema = z
     comment: z.string().optional(),
     /** the new status (status) */
     status: z.enum(STATUS_IDS).optional(),
+    /** when it was read one by one (the database; a workspace repo keeps these in ReadState.read) */
+    readAt: iso.nullable().optional(),
   })
   .passthrough()
 export type InboxItem = z.infer<typeof inboxItemSchema>

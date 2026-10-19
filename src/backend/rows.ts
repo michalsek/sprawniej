@@ -1,0 +1,499 @@
+/**
+ * Database rows to the app's own shapes (src/model/schema.ts) and back. Rows point at people and teams by id; the
+ * app by login and team key, so both ways go through the registry.
+ *
+ * Fields the database has no column for travel in `extra`, so nothing a newer app wrote is lost. Times: the database
+ * sends "2026-10-19T12:28:00.816096+00:00", the app uses "2026-10-19T12:28:00.816Z" everywhere (it compares them as
+ * text), so every time goes through iso(). changed_at never does: it stays exact for the newer-wins checks.
+ */
+import type { Json } from './database.types'
+import type { Registry } from './registry'
+import type { Insert, Row } from './tables'
+import type { Member } from '@/data/store'
+import {
+  AUTO_ARCHIVE_MONTHS,
+  isGuest,
+  type ArchivedIssue,
+  type Comment,
+  type Display,
+  type Filters,
+  type InboxItem,
+  type Issue,
+  type Label,
+  type Person,
+  type Project,
+  type ReadState,
+  type Team,
+  type View,
+  type Workspace,
+} from '@/model/schema'
+import type { Priority, StatusId } from '@/model/status'
+
+// ---------- times ----------
+
+const STAMP = /^(\d{4})-(\d\d)-(\d\d)[T ](\d\d):(\d\d):(\d\d)(?:\.(\d{1,9}))?(Z|[+-]\d\d(?::?\d\d)?)?$/
+
+/** microseconds since 1970, exact (a bigint), for changed_at and deleted_at comparisons (P19); null if unreadable */
+export function micros(s: string): bigint | null {
+  const m = STAMP.exec(s)
+  if (!m) return null
+  const [, y, mo, d, h, mi, sec, frac = '', zone = 'Z'] = m
+  const ms = Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(sec))
+  if (Number.isNaN(ms)) return null
+  let offset = 0
+  if (zone !== 'Z') {
+    const z = /^([+-])(\d\d):?(\d\d)?$/.exec(zone)!
+    offset = (z[1] === '-' ? -1 : 1) * (Number(z[2]) * 60 + Number(z[3] ?? 0))
+  }
+  return (BigInt(ms) - BigInt(offset) * 60_000n) * 1000n + BigInt(frac.padEnd(6, '0').slice(0, 6))
+}
+
+/** -1, 0 or 1; a missing or unreadable time counts as the oldest */
+export function compareStamp(a: string | null | undefined, b: string | null | undefined): number {
+  const x = a ? micros(a) : null
+  const y = b ? micros(b) : null
+  if (x === null || y === null) return x === y ? 0 : x === null ? -1 : 1
+  return x < y ? -1 : x > y ? 1 : 0
+}
+
+/** a time as the app keeps it: "….123Z" (milliseconds cut, not rounded); something unreadable comes back as it is */
+export function iso(s: string): string {
+  const m = micros(s)
+  if (m === null) return s
+  // floor, also before 1970
+  const ms = m >= 0n ? m / 1000n : -((-m + 999n) / 1000n)
+  return new Date(Number(ms)).toISOString()
+}
+
+export function isoOrNull(s: string | null | undefined): string | null {
+  return s == null ? null : iso(s)
+}
+
+// ---------- shared ----------
+
+/** how a row finds people and teams; `miss` hears about an id the registry doesn't know yet */
+export interface Resolve {
+  registry: Registry
+  miss?: (id: string, table: 'profiles' | 'teams') => void
+}
+
+/** the fields each kind has (or makes up from other tables), so none of them is kept in `extra` as well */
+const KNOWN = {
+  workspace: new Set(['id', 'name', 'format', 'createdAt']),
+  person: new Set(['id', 'login', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'linearId', 'linearIds']),
+  team: new Set(['id', 'key', 'name', 'emoji', 'members', 'createdAt', 'lastNumber', 'autoArchive', 'linearId']),
+  label: new Set(['id', 'name', 'color', 'linearId']),
+  project: new Set(['id', 'name', 'emoji', 'description', 'status', 'lead', 'teams', 'targetDate', 'createdAt', 'linearId']),
+  issue: new Set([
+    'id', 'team', 'number', 'title', 'description', 'status', 'priority', 'assignee', 'labels', 'project', 'parent',
+    'dueDate', 'estimate', 'sortOrder', 'createdBy', 'createdAt', 'updatedAt', 'completedAt', 'duplicateOf',
+    'subscribers', 'unsubscribed', 'formerRefs', 'linearId', 'archivedAt', 'archivedBy', 'comments',
+  ]),
+  comment: new Set(['id', 'issue', 'author', 'createdAt', 'editedAt', 'body', 'linearId']),
+  view: new Set(['id', 'name', 'emoji', 'description', 'owner', 'team', 'filters', 'display', 'createdAt', 'linearId']),
+  inbox: new Set(['id', 'type', 'issue', 'actor', 'at', 'comment', 'status', 'readAt']),
+  readState: new Set(['readUntil', 'read']),
+}
+
+const asObject = (v: unknown): Record<string, unknown> =>
+  v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : {}
+
+/** what `extra` holds, minus names the row has a column for (a column always wins) */
+function fromExtra(extra: unknown, known: ReadonlySet<string>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(asObject(extra))) if (!known.has(k)) out[k] = v
+  return out
+}
+
+/** the model's own fields the database has no column for */
+function toExtra(model: object, known: ReadonlySet<string>): Json {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(model)) if (!known.has(k) && v !== undefined) out[k] = v
+  return out as Json
+}
+
+const linear = (row: { linear_id: string | null }) => (row.linear_id != null ? { linearId: row.linear_id } : {})
+
+/** a person's login; an id nobody knows yet stands in for it until their profile arrives */
+function login(id: string | null, r: Resolve): string | null {
+  if (!id) return null
+  const known = r.registry.login(id)
+  if (known !== undefined) return known
+  r.miss?.(id, 'profiles')
+  return id
+}
+
+function teamKey(id: string, r: Resolve): string | undefined {
+  const key = r.registry.teamKey(id)
+  if (key === undefined) r.miss?.(id, 'teams')
+  return key
+}
+
+type Stamped = { changed_at?: string | null }
+
+/** names in the order their join rows were made (oldest first, ones not saved yet last), then by name */
+function inOrder<R extends Stamped>(rows: readonly R[], name: (row: R) => string | undefined): string[] {
+  const named = rows.flatMap((row) => {
+    const n = name(row)
+    return n === undefined ? [] : [{ n, at: row.changed_at ?? null }]
+  })
+  named.sort((a, b) => {
+    if (!a.at || !b.at) return a.at === b.at ? (a.n < b.n ? -1 : a.n > b.n ? 1 : 0) : a.at ? -1 : 1
+    return compareStamp(a.at, b.at) || (a.n < b.n ? -1 : a.n > b.n ? 1 : 0)
+  })
+  return [...new Set(named.map((x) => x.n))]
+}
+
+// ---------- rows to the app ----------
+
+export function rowToWorkspace(row: Row<'workspaces'>): Workspace {
+  return { ...fromExtra(row.extra, KNOWN.workspace), id: row.id, name: row.name, createdAt: iso(row.created_at) }
+}
+
+/** a guest keeps one Linear id (`linearId`); an account can stand for several (`linearIds`, see relink.ts) */
+export function rowToPerson(row: Row<'profiles'>): Person {
+  const ids = row.linear_ids ?? []
+  return {
+    ...fromExtra(row.extra, KNOWN.person),
+    login: row.login,
+    githubId: row.github_id ?? 0,
+    name: row.name,
+    avatarUrl: row.avatar_url,
+    ...(row.name_set_here && { nameSetHere: true }),
+    ...(row.guest_of && ids.length > 0 && { linearId: ids[0] }),
+    ...((row.guest_of ? ids.length > 1 : ids.length > 0) && { linearIds: [...ids] }),
+  }
+}
+
+export function rowToMember(row: Pick<Row<'workspace_members'>, 'role' | 'removed_at'>): Member {
+  return { role: row.role as Member['role'], removedAt: isoOrNull(row.removed_at) }
+}
+
+export type TeamMemberIn = Pick<Row<'team_members'>, 'profile_id'> & Stamped
+export function rowToTeam(row: Row<'teams'>, members: readonly TeamMemberIn[], r: Resolve): Team {
+  return {
+    ...fromExtra(row.extra, KNOWN.team),
+    key: row.key,
+    name: row.name,
+    emoji: row.emoji,
+    members: inOrder(members, (m) => login(m.profile_id, r) ?? undefined),
+    createdAt: iso(row.created_at),
+    lastNumber: row.last_number,
+    autoArchive: row.auto_archive,
+    ...linear(row),
+  }
+}
+
+export function rowToLabel(row: Row<'labels'>): Label {
+  return { ...fromExtra(row.extra, KNOWN.label), id: row.id, name: row.name, color: row.color, ...linear(row) }
+}
+
+export type ProjectTeamIn = Pick<Row<'project_teams'>, 'team_id'> & Stamped
+/** a team not known yet is left out until it arrives */
+export function rowToProject(row: Row<'projects'>, teams: readonly ProjectTeamIn[], r: Resolve): Project {
+  return {
+    ...fromExtra(row.extra, KNOWN.project),
+    id: row.id,
+    name: row.name,
+    emoji: row.emoji,
+    description: row.description,
+    status: row.status as Project['status'],
+    lead: login(row.lead_id, r),
+    teams: inOrder(teams, (t) => teamKey(t.team_id, r)),
+    targetDate: row.target_date,
+    createdAt: iso(row.created_at),
+    ...linear(row),
+  }
+}
+
+export type IssueLabelIn = Pick<Row<'issue_labels'>, 'label_id'> & Stamped
+export type IssueFollowerIn = Pick<Row<'issue_followers'>, 'profile_id' | 'following'> & Stamped
+
+/**
+ * An issue with its labels and followers. Archived (archived_at set): an ArchivedIssue that holds its comments.
+ * Undefined while its team isn't known: an issue can't show without one.
+ */
+export function rowToIssue(
+  row: Row<'issues'>,
+  labels: readonly IssueLabelIn[],
+  followers: readonly IssueFollowerIn[],
+  r: Resolve,
+  comments: Comment[] = [],
+): Issue | ArchivedIssue | undefined {
+  const team = teamKey(row.team_id, r)
+  if (team === undefined) return undefined
+  const who = (following: boolean) =>
+    [...new Set(followers.filter((f) => f.following === following).map((f) => login(f.profile_id, r)!))].sort()
+  const subscribers = who(true)
+  const unsubscribed = who(false)
+  const issue: Issue = {
+    ...fromExtra(row.extra, KNOWN.issue),
+    id: row.id,
+    team,
+    number: row.number,
+    title: row.title,
+    // a row too big to send comes without it (`partial`) until it's fetched
+    description: row.description ?? '',
+    status: row.status as StatusId,
+    priority: row.priority as Priority,
+    assignee: login(row.assignee_id, r),
+    labels: inOrder(labels, (l) => l.label_id),
+    project: row.project_id,
+    parent: row.parent_id,
+    dueDate: row.due_date,
+    estimate: row.estimate == null ? null : Number(row.estimate),
+    sortOrder: row.sort_order,
+    createdBy: login(row.created_by, r) ?? '',
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+    completedAt: isoOrNull(row.completed_at),
+    duplicateOf: row.duplicate_of,
+    ...(subscribers.length > 0 && { subscribers }),
+    ...(unsubscribed.length > 0 && { unsubscribed }),
+    ...(row.former_refs?.length > 0 && { formerRefs: [...row.former_refs] }),
+    ...linear(row),
+  }
+  if (!row.archived_at) return issue
+  return { ...issue, archivedAt: iso(row.archived_at), archivedBy: login(row.archived_by, r) ?? '', comments }
+}
+
+export function rowToComment(row: Row<'comments'>, r: Resolve): Comment {
+  return {
+    ...fromExtra(row.extra, KNOWN.comment),
+    id: row.id,
+    issue: row.issue_id,
+    author: login(row.author_id, r) ?? '',
+    createdAt: iso(row.created_at),
+    editedAt: isoOrNull(row.edited_at),
+    body: row.body ?? '',
+    ...linear(row),
+  }
+}
+
+/** filters and display already hold logins and team keys, so they pass through. Undefined while its team isn't known */
+export function rowToView(row: Row<'views'>, r: Resolve): View | undefined {
+  const team = row.team_id === null ? null : teamKey(row.team_id, r)
+  if (team === undefined) return undefined
+  return {
+    ...fromExtra(row.extra, KNOWN.view),
+    id: row.id,
+    name: row.name,
+    emoji: row.emoji,
+    description: row.description,
+    owner: login(row.owner_id, r) ?? '',
+    team,
+    filters: asObject(row.filters) as Filters,
+    display: asObject(row.display) as Display,
+    createdAt: iso(row.created_at),
+    ...linear(row),
+  }
+}
+
+export function rowToInbox(row: Row<'inbox'>, r: Resolve): InboxItem {
+  return {
+    ...fromExtra(row.extra, KNOWN.inbox),
+    id: row.id,
+    type: row.type as InboxItem['type'],
+    issue: row.issue_id,
+    actor: login(row.actor_id, r) ?? '',
+    at: iso(row.at),
+    ...(row.comment_id != null && { comment: row.comment_id }),
+    ...(row.status != null && { status: row.status as StatusId }),
+    ...(row.read_at != null && { readAt: iso(row.read_at) }),
+  }
+}
+
+/** notes read one by one carry their own read_at, so `read` stays empty */
+export function rowToReadState(row: Row<'read_state'>): ReadState {
+  return { ...fromExtra(row.extra, KNOWN.readState), readUntil: isoOrNull(row.read_until), read: [] }
+}
+
+// ---------- the app to rows ----------
+// For the import and the actions. A login or team key the registry doesn't know is a mistake in the code, so it throws.
+
+function profileId(who: string | null | undefined, reg: Registry): string | null {
+  if (!who) return null
+  const id = reg.profileId(who)
+  if (!id) throw new Error(`Unknown person: ${who}`)
+  return id
+}
+
+function teamId(key: string, reg: Registry): string {
+  const id = reg.teamId(key)
+  if (!id) throw new Error(`Unknown team: ${key}`)
+  return id
+}
+
+/** an id the model brings itself (a guest made by the import), else the registry's */
+const ownId = (model: object): string | undefined => {
+  const id = (model as { id?: unknown }).id
+  return typeof id === 'string' && id ? id : undefined
+}
+
+/** the same as linearIdsOf in src/data/relink.ts, kept apart so this file doesn't pull in the repo file code (files.ts, project.ts) */
+function linearIds(p: Person): string[] {
+  const x = p as { linearId?: unknown; linearIds?: unknown }
+  const own = typeof x.linearId === 'string' ? [x.linearId] : []
+  const more = Array.isArray(x.linearIds) ? x.linearIds.filter((i): i is string => typeof i === 'string') : []
+  return [...new Set([...own, ...more])]
+}
+
+const linearId = (model: object): string | null => {
+  const id = (model as { linearId?: unknown }).linearId
+  return typeof id === 'string' ? id : null
+}
+
+export function workspaceToRow(w: Workspace, workspaceId: string): Insert<'workspaces'> {
+  return { id: workspaceId, name: w.name, created_at: w.createdAt, extra: toExtra(w, KNOWN.workspace) }
+}
+
+export function personToProfile(p: Person, workspaceId: string, reg: Registry): Insert<'profiles'> {
+  const id = ownId(p) ?? reg.profileId(p.login)
+  if (!id) throw new Error(`Unknown person: ${p.login}`)
+  return {
+    id,
+    login: p.login,
+    github_id: p.githubId > 0 ? p.githubId : null,
+    name: p.name,
+    avatar_url: p.avatarUrl,
+    name_set_here: !!p.nameSetHere,
+    guest_of: isGuest(p.login) ? workspaceId : null,
+    linear_ids: linearIds(p),
+    extra: toExtra(p, KNOWN.person),
+  }
+}
+
+export function teamToRows(t: Team, workspaceId: string, reg: Registry): { teams: Insert<'teams'>; team_members: Insert<'team_members'>[] } {
+  const id = ownId(t) ?? teamId(t.key, reg)
+  return {
+    teams: {
+      id,
+      workspace_id: workspaceId,
+      key: t.key,
+      name: t.name,
+      emoji: t.emoji,
+      ...(t.lastNumber !== undefined && { last_number: t.lastNumber }),
+      auto_archive: t.autoArchive ?? AUTO_ARCHIVE_MONTHS,
+      linear_id: linearId(t),
+      created_at: t.createdAt,
+      extra: toExtra(t, KNOWN.team),
+    },
+    team_members: t.members.map((m) => ({ workspace_id: workspaceId, team_id: id, profile_id: profileId(m, reg)! })),
+  }
+}
+
+export function labelToRow(l: Label, workspaceId: string): Insert<'labels'> {
+  return { id: l.id, workspace_id: workspaceId, name: l.name, color: l.color, linear_id: linearId(l), extra: toExtra(l, KNOWN.label) }
+}
+
+/** project_teams in the project's order: reading them back keeps the order they were made in (E45) */
+export function projectToRows(
+  p: Project,
+  workspaceId: string,
+  reg: Registry,
+): { projects: Insert<'projects'>; project_teams: Insert<'project_teams'>[] } {
+  return {
+    projects: {
+      id: p.id,
+      workspace_id: workspaceId,
+      name: p.name,
+      emoji: p.emoji,
+      description: p.description,
+      status: p.status,
+      lead_id: profileId(p.lead, reg),
+      target_date: p.targetDate,
+      linear_id: linearId(p),
+      created_at: p.createdAt,
+      extra: toExtra(p, KNOWN.project),
+    },
+    project_teams: p.teams.map((key) => ({ workspace_id: workspaceId, project_id: p.id, team_id: teamId(key, reg) })),
+  }
+}
+
+/** issue_labels in the issue's order (as projectToRows); an archived issue's comments are written on their own */
+export function issueToRows(
+  i: Issue & { archivedAt?: string; archivedBy?: string },
+  workspaceId: string,
+  reg: Registry,
+): { issues: Insert<'issues'>; issue_labels: Insert<'issue_labels'>[]; issue_followers: Insert<'issue_followers'>[] } {
+  const followers = new Map<string, boolean>()
+  for (const l of i.subscribers ?? []) followers.set(profileId(l, reg)!, true)
+  for (const l of i.unsubscribed ?? []) followers.set(profileId(l, reg)!, false)
+  return {
+    issues: {
+      id: i.id,
+      workspace_id: workspaceId,
+      team_id: teamId(i.team, reg),
+      number: i.number,
+      title: i.title,
+      description: i.description,
+      status: i.status,
+      priority: i.priority,
+      assignee_id: profileId(i.assignee, reg),
+      project_id: i.project,
+      parent_id: i.parent,
+      due_date: i.dueDate ?? null,
+      estimate: i.estimate ?? null,
+      sort_order: i.sortOrder,
+      duplicate_of: i.duplicateOf ?? null,
+      former_refs: i.formerRefs ?? [],
+      created_by: profileId(i.createdBy, reg),
+      created_at: i.createdAt,
+      updated_at: i.updatedAt,
+      completed_at: i.completedAt ?? null,
+      archived_at: i.archivedAt ?? null,
+      archived_by: i.archivedAt ? profileId(i.archivedBy, reg) : null,
+      linear_id: linearId(i),
+      extra: toExtra(i, KNOWN.issue),
+    },
+    issue_labels: [...new Set(i.labels)].map((label_id) => ({ workspace_id: workspaceId, issue_id: i.id, label_id })),
+    issue_followers: [...followers].map(([profile_id, following]) => ({ workspace_id: workspaceId, issue_id: i.id, profile_id, following })),
+  }
+}
+
+export function commentToRow(c: Comment, workspaceId: string, reg: Registry): Insert<'comments'> {
+  return {
+    id: c.id,
+    workspace_id: workspaceId,
+    issue_id: c.issue,
+    author_id: profileId(c.author, reg),
+    body: c.body,
+    created_at: c.createdAt,
+    edited_at: c.editedAt ?? null,
+    linear_id: linearId(c),
+    extra: toExtra(c, KNOWN.comment),
+  }
+}
+
+export function viewToRow(v: View, workspaceId: string, reg: Registry): Insert<'views'> {
+  return {
+    id: v.id,
+    workspace_id: workspaceId,
+    team_id: v.team === null ? null : teamId(v.team, reg),
+    owner_id: profileId(v.owner, reg),
+    name: v.name,
+    emoji: v.emoji,
+    description: v.description,
+    filters: v.filters as Json,
+    display: v.display as Json,
+    created_at: v.createdAt,
+    linear_id: linearId(v),
+    extra: toExtra(v, KNOWN.view),
+  }
+}
+
+export function inboxToRow(n: InboxItem, workspaceId: string, reg: Registry, recipient: string): Insert<'inbox'> {
+  return {
+    id: n.id,
+    workspace_id: workspaceId,
+    recipient_id: profileId(recipient, reg)!,
+    actor_id: profileId(n.actor, reg),
+    type: n.type,
+    issue_id: n.issue,
+    comment_id: n.comment ?? null,
+    status: n.status ?? null,
+    at: n.at,
+    read_at: n.readAt ?? null,
+    extra: toExtra(n, KNOWN.inbox),
+  }
+}

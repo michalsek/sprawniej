@@ -209,5 +209,6 @@ export function projectProgress(projectId: string, issues: Issue[]): { done: num
   return { done: mine.filter((i) => statusOf(i.status).group === 'completed').length, total: mine.length }
 }
 
-/** not marked as read yet (state/<login>.json) */
-export const isUnread = (n: Pick<InboxItem, 'id' | 'at'>, r: ReadState) => !r.read.includes(n.id) && (!r.readUntil || n.at > r.readUntil)
+/** not marked as read yet (state/<login>.json, or read_at in the database) */
+export const isUnread = (n: Pick<InboxItem, 'id' | 'at' | 'readAt'>, r: ReadState) =>
+  !n.readAt && !r.read.includes(n.id) && (!r.readUntil || n.at > r.readUntil)

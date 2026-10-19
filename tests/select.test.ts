@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
 import { sampleData } from '@/data/sample'
-import { childIndex, dueForArchive, groupIssues, inTab, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
+import { childIndex, dueForArchive, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
 import { findByRef, issueRef } from '@/data/store'
 import { DEFAULT_DISPLAY } from '@/data/displays'
 import type { Issue } from '@/model/schema'
@@ -154,5 +154,15 @@ describe('archiving finished issues', () => {
     expect(dueForArchive({ ...done, updatedAt: '2026-05-01T00:00:00.000Z' }, 6, '2026-08-01T00:00:00.000Z')).toBe(false)
     // not finished
     expect(dueForArchive({ ...done, status: 'todo', completedAt: null }, 6, '2030-01-01T00:00:00.000Z')).toBe(false)
+  })
+})
+
+describe('inbox', () => {
+  test('a note read one by one stays read, even when it is newer than "read until"', () => {
+    const n = { id: 'n1', at: '2026-10-19T12:00:00.000Z' }
+    const r = { readUntil: '2026-10-01T00:00:00.000Z', read: [] }
+    expect(isUnread(n, r)).toBe(true)
+    expect(isUnread({ ...n, readAt: '2026-10-19T12:05:00.000Z' }, r)).toBe(false)
+    expect(isUnread({ ...n, readAt: null }, r)).toBe(true)
   })
 })

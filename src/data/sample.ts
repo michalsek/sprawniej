@@ -156,6 +156,7 @@ export function sampleData(): DataState {
     workspace: { name: 'Software Mansion', format: 1, createdAt: at(90) },
     me: people[0],
     people: byKey(people, (p) => p.login),
+    members: {},
     labels: byKey(labels, (l) => l.id),
     teams: byKey(teams, (t) => t.key),
     archive: {},

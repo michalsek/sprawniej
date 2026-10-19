@@ -5,11 +5,20 @@
 import { create } from 'zustand'
 import type { ArchivedIssue, Comment, InboxItem, Issue, Label, Person, Project, ReadState, Team, View, Workspace } from '@/model/schema'
 
+/** someone's place in the workspace */
+export interface Member {
+  role: 'owner' | 'admin' | 'member'
+  /** when they left or were removed; their name still shows on old work */
+  removedAt: string | null
+}
+
 export interface DataState {
   workspace: Workspace | null
   /** the signed-in person */
   me: Person | null
   people: Record<string, Person>
+  /** by login; filled only by the database backend (src/backend), empty for a workspace repo */
+  members: Record<string, Member>
   labels: Record<string, Label>
   teams: Record<string, Team>
   issues: Record<string, Issue>
@@ -29,6 +38,7 @@ export const EMPTY: DataState = {
   workspace: null,
   me: null,
   people: {},
+  members: {},
   labels: {},
   teams: {},
   issues: {},
