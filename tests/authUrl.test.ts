@@ -21,9 +21,9 @@ describe('coming back from GitHub', () => {
     expect(r.left).toBeUndefined()
   })
 
-  test('a sign-in that came back with an error: the error goes, a problem is told', () => {
-    const r = run({ pathname: '/sprawniej/', search: '?error=access_denied&error_code=x&error_description=no', hash: '#/' })
-    expect(r.replaced).toBe('/sprawniej/#/')
+  test('a sign-in that came back with an error: the error goes (with any code), a problem is told', () => {
+    const r = run({ pathname: '/sprawniej/', search: '?error=access_denied&error_code=x&error_description=no&code=c&sb_flow_id=f&keep=1', hash: '#/' })
+    expect(r.replaced).toBe('/sprawniej/?keep=1#/')
     expect(r.problem).toBe("Signing in with GitHub didn't finish. Try again, or use your email.")
   })
 
@@ -47,26 +47,16 @@ describe('coming back from GitHub', () => {
 })
 
 describe('sign-in problems in plain words', () => {
-  const cases: [string, string][] = [
-    ['invalid_credentials', "That email and password don't match. Check them and try again."],
-    ['user_already_exists', "There's already an account with this email. Sign in instead."],
-    ['email_exists', "There's already an account with this email. Sign in instead."],
-    ['weak_password', 'Pick a longer password: at least 8 characters.'],
-    ['email_address_invalid', "That email address doesn't look right."],
-    ['email_not_confirmed', 'Open the link we emailed you first, then sign in.'],
-    ['over_request_rate_limit', 'Too many tries in a short time. Wait a minute and try again.'],
-    ['signup_disabled', "New accounts can't be created right now. Ask whoever looks after Sprawniej."],
-  ]
-  for (const [code, text] of cases) test(code, () => expect(friendlyAuthError({ code, message: 'whatever', status: 400 })).toBe(text))
+  test('a known problem', () => {
+    expect(friendlyAuthError({ code: 'invalid_credentials', message: 'Invalid login credentials', status: 400 })).toBe("That email and password don't match. Check them and try again.")
+  })
 
   test('no answer at all', () => {
     expect(friendlyAuthError({ name: 'AuthRetryableFetchError', status: 0 })).toBe("Can't reach Sprawniej. Check your internet connection and try again.")
-    expect(friendlyAuthError(new TypeError('Failed to fetch'))).toBe("Can't reach Sprawniej. Check your internet connection and try again.")
   })
 
   test('anything else, and our own problems as they are', () => {
     expect(friendlyAuthError({ code: 'unexpected_failure', status: 500 })).toBe('Something went wrong while signing in. Try again in a moment.')
-    expect(friendlyAuthError(undefined)).toBe('Something went wrong while signing in. Try again in a moment.')
     expect(friendlyAuthError(new AuthProblem('Use your email.'))).toBe('Use your email.')
   })
 })

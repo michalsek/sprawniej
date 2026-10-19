@@ -1,11 +1,11 @@
 /** Create a workspace: its name and its first team. You are its owner. */
-import { useState, type FormEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 import { useLocation } from 'wouter'
 import { Loader2 } from 'lucide-react'
 import { friendlyDbError } from '@/backend/problem'
 import { createWorkspace } from '@/backend/workspaces'
 import { TeamFields } from '@/features/teams/TeamFields'
-import { teamDraftOk, type TeamDraft } from '@/features/teams/teamDraft'
+import { teamDraftOk, type TeamDraft } from '@/model/teamDraft'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
@@ -20,7 +20,7 @@ export function NewWorkspace({ onBack }: { onBack: () => void }) {
   const [problem, setProblem] = useState<string>()
   const ok = !!name.trim() && teamDraftOk(team)
 
-  async function create(e?: FormEvent) {
+  async function create(e?: SubmitEvent<HTMLFormElement>) {
     e?.preventDefault()
     if (!ok || busy) return
     setBusy(true)

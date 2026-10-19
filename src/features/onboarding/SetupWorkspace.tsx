@@ -6,7 +6,7 @@ import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { TeamFields } from '@/features/teams/TeamFields'
-import { teamDraftOk, type TeamDraft } from '@/features/teams/teamDraft'
+import { teamDraftOk, type TeamDraft } from '@/model/teamDraft'
 import { Step } from './Step'
 import { takeWorkspaceName } from './setupDraft'
 

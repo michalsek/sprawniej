@@ -7,7 +7,7 @@ import { useData } from '@/data/store'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
 import { TeamFields } from './TeamFields'
-import { teamDraftOk, type TeamDraft } from './teamDraft'
+import { teamDraftOk, type TeamDraft } from '@/model/teamDraft'
 
 export function TeamsDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (o: boolean) => void }) {
   const [, navigate] = useLocation()

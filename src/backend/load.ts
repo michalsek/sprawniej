@@ -1,26 +1,26 @@
 /**
  * Reading rows: everything a workspace needs when it opens, what changed while we weren't listening (catching up),
- * the archive, and single rows a message pointed at. Every function returns inputs for applyRows.
+ * the archive, and single rows a message pointed at. Every method returns inputs for applyRows.
  *
- * The database hands out at most 1000 rows per request, so lists are read in pages, ordered by the primary key and
- * continued after the last key seen (never by counting: a row deleted meanwhile would make a count skip one).
+ * The database hands out a limited number of rows per request (1000 in supabase/config.toml, but whoever runs it may
+ * set less), so lists are read in pages, ordered by the primary key and continued after the last key seen (never by
+ * counting: a row deleted meanwhile would make a count skip one). Each request also asks how many rows are left, so
+ * reading stops exactly when everything is in, whatever the limit.
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from './database.types'
+import type { Db } from './client'
 import { micros } from './rows'
 import { KEYS, LIVE_TABLES, type DeletionRow, type LiveTable } from './tables'
 import type { Incoming } from './apply'
 
-type Db = SupabaseClient<Database>
 type Loose = Record<string, unknown>
 /** a select on a table picked at run time (one row type per table can't be named here) */
 type Query = ReturnType<ReturnType<SupabaseClient['from']>['select']>
 
+/** rows asked for per request */
 const PAGE = 1000
 /** values per `in (…)`, so the address stays short */
 const CHUNK = 100
-
-const from = (db: Db, table: string) => (db as unknown as SupabaseClient).from(table)
 
 const chunks = <T>(list: readonly T[], size = CHUNK): T[][] => {
   const out: T[][] = []
@@ -31,140 +31,191 @@ const chunks = <T>(list: readonly T[], size = CHUNK): T[][] => {
 /** the filter that continues after `last` in key order: "id.gt.X", or "a.gt.X,and(a.eq.X,b.gt.Y)" (ids need no quotes) */
 function after(cols: readonly string[], last: Loose): string {
   const [a, b] = cols
-  if (b === undefined) return `${a}.gt.${String(last[a])}`
-  return `${a}.gt.${String(last[a])},and(${a}.eq.${String(last[a])},${b}.gt.${String(last[b])})`
+  const x = String(last[a])
+  if (b === undefined) return `${a}.gt.${x}`
+  return `${a}.gt.${x},and(${a}.eq.${x},${b}.gt.${String(last[b])})`
 }
 
 export const afterKey = (table: LiveTable, last: Loose): string => after(KEYS[table], last)
-
-/** every row of a select, page by page in key order */
-async function paged(db: Db, table: string, cols: readonly string[], select: string, filter: (q: Query) => Query, onPage?: (n: number) => void): Promise<Loose[]> {
-  const out: Loose[] = []
-  let last: Loose | undefined
-  for (;;) {
-    let q = filter(from(db, table).select(select))
-    if (last) q = q.or(after(cols, last))
-    for (const c of cols) q = q.order(c)
-    const { data, error } = await q.limit(PAGE)
-    if (error) throw error
-    const rows = data as unknown as Loose[]
-    out.push(...rows)
-    onPage?.(out.length)
-    if (rows.length < PAGE) return out
-    last = rows[rows.length - 1]
-  }
-}
-
-/** a table's rows that belong to this workspace (and, for your inbox and read marks, to you) */
-function scope(table: LiveTable, ws: string, meId: string): (q: Query) => Query {
-  if (table === 'workspaces') return (q) => q.eq('id', ws)
-  if (table === 'inbox') return (q) => q.eq('workspace_id', ws).eq('recipient_id', meId)
-  if (table === 'read_state') return (q) => q.eq('workspace_id', ws).eq('profile_id', meId)
-  return (q) => q.eq('workspace_id', ws)
-}
 
 const fetched = (table: LiveTable, rows: readonly Loose[], keys?: Record<string, string>[]): Incoming => ({ from: 'fetch', table, rows, ...(keys && { keys }) })
 
 /** an issue's labels, followers and comments, read through their issue (to tell open issues from archived ones) */
 const ISSUE_PARTS = ['issue_labels', 'issue_followers', 'comments'] as const
-const withIssue = '*, issues!inner(archived_at)'
+type IssuePart = (typeof ISSUE_PARTS)[number]
+const isIssuePart = (t: LiveTable): t is IssuePart => (ISSUE_PARTS as readonly string[]).includes(t)
+const WITH_ISSUE = '*, issues!inner(archived_at)'
 const dropIssue = (rows: Loose[]): Loose[] => rows.map(({ issues: _issues, ...row }) => row)
-
-function issueParts(db: Db, ws: string, archived: boolean): Promise<Incoming>[] {
-  return ISSUE_PARTS.map(async (t) => {
-    const rows = await paged(db, t, KEYS[t], withIssue, (q) =>
-      archived ? q.eq('workspace_id', ws).not('issues.archived_at', 'is', null) : q.eq('workspace_id', ws).is('issues.archived_at', null),
-    )
-    return fetched(t, dropIssue(rows))
-  })
-}
-
-/** the people a workspace shows: its members (also those who left) and its people from Linear */
-async function profiles(db: Db, ws: string, memberIds: readonly string[]): Promise<Incoming> {
-  const parts = await Promise.all([
-    ...chunks(memberIds).map((ids) => paged(db, 'profiles', ['id'], '*', (q) => q.in('id', ids))),
-    paged(db, 'profiles', ['id'], '*', (q) => q.eq('guest_of', ws)),
-  ])
-  return fetched('profiles', parts.flat())
-}
 
 const memberIdsOf = (rows: readonly Loose[]) => [...new Set(rows.map((r) => String(r.profile_id)))]
 
-/** everything an opening workspace needs (the archive comes later, when something needs it) */
-export async function loadAll(db: Db, ws: string, meId: string, progress?: (text: string) => void): Promise<Incoming[]> {
-  const plain = ['workspaces', 'teams', 'team_members', 'labels', 'projects', 'project_teams', 'views', 'inbox', 'read_state'] as const
-  const members = paged(db, 'workspace_members', KEYS.workspace_members, '*', scope('workspace_members', ws, meId))
-  const issues = paged(db, 'issues', KEYS.issues, '*', (q) => q.eq('workspace_id', ws).is('archived_at', null), (n) =>
-    n >= PAGE ? progress?.(`Getting your team's issues: ${n.toLocaleString('en')} so far…`) : undefined,
-  )
-  return Promise.all([
-    ...plain.map(async (t) => fetched(t, await paged(db, t, KEYS[t], '*', scope(t, ws, meId)))),
-    members.then((rows) => fetched('workspace_members', rows)),
-    members.then((rows) => profiles(db, ws, memberIdsOf(rows))),
-    issues.then((rows) => fetched('issues', rows)),
-    ...issueParts(db, ws, false),
-  ])
-}
+/** reads one workspace's rows, as one person (your inbox and read marks are yours only) */
+export class Loader {
+  private db: Db
+  private ws: string
+  private meId: string
+  private page: number
 
-/** one table again, whole (catching up found too many changes in it to read them one by one) */
-export async function loadTable(db: Db, ws: string, meId: string, table: LiveTable): Promise<Incoming[]> {
-  if (table === 'profiles') {
-    const members = await paged(db, 'workspace_members', KEYS.workspace_members, 'workspace_id,profile_id', scope('workspace_members', ws, meId))
-    return [await profiles(db, ws, memberIdsOf(members))]
+  /** `page`: rows asked for per request (tests make it small) */
+  constructor(db: Db, ws: string, meId: string, { page = PAGE }: { page?: number } = {}) {
+    this.db = db
+    this.ws = ws
+    this.meId = meId
+    this.page = page
   }
-  if (table === 'issues') return [fetched('issues', await paged(db, 'issues', KEYS.issues, '*', (q) => q.eq('workspace_id', ws).is('archived_at', null)))]
-  if (table === 'issue_labels' || table === 'issue_followers' || table === 'comments') {
-    return [fetched(table, dropIssue(await paged(db, table, KEYS[table], withIssue, (q) => q.eq('workspace_id', ws).is('issues.archived_at', null))))]
+
+  private from(table: string) {
+    return (this.db as unknown as SupabaseClient).from(table)
   }
-  return [fetched(table, await paged(db, table, KEYS[table], '*', scope(table, ws, meId)))]
-}
 
-/** archived issues with their labels, followers and comments */
-export async function loadArchived(db: Db, ws: string): Promise<Incoming[]> {
-  return Promise.all([
-    paged(db, 'issues', KEYS.issues, '*', (q) => q.eq('workspace_id', ws).not('archived_at', 'is', null)).then((rows) => fetched('issues', rows)),
-    ...issueParts(db, ws, true),
-  ])
-}
+  /** every row of a select, page by page in key order, until none are left */
+  private async paged(table: string, cols: readonly string[], select: string, filter: (q: Query) => Query, onPage?: (n: number) => void): Promise<Loose[]> {
+    const out: Loose[] = []
+    let last: Loose | undefined
+    for (;;) {
+      let q = filter(this.from(table).select(select, { count: 'exact' }))
+      if (last) q = q.or(after(cols, last))
+      for (const c of cols) q = q.order(c)
+      const { data, error, count } = await q.limit(this.page)
+      if (error) throw error
+      const rows = data as unknown as Loose[]
+      out.push(...rows)
+      onPage?.(out.length)
+      // `count` is what was left before this page; without it, an empty page says it's over
+      if (!rows.length || (count !== null && rows.length >= count)) return out
+      last = rows[rows.length - 1]
+    }
+  }
 
-/**
- * What changed since `since`: changed rows of every table (archived issues too), deletions, and the workspace row
- * itself. `full`: tables with too many changes to read this way (read them whole with loadTable); `gone`: the
- * workspace isn't there for you any more (deleted, or you're no longer in it).
- */
-export async function loadChanged(
-  db: Db,
-  ws: string,
-  meId: string,
-  since: string,
-  members: ReadonlySet<string>,
-): Promise<{ inputs: Incoming[]; full: LiveTable[]; gone: boolean }> {
-  const full: LiveTable[] = []
-  const changed = async (t: LiveTable, filter: (q: Query) => Query) => {
-    const { data, error } = await filter(from(db, t).select('*')).gt('changed_at', since).order('changed_at').limit(PAGE)
+  /** a table's rows that belong to this workspace (and, for your inbox and read marks, to you) */
+  private scope(table: LiveTable): (q: Query) => Query {
+    if (table === 'workspaces') return (q) => q.eq('id', this.ws)
+    if (table === 'inbox') return (q) => q.eq('workspace_id', this.ws).eq('recipient_id', this.meId)
+    if (table === 'read_state') return (q) => q.eq('workspace_id', this.ws).eq('profile_id', this.meId)
+    return (q) => q.eq('workspace_id', this.ws)
+  }
+
+  /** an issue part's rows, of open issues or of archived ones */
+  private async parts(t: IssuePart, archived: boolean): Promise<Incoming> {
+    const rows = await this.paged(t, KEYS[t], WITH_ISSUE, (q) =>
+      archived ? q.eq('workspace_id', this.ws).not('issues.archived_at', 'is', null) : q.eq('workspace_id', this.ws).is('issues.archived_at', null),
+    )
+    return fetched(t, dropIssue(rows))
+  }
+
+  private issues(archived: boolean, onPage?: (n: number) => void): Promise<Incoming> {
+    const filter = (q: Query) => (archived ? q.eq('workspace_id', this.ws).not('archived_at', 'is', null) : q.eq('workspace_id', this.ws).is('archived_at', null))
+    return this.paged('issues', KEYS.issues, '*', filter, onPage).then((rows) => fetched('issues', rows))
+  }
+
+  /** the people a workspace shows: its members (also those who left) and its people from Linear */
+  private async profiles(memberIds: readonly string[]): Promise<Incoming> {
+    const parts = await Promise.all([
+      ...chunks(memberIds).map((ids) => this.paged('profiles', ['id'], '*', (q) => q.in('id', ids))),
+      this.paged('profiles', ['id'], '*', (q) => q.eq('guest_of', this.ws)),
+    ])
+    return fetched('profiles', parts.flat())
+  }
+
+  private whole(t: LiveTable): Promise<Incoming> {
+    return this.paged(t, KEYS[t], '*', this.scope(t)).then((rows) => fetched(t, rows))
+  }
+
+  /** everything an opening workspace needs (the archive comes later, when something needs it) */
+  all(progress?: (text: string) => void): Promise<Incoming[]> {
+    const plain = ['workspaces', 'teams', 'team_members', 'labels', 'projects', 'project_teams', 'views', 'inbox', 'read_state'] as const
+    const members = this.paged('workspace_members', KEYS.workspace_members, '*', this.scope('workspace_members'))
+    const told = (n: number) => (n >= PAGE ? progress?.(`Getting your team's issues: ${n.toLocaleString('en')} so far…`) : undefined)
+    return Promise.all([
+      ...plain.map((t) => this.whole(t)),
+      members.then((rows) => fetched('workspace_members', rows)),
+      members.then((rows) => this.profiles(memberIdsOf(rows))),
+      this.issues(false, told),
+      ...ISSUE_PARTS.map((t) => this.parts(t, false)),
+    ])
+  }
+
+  /** one table again, whole (catching up found too many changes in it to read them one by one) */
+  async table(t: LiveTable): Promise<Incoming[]> {
+    if (t === 'profiles') {
+      const members = await this.paged('workspace_members', KEYS.workspace_members, 'workspace_id,profile_id', this.scope('workspace_members'))
+      return [await this.profiles(memberIdsOf(members))]
+    }
+    if (t === 'issues') return [await this.issues(false)]
+    if (isIssuePart(t)) return [await this.parts(t, false)]
+    return [await this.whole(t)]
+  }
+
+  /** archived issues with their labels, followers and comments */
+  archived(): Promise<Incoming[]> {
+    return Promise.all([this.issues(true), ...ISSUE_PARTS.map((t) => this.parts(t, true))])
+  }
+
+  /**
+   * What changed since `since`: changed rows of every table (archived issues too), deletions, and the workspace row
+   * itself. `full`: tables with more changes than one request brings (read them whole with table()); `gone`: the
+   * workspace isn't there for you any more (deleted, or you're no longer in it).
+   */
+  async changed(since: string, members: ReadonlySet<string>): Promise<{ inputs: Incoming[]; full: LiveTable[]; gone: boolean }> {
+    const full: LiveTable[] = []
+    const changed = async (t: LiveTable, filter: (q: Query) => Query) => {
+      const { data, error, count } = await filter(this.from(t).select('*', { count: 'exact' })).gt('changed_at', since).order('changed_at').limit(this.page)
+      if (error) throw error
+      const rows = data as unknown as Loose[]
+      if (count === null ? rows.length >= this.page : count > rows.length) full.push(t)
+      return rows
+    }
+    const tables = LIVE_TABLES.filter((t) => t !== 'workspaces' && t !== 'profiles')
+    const [workspace, people, deletions, ...rest] = await Promise.all([
+      this.paged('workspaces', ['id'], '*', (q) => q.eq('id', this.ws)),
+      // the rules also let through people from your other workspaces: only this one's are kept
+      changed('profiles', (q) => q),
+      this.paged('deletions', ['id'], '*', (q) => q.eq('workspace_id', this.ws).gt('deleted_at', since)),
+      ...tables.map((t) => changed(t, this.scope(t))),
+    ])
+    const joined = new Set(members)
+    tables.forEach((t, n) => t === 'workspace_members' && rest[n].forEach((r) => joined.add(String(r.profile_id))))
+    const inputs: Incoming[] = [
+      fetched('workspaces', workspace),
+      fetched('profiles', people.filter((p) => p.guest_of === this.ws || joined.has(String(p.id)))),
+      { from: 'deletions', rows: deletions as unknown as DeletionRow[] },
+      ...tables.map((t, n) => fetched(t, rest[n])),
+    ]
+    return { inputs, full, gone: workspace.length === 0 }
+  }
+
+  /** what the groups ask for; new issues (ones we didn't have) come with their labels, followers and comments */
+  async byKeys(groups: readonly FetchGroup[], issuesNew: readonly string[]): Promise<Incoming[]> {
+    const asked = groups.map(async (g) => {
+      const rows = await this.paged(g.table, KEYS[g.table], '*', (q) => {
+        let r = q.in(g.inCol, g.values)
+        for (const [c, v] of Object.entries(g.eq)) r = r.eq(c, v)
+        // profiles and workspaces are shared between workspaces; the rest is kept to this one
+        return g.table === 'profiles' || g.table === 'workspaces' || 'workspace_id' in g.eq ? r : r.eq('workspace_id', this.ws)
+      })
+      return fetched(g.table, rows, g.values.map((v) => ({ ...g.eq, [g.inCol]: v })))
+    })
+    const [rows, parts] = await Promise.all([Promise.all(asked), this.partsOf(issuesNew)])
+    return [...rows, ...parts]
+  }
+
+  /** the labels, followers and comments of these issues */
+  async partsOf(issueIds: readonly string[]): Promise<Incoming[]> {
+    return Promise.all(
+      chunks(issueIds).flatMap((ids) => ISSUE_PARTS.map(async (t) => fetched(t, await this.paged(t, KEYS[t], '*', (q) => q.eq('workspace_id', this.ws).in('issue_id', ids))))),
+    )
+  }
+
+  /** the workspace is there for you */
+  async exists(): Promise<boolean> {
+    const { data, error } = await this.db.from('workspaces').select('id').eq('id', this.ws)
     if (error) throw error
-    const rows = data as unknown as Loose[]
-    if (rows.length >= PAGE) full.push(t)
-    return rows
+    return data.length > 0
   }
-  const tables = LIVE_TABLES.filter((t) => t !== 'workspaces' && t !== 'profiles')
-  const [workspace, people, deletions, ...rest] = await Promise.all([
-    paged(db, 'workspaces', ['id'], '*', (q) => q.eq('id', ws)),
-    // the rules also let through people from your other workspaces: only this one's are kept
-    changed('profiles', (q) => q),
-    paged(db, 'deletions', ['id'], '*', (q) => q.eq('workspace_id', ws).gt('deleted_at', since)),
-    ...tables.map((t) => changed(t, scope(t, ws, meId))),
-  ])
-  const joined = new Set(members)
-  tables.forEach((t, n) => t === 'workspace_members' && rest[n].forEach((r) => joined.add(String(r.profile_id))))
-  const inputs: Incoming[] = [
-    fetched('workspaces', workspace),
-    fetched('profiles', people.filter((p) => p.guest_of === ws || joined.has(String(p.id)))),
-    { from: 'deletions', rows: deletions as unknown as DeletionRow[] },
-    ...tables.map((t, n) => fetched(t, rest[n])),
-  ]
-  return { inputs, full, gone: workspace.length === 0 }
 }
+
+/** what a Loader reads with (LiveWorkspace's tests give it a pretend one) */
+export type Reader = Pick<Loader, 'all' | 'table' | 'archived' | 'changed' | 'byKeys' | 'partsOf' | 'exists'>
 
 /** rows asked for by key, grouped so each group is one request */
 export interface FetchGroup {
@@ -189,27 +240,6 @@ export function planFetch(reqs: readonly { table: LiveTable; key: Record<string,
     groups.set(id, g)
   }
   return [...groups.values()].flatMap((g) => chunks([...g.values]).map((values) => ({ table: g.table, eq: g.eq, inCol: g.inCol, values })))
-}
-
-/** what a group asks for, in rows; new issues (ones we didn't have) come with their labels, followers and comments */
-export async function fetchByKeys(db: Db, ws: string, groups: readonly FetchGroup[], issuesNew: readonly string[]): Promise<Incoming[]> {
-  const asked = groups.map(async (g) => {
-    const rows = await paged(db, g.table, KEYS[g.table], '*', (q) => {
-      let r = q.in(g.inCol, g.values)
-      for (const [c, v] of Object.entries(g.eq)) r = r.eq(c, v)
-      // profiles and workspaces are shared between workspaces; the rest is kept to this one
-      return g.table === 'profiles' || g.table === 'workspaces' || 'workspace_id' in g.eq ? r : r.eq('workspace_id', ws)
-    })
-    return fetched(g.table, rows, g.values.map((v) => ({ ...g.eq, [g.inCol]: v })))
-  })
-  return (await Promise.all([...asked, ...partsOf(db, ws, issuesNew)])).flat()
-}
-
-/** the labels, followers and comments of these issues */
-export function partsOf(db: Db, ws: string, issueIds: readonly string[]): Promise<Incoming>[] {
-  return chunks(issueIds).flatMap((ids) =>
-    ISSUE_PARTS.map(async (t) => fetched(t, await paged(db, t, KEYS[t], '*', (q) => q.eq('workspace_id', ws).in('issue_id', ids)))),
-  )
 }
 
 /** a raw database time, `seconds` earlier, as an exact ISO time ("…T12:27:50.816096Z"): where catching up starts */

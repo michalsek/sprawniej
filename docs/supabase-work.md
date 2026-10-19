@@ -19,6 +19,7 @@ with a reason.
 - 2026-10-19: The schema is applied with the CLI (`bunx supabase db reset --linked` while developing, `db push` later); the Supabase MCP refuses SQL with `delete`/`drop` without a confirmation this app can't show. `db reset --linked` replaced `wipe.sql`, and SQL for cleanup runs with `bunx supabase db query --linked`.
 - 2026-10-19: `import_rows` matches rows on the primary key (`unique (workspace_id, linear_id)` stays as a guard); `views` got `linear_id`; `invites.for_profile` is `on delete set null`; `ensure_profile`/`create_profile` return a set (no rows = pick a name); one catch-up message per import batch; workspaces leave no deletion notes.
 - 2026-10-19: Accepted advisor warnings: "signed-in users can execute SECURITY DEFINER function" for the 11 public functions (they are the API, each checks the caller, `anon` can't run them); leaked-password protection (paid plan); "insufficient MFA options" (no MFA in stage A).
+- 2026-10-19: Sign-out keeps only `sprawniej-chrome` (whether the sidebar is open): it says nothing about the person or the work.
 - 2026-10-19: Work happens in the session's worktree; `main` is fast-forwarded to it after each step (the session
   can't write in the main checkout directly).
 
@@ -32,8 +33,8 @@ Status: `todo`, `doing`, `done`.
 | 1 | Database schema, settings, DB tests (`supabase/`, `tests/db`, generated types) | done | 95beeff + fix round; 53/53 DB tests, QA attack scripts pass |
 | 2 | Linear mapping returns rows (pure code, `linearMap.ts`) | done | 70b978b, be04249 and a last fix; QA and code review passed |
 | 3 | Backend groundwork: `rows.ts`, `apply.ts`, registry, store additions | done | 2b367bd + fix round; QA probes re-run |
-| 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | doing | built in 537747e, 20/20 browser scenarios; QA running, review in |
-| 5 | Saving: `writes.ts` and `actions.ts` on rows | todo | after 4 |
+| 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | done | 537747e + fix round; 23/23 browser scenarios, 59/59 DB tests |
+| 5 | Saving: `writes.ts` and `actions.ts` on rows | doing | |
 | 6 | Linear import end to end (`import_rows`) | todo | after 2 and 5; parallel with 7, 8, 9 |
 | 7 | History and pictures | todo | after 5 |
 | 8 | Team features: invites, members and roles, people from Linear, ways to sign in | todo | after 5 |
@@ -155,8 +156,8 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E82 | phase 1 QA | Deleting a workspace also sends one message per guest profile | won't do | harmless |
 | E83 | phase 1 review | The team key pattern is copied three times and the login pattern four times in the app | open | phase 10 |
 | E84 | phase 1 review | `src/data/store.ts:61` issue references match `[A-Z][A-Z0-9]*`, looser than team keys | open |  |
-| E85 | phase 4 planner | Sign-out leaves other `sprawniej:` keys and comment drafts on a shared computer | open | phase 4 |
-| E86 | phase 4 planner | `session.toured` is never read (the tour uses its own key) | open | phase 4 |
+| E85 | phase 4 planner | Sign-out leaves other `sprawniej:` keys and comment drafts on a shared computer | fixed | phase 4 fix round |
+| E86 | phase 4 planner | `session.toured` is never read (the tour uses its own key) | fixed | phase 4 fix round |
 | E87 | phase 4 planner | `Crash.tsx:37` and docs/design.md promise changes are kept on this device | open | phase 5 / 10 |
 | E88 | phase 4 planner | `Step.tsx:33` `Problem` uses a raw red instead of a theme colour | open |  |
 | E89 | phase 4 planner | `Tour.tsx:28-33` queries the page on every animation frame while a tip is open | open |  |
@@ -172,18 +173,18 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E99 | phase 3 review | Write helpers send columns signed-in people can't write; `Change.fields` isn't limited to writable columns | fixed | phase 3 fix round, commit after 62a9e22 (C4) |
 | E100 | phase 3 review | `src/config.ts:5` env reads have no types | fixed | phase 3 fix round, commit after 62a9e22 (C6) |
 | E101 | phase 3 review | `select.ts:65` `PRIORITY_RANK.get(...)!` gives NaN for an unknown priority | open |  |
-| E102 | phase 4 review | A failure while opening (channel join or a bad row) leaves the spinner up for good | open | phase 4 fix round |
-| E103 | phase 4 review | Offline, the GitHub button says GitHub isn't switched on | open | phase 4 fix round |
-| E104 | phase 4 review | Sign-out tells other tabs before the sign-in is gone (double reloads, timing-dependent) | open | phase 4 fix round |
-| E105 | phase 4 review | The old `sprawniej-session` (with a GitHub key) stays until someone signs out | open | phase 4 fix round |
-| E106 | phase 4 review | The chip says "Not saved yet" during a slow join or short drop with nothing waiting | open | phase 4 fix round |
-| E107 | phase 4 review | `LiveWorkspace` lifecycle (open/close/catch-up/reopen) has no tests | open | phase 4 fix round |
-| E108 | phase 4 review | A GitHub sign-in that fails to finish says nothing and leaves `sb_flow_id` in the address | open | phase 4 fix round |
-| E109 | phase 4 review | New uses of the deprecated `FormEvent` type | open | phase 4 fix round |
-| E110 | phase 4 review | A failed fetch of asked-for rows is never retried | open | phase 4 fix round |
-| E111 | phase 4 review | Paging stops by comparing with 1000 rows, the server's row limit | open | phase 4 fix round |
+| E102 | phase 4 review | A failure while opening (channel join or a bad row) leaves the spinner up for good | fixed | phase 4 fix round |
+| E103 | phase 4 review | Offline, the GitHub button says GitHub isn't switched on | fixed | phase 4 fix round |
+| E104 | phase 4 review | Sign-out tells other tabs before the sign-in is gone (double reloads, timing-dependent) | fixed | phase 4 fix round |
+| E105 | phase 4 review | The old `sprawniej-session` (with a GitHub key) stays until someone signs out | fixed | phase 4 fix round |
+| E106 | phase 4 review | The chip says "Not saved yet" during a slow join or short drop with nothing waiting | fixed | phase 4 fix round |
+| E107 | phase 4 review | `LiveWorkspace` lifecycle (open/close/catch-up/reopen) has no tests | fixed | phase 4 fix round |
+| E108 | phase 4 review | A GitHub sign-in that fails to finish says nothing and leaves `sb_flow_id` in the address | fixed | phase 4 fix round |
+| E109 | phase 4 review | New uses of the deprecated `FormEvent` type | fixed | phase 4 fix round |
+| E110 | phase 4 review | A failed fetch of asked-for rows is never retried | fixed | phase 4 fix round |
+| E111 | phase 4 review | Paging stops by comparing with 1000 rows, the server's row limit | fixed | phase 4 fix round |
 | E112 | phase 4 implementer | `useHistory.ts:57` and `ImportPage.tsx:72` still read the old save status | open | phases 6, 7 |
-| E113 | phase 4 implementer | After a workspace goes away while open, the chip keeps saying Saved behind the dialog | open | phase 4 fix round |
+| E113 | phase 4 implementer | After a workspace goes away while open, the chip keeps saying Saved behind the dialog | fixed | phase 4 fix round |
 | E114 | phase 5 planner | Settings: "Your GitHub profile stays as it is" / "Use your GitHub name" mean nothing now | open | phase 8 |
 | E115 | phase 5 planner | TeamMenu offers "Delete team" and Settings an editable workspace name to members who can't | open | phase 8 |
 | E116 | phase 5 planner | `Editor.tsx:26` imports `mergeText` from `src/sync/merge.ts` (deleted in phase 10) | open | phase 5 |
@@ -205,6 +206,12 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E132 | phase 9 planner | Catch-up reads changed profiles across all your workspaces and filters in the browser | open | phase 9 |
 | E133 | phase 9 planner | Inbox deletions leave no note, so catch-ups in memory miss notes removed meanwhile | open | phase 9 (inbox checked at open) |
 | E134 | phase 9 planner | `profileId` isn't kept across reloads, so even a cached open waits for one request | won't do | one small request; keeping it adds a stale-profile case |
+| E135 | phase 4 QA | A deep link is lost after signing in and picking a workspace | fixed | phase 4 fix round |
+| E136 | phase 4 QA | Waiting screens repeat their title as their text | fixed | phase 4 fix round |
+| E137 | phase 4 QA | The profile load error always blames the connection | fixed | phase 4 fix round |
+| E138 | phase 4 QA | An issue page stays blank if loading the archive fails once | fixed | phase 4 fix round |
+| E139 | phase 4 QA | Sidebar "Your GitHub profile" links to github.com/<handle>, but handles are free now | fixed | phase 4 fix round |
+| E140 | phase 4 QA | `cleanup-tests.sql` wipes every dbtest workspace, also another run's in progress | won't do | test runs happen one at a time; documented in the briefs |
 
 ## Waiting on the user
 

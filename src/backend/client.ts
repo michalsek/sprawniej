@@ -16,14 +16,23 @@ export function backendConfig(env: Record<string, string | undefined> = import.m
 
 export const isSetUp = (): boolean => backendConfig() !== null
 
-let client: SupabaseClient<Database> | null | undefined
+export type Db = SupabaseClient<Database>
+
+let client: Db | null | undefined
 
 /** null when the app isn't set up */
-export function getClient(): SupabaseClient<Database> | null {
+export function getClient(): Db | null {
   if (client !== undefined) return client
   const config = backendConfig()
   const url = import.meta.env.VITE_SUPABASE_URL?.trim()
   if (!config && url && !isWebAddress(url)) console.warn(`VITE_SUPABASE_URL is not a web address: ${url}`)
   client = config && createClient<Database>(config.url, config.key, { auth: { flowType: 'pkce', detectSessionInUrl: true, persistSession: true } })
   return client
+}
+
+/** for calls made only once the app is set up (the screens that make them don't show otherwise) */
+export function requireClient(): Db {
+  const db = getClient()
+  if (!db) throw new Error("Sprawniej isn't set up yet.")
+  return db
 }

@@ -11,8 +11,11 @@ import { Button } from '@/ui/button'
 import { NewWorkspace } from './NewWorkspace'
 import { Problem, Step } from './Step'
 
+/** pages every workspace has: a link to one (opened before signing in) is kept while you choose */
+const WORKSPACE_PAGE = /^\/(inbox|my-issues|projects|project\/[^/]+|views|view\/[^/]+|team\/[^/]+(\/.*)?|issue\/[^/]+|help|whats-new|settings(\/import)?)$/
+
 export function PickWorkspace() {
-  const [, navigate] = useLocation()
+  const [loc, navigate] = useLocation()
   const { user, recent, open } = useSession()
   const { signOut, dialog: signOutDialog } = useSignOut()
   const [list, setList] = useState<WorkspaceInfo[] | null>(null)
@@ -43,7 +46,7 @@ export function PickWorkspace() {
 
   const pick = (w: WorkspaceInfo) => {
     open({ id: w.id, name: w.name })
-    navigate('/', { replace: true })
+    if (!WORKSPACE_PAGE.test(loc)) navigate('/', { replace: true })
   }
   const empty = list !== null && !list.length
 

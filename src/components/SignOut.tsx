@@ -3,7 +3,7 @@
  * they're lost.
  */
 import { useState } from 'react'
-import { signOutEverywhere } from '@/app/signOut'
+import { signOutOfThisBrowser } from '@/app/signOut'
 import { backend } from '@/backend'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
@@ -16,6 +16,7 @@ export function useSignOut(then?: string) {
   async function signOut(force = false) {
     setBusy(true)
     if (!force) {
+      // what couldn't be sent shows in pending() below
       await backend.flush().catch(() => {})
       if (backend.pending() > 0 && !navigator.onLine) {
         setBusy(false)
@@ -23,7 +24,7 @@ export function useSignOut(then?: string) {
         return
       }
     }
-    await signOutEverywhere(then)
+    await signOutOfThisBrowser(then)
   }
 
   const dialog = (

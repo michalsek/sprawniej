@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { applyRows, emptyLive, type Incoming, type LiveState, type StoreSlice } from '@/backend/apply'
-import { fetchByKeys, loadAll, loadArchived, loadChanged, planFetch, sinceMark } from '@/backend/load'
+import { Loader, planFetch, sinceMark } from '@/backend/load'
 import { Registry } from '@/backend/registry'
 import { EMPTY } from '@/data/store'
 import { closeChannels, enabled, getWorld, newIssue, newWorkspace, ok, ulid, type World } from './support'
@@ -28,11 +28,12 @@ describe.skipIf(!enabled)('reading a workspace', () => {
   }, 60_000)
   afterAll(closeChannels)
 
+  const as = (who: World['ana'], page?: number) => new Loader(who.db, ws, who.profileId, { page })
   const apply = (state: LiveState, inputs: Incoming[], registry = new Registry()) =>
     applyRows(state, fresh(), inputs, { workspaceId: ws, meId: w.ana.profileId, registry })
 
   test('opening reads the open issues with their labels and comments, the teams, the people', async () => {
-    const inputs = await loadAll(w.ana.db, ws, w.ana.profileId)
+    const inputs = await as(w.ana).all()
     const r = apply(emptyLive(), inputs)
     expect(r.patch.workspace?.name).toEndWith(' load')
     expect(Object.keys(r.patch.teams ?? {})).toEqual(['ENG'])
@@ -49,7 +50,7 @@ describe.skipIf(!enabled)('reading a workspace', () => {
   })
 
   test('the archive comes on its own, with its comments', async () => {
-    const r = apply(emptyLive(), [...(await loadAll(w.ana.db, ws, w.ana.profileId)), ...(await loadArchived(w.ana.db, ws))])
+    const r = apply(emptyLive(), [...(await as(w.ana).all()), ...(await as(w.ana).archived())])
     expect(r.patch.archive?.[done]?.title).toBe('Archived one')
     expect(r.patch.archive?.[done]?.comments?.map((c) => c.body)).toEqual(['On the archived one'])
     expect(r.patch.archive?.[open]).toBeUndefined()
@@ -57,17 +58,19 @@ describe.skipIf(!enabled)('reading a workspace', () => {
 
   test('catching up brings changed rows and deletions', async () => {
     const registry = new Registry()
-    const first = apply(emptyLive(), await loadAll(w.ana.db, ws, w.ana.profileId), registry)
+    const first = apply(emptyLive(), await as(w.ana).all(), registry)
     const since = sinceMark(first.state.mark!, 0)
     await ok(w.ana.db.from('issues').update({ title: 'Renamed' }).eq('id', open))
     await ok(w.ana.db.from('issue_labels').delete().eq('issue_id', open).eq('label_id', label))
     const members = new Set([w.ana.profileId])
-    const changed = await loadChanged(w.ana.db, ws, w.ana.profileId, since, members)
+    const changed = await as(w.ana).changed(since, members)
     expect(changed.gone).toBe(false)
     expect(changed.full).toEqual([])
     const issues = changed.inputs.find((i) => i.from === 'fetch' && i.table === 'issues')
-    // archived issues count too (the archiving came after everything the first read saw)
-    expect(issues?.from === 'fetch' && issues.rows.map((r) => r.title)).toContain('Renamed')
+    // archived issues count too: archiving one came after everything the first read saw
+    const titles = issues?.from === 'fetch' ? issues.rows.map((r) => r.title) : []
+    expect(titles).toContain('Renamed')
+    expect(titles).toContain('Archived one')
     const deletions = changed.inputs.find((i) => i.from === 'deletions')
     expect(deletions?.from === 'deletions' && deletions.rows.map((d) => d.row_key)).toEqual([{ issue_id: open, label_id: label }])
     const next = applyRows(first.state, { ...fresh(), ...first.patch } as StoreSlice, changed.inputs, { workspaceId: ws, meId: w.ana.profileId, registry })
@@ -77,13 +80,34 @@ describe.skipIf(!enabled)('reading a workspace', () => {
 
   test('rows asked for by key, a new issue with its parts', async () => {
     const groups = planFetch([{ table: 'issues', key: { id: open } }, { table: 'labels', key: { id: label } }])
-    const inputs = await fetchByKeys(w.ana.db, ws, groups, [open])
+    const inputs = await as(w.ana).byKeys(groups, [open])
     const tables = inputs.flatMap((i) => (i.from === 'fetch' && i.rows.length ? [i.table] : []))
     expect(tables.sort()).toEqual(['comments', 'issues', 'labels'])
   })
 
+  test('page after page, whatever the page size: everything comes, nothing twice', async () => {
+    const more = [(await newIssue(w.ana, ws, eng)).id, (await newIssue(w.ana, ws, eng)).id]
+    const second = ulid()
+    await ok(w.ana.db.from('labels').insert({ id: second, workspace_id: ws, name: 'Second', color: '#000000' }))
+    // two rows with the same first key column: the page after one goes on within the issue
+    await ok(w.ana.db.from('issue_labels').insert([label, second].map((label_id) => ({ workspace_id: ws, issue_id: more[0], label_id }))))
+    for (const body of ['One', 'Two']) await ok(w.ana.db.from('comments').insert({ id: ulid(), workspace_id: ws, issue_id: more[1], body }))
+    const inputs = await as(w.ana, 1).all()
+    const rows = (t: string) => inputs.flatMap((i) => (i.from === 'fetch' && i.table === t ? i.rows : []))
+    const whole = await as(w.ana).all()
+    const wholeRows = (t: string) => whole.flatMap((i) => (i.from === 'fetch' && i.table === t ? i.rows : []))
+    const key = (r: Record<string, unknown>) => String(r.id ?? `${String(r.issue_id)}|${String(r.label_id)}`)
+    for (const t of ['issues', 'comments', 'labels', 'issue_labels']) {
+      expect(rows(t).map(key).sort()).toEqual(wholeRows(t).map(key).sort())
+      expect(new Set(rows(t).map(key)).size).toBe(rows(t).length)
+    }
+    expect(rows('issues').length).toBeGreaterThanOrEqual(3)
+    expect(rows('issue_labels').length).toBe(2)
+    expect(rows('comments').length).toBe(3)
+  })
+
   test('a workspace you are not in reads as gone', async () => {
-    const changed = await loadChanged(w.cy.db, ws, w.cy.profileId, '2026-01-01T00:00:00Z', new Set())
+    const changed = await as(w.cy).changed('2026-01-01T00:00:00Z', new Set())
     expect(changed.gone).toBe(true)
   })
 })

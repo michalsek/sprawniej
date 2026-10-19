@@ -9,7 +9,8 @@ import type { AuthChangeEvent, Session as AuthSession, User } from '@supabase/su
 import { create } from 'zustand'
 import { authRedirectUrl } from '@/config'
 import { useSession } from '@/session'
-import { backendConfig, getClient } from './client'
+import { backendConfig, getClient, requireClient } from './client'
+import { isUnreachable, UNREACHABLE } from './problem'
 
 export interface AuthUser {
   id: string
@@ -34,7 +35,6 @@ export const useAuth = create<AuthState>()(() => ({ ready: false, user: null, lo
 export const RETURN_KEY = 'sprawniej:return-to'
 /** set just before "Sign out", so the sign-out other tabs hear about is told apart from one that just happened */
 const SIGNING_OUT = 'sprawniej:signing-out'
-const TABS = 'sprawniej-tabs'
 
 /** a problem with signing in, ready to show */
 export class AuthProblem extends Error {}
@@ -59,7 +59,8 @@ export function takeReturnedUrl(
   const saved = store.getItem(RETURN_KEY)
   if (saved === null && !failed) return undefined
   store.removeItem(RETURN_KEY)
-  for (const p of ERROR_PARAMS) params.delete(p)
+  // a failed sign-in's leftovers mean nothing to the client: it would try them and fail again
+  if (failed) for (const p of [...ERROR_PARAMS, 'code', 'sb_flow_id']) params.delete(p)
   const blank = loc.hash === '' || loc.hash === '#' || loc.hash === '#/' || !!hashParams
   const hash = blank ? (saved?.startsWith('#/') ? saved : '#/') : loc.hash
   const search = params.toString()
@@ -79,15 +80,13 @@ const MESSAGES: Record<string, string> = {
   over_email_send_rate_limit: 'Too many tries in a short time. Wait a minute and try again.',
   signup_disabled: "New accounts can't be created right now. Ask whoever looks after Sprawniej.",
 }
-const UNREACHABLE = "Can't reach Sprawniej. Check your internet connection and try again."
 
 /** what to say when signing in or up fails */
 export function friendlyAuthError(e: unknown): string {
   if (e instanceof AuthProblem) return e.message
   const err = (e ?? {}) as { name?: unknown; code?: unknown; status?: unknown }
   if (typeof err.code === 'string' && MESSAGES[err.code]) return MESSAGES[err.code]
-  // no answer at all (offline, blocked): the client calls it a retryable fetch error, the browser a TypeError
-  if (err.name === 'AuthRetryableFetchError' || e instanceof TypeError || err.status === 0) return UNREACHABLE
+  if (isUnreachable(e) || err.status === 0) return UNREACHABLE
   return 'Something went wrong while signing in. Try again in a moment.'
 }
 
@@ -100,12 +99,6 @@ const toUser = (u: User | null | undefined): AuthUser | null =>
         avatarUrl: String(u.user_metadata?.avatar_url ?? ''),
       }
     : null
-
-const client = () => {
-  const db = getClient()
-  if (!db) throw new AuthProblem("Sprawniej isn't set up yet.")
-  return db
-}
 
 /** this tab is signing out on purpose and reloads by itself */
 let leaving = false
@@ -133,23 +126,25 @@ function onAuthEvent(event: AuthChangeEvent, session: AuthSession | null) {
   const user = toUser(session?.user)
   const was = useAuth.getState()
   switch (event) {
-    case 'INITIAL_SESSION':
-      setUser(user, { ready: true })
-      break
     case 'SIGNED_IN':
       if (!user) break
       // someone else signed in (here, or in another tab): nothing of the last person's may stay on screen
       if (lastUserId && lastUserId !== user.id) return startOver()
+      localStorage.removeItem(SIGNING_OUT)
       setUser(user, { lost: false, urlProblem: undefined })
       break
     case 'SIGNED_OUT':
       if (leaving) return
+      // "Sign out" in another tab: the client tells every tab, and the mark says it was on purpose
       if (deliberate()) return startOver()
       setUser(null, { lost: was.user !== null || was.lost })
       break
     case 'TOKEN_REFRESHED':
     case 'USER_UPDATED':
       if (user) setUser(user)
+      break
+    // the first state comes from getSession() in startAuth; the rest (password recovery, MFA) isn't used yet
+    default:
       break
   }
 }
@@ -162,80 +157,77 @@ export function startAuth(urlProblem?: string): void {
   if (!db) return
   if (urlProblem) useAuth.setState({ urlProblem })
   if (!deliberate()) localStorage.removeItem(SIGNING_OUT)
+  const cameBack = new URL(location.href).searchParams.has('code')
   // the client's own calls must not be awaited inside its callback (they wait for each other), so work comes after it
   db.auth.onAuthStateChange((event, session) => {
     setTimeout(() => onAuthEvent(event, session), 0)
   })
-  void db.auth.getSession().then(
-    ({ data }) => {
-      setUser(toUser(data.session?.user), { ready: true })
-      // a ?code the client didn't use (an old link, a sign-in started elsewhere) means nothing now
-      const url = new URL(location.href)
-      if (url.searchParams.has('code')) {
-        url.searchParams.delete('code')
-        history.replaceState(history.state, '', url.toString())
-      }
-    },
-    () => useAuth.setState({ ready: true }),
-  )
-  if (typeof BroadcastChannel !== 'undefined') {
-    new BroadcastChannel(TABS).onmessage = (e: MessageEvent<{ t?: string }>) => {
-      if (e.data?.t === 'signed-out') startOver()
-    }
+  const settle = (signedIn: AuthUser | null) => {
+    setUser(signedIn, { ready: true })
+    // the client takes ?code off once it turned it into a sign-in; one still there didn't work (or wasn't for us)
+    const url = new URL(location.href)
+    if (!url.searchParams.has('code')) return
+    url.searchParams.delete('code')
+    url.searchParams.delete('sb_flow_id')
+    history.replaceState(history.state, '', url.toString())
+    if (cameBack && !signedIn) useAuth.setState({ urlProblem: GITHUB_UNFINISHED })
   }
+  db.auth.getSession().then(
+    ({ data }) => settle(toUser(data.session?.user)),
+    // the stored sign-in can't be read: start signed out
+    () => settle(null),
+  )
 }
 
 export async function signInWithPassword(email: string, password: string): Promise<void> {
-  const { error } = await client().auth.signInWithPassword({ email: email.trim(), password })
+  const { error } = await requireClient().auth.signInWithPassword({ email: email.trim(), password })
   if (error) throw new AuthProblem(friendlyAuthError(error))
 }
 
 /** 'check-email' when new accounts have to open an emailed link first */
 export async function signUpWithPassword(email: string, password: string): Promise<'signed-in' | 'check-email'> {
-  const { data, error } = await client().auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: authRedirectUrl() } })
+  const { data, error } = await requireClient().auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: authRedirectUrl() } })
   if (error) throw new AuthProblem(friendlyAuthError(error))
   return data.session ? 'signed-in' : 'check-email'
 }
 
-let github: Promise<boolean> | undefined
+let github: Promise<'on' | 'off' | 'unknown'> | undefined
 
-/** whoever looks after Sprawniej has switched GitHub sign-in on */
-export function githubAvailable(): Promise<boolean> {
+/** whoever looks after Sprawniej has switched GitHub sign-in on ('unknown': Sprawniej can't be reached to ask) */
+export function githubAvailable(): Promise<'on' | 'off' | 'unknown'> {
   const config = backendConfig()
-  if (!config) return Promise.resolve(false)
+  if (!config) return Promise.resolve('off')
   github ??= fetch(`${config.url}/auth/v1/settings`, { headers: { apikey: config.key } })
     .then((r) => (r.ok ? (r.json() as Promise<{ external?: Record<string, unknown> }>) : Promise.reject(new Error(String(r.status)))))
-    .then((s) => s.external?.github === true)
+    .then((s) => (s.external?.github === true ? 'on' : 'off'))
     .catch(() => {
-      github = undefined // ask again next time
-      return false
+      github = undefined // not known: ask again next time
+      return 'unknown'
     })
   return github
 }
 
 /** leaves for GitHub and comes back signed in */
 export async function signInWithGitHub(): Promise<void> {
-  if (!(await githubAvailable())) throw new AuthProblem(GITHUB_OFF)
+  const available = await githubAvailable()
+  if (available !== 'on') throw new AuthProblem(available === 'off' ? GITHUB_OFF : UNREACHABLE)
   sessionStorage.setItem(RETURN_KEY, location.hash || '#/')
-  const { error } = await client().auth.signInWithOAuth({ provider: 'github', options: { redirectTo: authRedirectUrl() } })
+  const { error } = await requireClient().auth.signInWithOAuth({ provider: 'github', options: { redirectTo: authRedirectUrl() } })
   if (error) {
     sessionStorage.removeItem(RETURN_KEY)
     throw new AuthProblem(friendlyAuthError(error))
   }
 }
 
-/** signs out in this browser only (other devices stay signed in) */
-export async function signOutHere(): Promise<void> {
+/**
+ * Signs out in this browser only (other devices stay signed in). The mark goes first: the client tells the other
+ * tabs as it signs out, and they read the mark to know it was on purpose (then they start over too).
+ */
+export async function signOutLocally(): Promise<void> {
   leaving = true
   localStorage.setItem(SIGNING_OUT, String(Date.now()))
   const db = getClient()
-  // the sign-in is forgotten here even when the database can't be reached
+  // the sign-in is forgotten here even when Sprawniej can't be reached (it only fails to end it there too)
   if (db) await db.auth.signOut({ scope: 'local' }).catch(() => {})
-}
-
-export function tellOtherTabs(msg: { t: 'signed-out' }): void {
-  if (typeof BroadcastChannel === 'undefined') return
-  const ch = new BroadcastChannel(TABS)
-  ch.postMessage(msg)
-  ch.close()
+  useAuth.setState({ user: null, lost: false })
 }

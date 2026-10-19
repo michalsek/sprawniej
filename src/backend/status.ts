@@ -1,7 +1,7 @@
 /** What the save chip in the top bar says (src/app/SaveStatus.tsx), and the facts it comes from. */
 import { create } from 'zustand'
 
-export type SaveState = 'loading' | 'saved' | 'saving' | 'offline' | 'error' | 'signed-out'
+export type SaveState = 'loading' | 'saved' | 'saving' | 'offline' | 'reconnecting' | 'error' | 'signed-out' | 'closed'
 
 export interface SaveStatus {
   state: SaveState
@@ -24,11 +24,12 @@ export const resetStatus = () => useSaveStatus.setState({ ...START, detail: unde
 
 /**
  * What the chip says once a workspace is open. `channelsUp`: both live channels are joined; `failing`: catching up
- * with teammates' changes keeps failing.
+ * with teammates' changes keeps failing; `pending`: your changes still on their way (phase 5). Not reaching
+ * Sprawniej is only worth a warning when something of yours is waiting; otherwise it's a calm "Reconnecting…".
  */
-export function connectionState(online: boolean, channelsUp: boolean, signedIn: boolean, failing: boolean): SaveState {
+export function connectionState(online: boolean, channelsUp: boolean, signedIn: boolean, failing: boolean, pending = 0): SaveState {
   if (!signedIn) return 'signed-out'
   if (!online) return 'offline'
-  if (failing || !channelsUp) return 'error'
-  return 'saved'
+  if (failing || !channelsUp) return pending > 0 ? 'error' : 'reconnecting'
+  return pending > 0 ? 'saving' : 'saved'
 }

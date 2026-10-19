@@ -1,5 +1,5 @@
 /** The first screen: sign in (with GitHub, or an email and a password), or create an account. */
-import { useState, type FormEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
 import { friendlyAuthError, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
 import { Button } from '@/ui/button'
@@ -42,7 +42,7 @@ export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: 
     }
   }
 
-  async function submit(e: FormEvent) {
+  async function submit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
     if (!email.trim() || !password || busy) return
     setBusy('email')

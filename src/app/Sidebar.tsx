@@ -1,7 +1,7 @@
 /** The left column: product name, personal pages, workspace pages, your teams, and you at the bottom. */
 import { useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'wouter'
-import { SquarePen, ChevronDown, ChevronsUpDown, CircleHelp, CircleUser, Inbox, Layers, LogOut, Box, Plus, Settings, SquareStack, Repeat, ExternalLink, Sparkles } from 'lucide-react'
+import { SquarePen, ChevronDown, ChevronsUpDown, CircleHelp, CircleUser, Inbox, Layers, LogOut, Box, Plus, Settings, SquareStack, Repeat, Sparkles } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { Logo } from '@/components/Logo'
 import { PersonAvatar } from '@/components/Avatar'
@@ -113,9 +113,9 @@ function Me() {
           <Repeat /> Switch workspace
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <a href={`https://github.com/${me.login}`} target="_blank" rel="noreferrer">
-            <CircleUser /> Your GitHub profile <ExternalLink className="ml-auto" />
-          </a>
+          <Link href="/settings">
+            <CircleUser /> Your account
+          </Link>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem asChild>

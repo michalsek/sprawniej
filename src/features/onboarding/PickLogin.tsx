@@ -1,5 +1,5 @@
 /** Signed in for the first time: your name and @handle, the way teammates will see you. */
-import { useState, type FormEvent } from 'react'
+import { useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '@/backend/auth'
 import { createProfile, LOGIN_PATTERN, suggestLogin, type MyProfile } from '@/backend/profiles'
@@ -20,7 +20,7 @@ export function PickLogin({ onDone }: { onDone: (p: MyProfile) => void }) {
   const bad = !!login && !LOGIN_PATTERN.test(login)
   const ok = !!name.trim() && !!login && !bad
 
-  async function submit(e?: FormEvent) {
+  async function submit(e?: SubmitEvent<HTMLFormElement>) {
     e?.preventDefault()
     if (!ok || busy) return
     setBusy(true)

@@ -4,7 +4,7 @@
  */
 import type { Person } from '@/model/schema'
 import { plain } from '@/lib/plain'
-import { getClient } from './client'
+import { requireClient } from './client'
 import { friendlyDbError } from './problem'
 import { rowToPerson } from './rows'
 
@@ -16,24 +16,19 @@ export interface MyProfile {
   person: Person
 }
 
-const db = () => {
-  const c = getClient()
-  if (!c) throw new Error("Sprawniej isn't set up yet.")
-  return c
-}
-
 /** null: no handle picked yet */
 export async function ensureProfile(): Promise<MyProfile | null> {
-  const { data, error } = await db().rpc('ensure_profile').maybeSingle()
+  const { data, error } = await requireClient().rpc('ensure_profile').maybeSingle()
   if (error) throw error
   return data ? { id: data.id, person: rowToPerson(data) } : null
 }
 
 /** throws an Error whose message can be shown as it is */
 export async function createProfile(login: string, name: string): Promise<MyProfile> {
-  const { data, error } = await db().rpc('create_profile', { p_login: login.trim(), p_name: name.trim() }).maybeSingle()
+  const { data, error } = await requireClient().rpc('create_profile', { p_login: login.trim(), p_name: name.trim() }).maybeSingle()
   // picked already (in another tab, say): that one it is
   if (error?.code === 'SP001') {
+    // can't read it now: say what went wrong with picking instead
     const mine = await ensureProfile().catch(() => null)
     if (mine) return mine
   }

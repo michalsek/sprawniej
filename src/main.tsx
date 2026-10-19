@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from '@/app/App'
 import { Crash } from '@/app/Crash'
+import { forgetOldVersion } from '@/app/signOut'
 import { watchForUpdates } from '@/app/updates'
 import { backend } from '@/backend'
 import { startAuth, takeReturnedUrl } from '@/backend/auth'
@@ -17,6 +18,7 @@ window.sprawniej = { ...window.sprawniej, actions: { ...actions }, backend: { st
 window.addEventListener('load', () => setTimeout(() => sessionStorage.removeItem('sprawniej:reloaded-for-update'), 10_000))
 
 watchForUpdates()
+forgetOldVersion()
 
 // back from GitHub: the route you were on, and words for a sign-in that didn't finish; then the sign-in starts
 if (isSetUp()) startAuth(takeReturnedUrl(location, sessionStorage, (url) => history.replaceState(history.state, '', url)))

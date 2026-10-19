@@ -6,11 +6,9 @@
  * A channel that drops comes back by itself (and says SUBSCRIBED again); what was sent meanwhile is lost, so track()
  * tells index.ts when to catch up.
  */
-import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js'
-import type { Database } from './database.types'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+import type { Db } from './client'
 import type { Message } from './tables'
-
-type Db = SupabaseClient<Database>
 
 export type Topic = 'ws' | 'me'
 export type ChannelStatus = 'joining' | 'SUBSCRIBED' | 'CHANNEL_ERROR' | 'TIMED_OUT' | 'CLOSED'
@@ -18,18 +16,39 @@ export type ChannelStatus = 'joining' | 'SUBSCRIBED' | 'CHANNEL_ERROR' | 'TIMED_
 /** how long joining may take before the workspace opens without it (it keeps trying) */
 const SLOW = 10_000
 
+/** what arrives looks like a message (anything else, from a newer or broken sender, is skipped) */
+export function isMessage(p: unknown): p is Message {
+  if (!p || typeof p !== 'object') return false
+  const m = p as Record<string, unknown>
+  if (m.op === 'catch_up') return m.table === undefined || typeof m.table === 'string'
+  return (m.op === 'INSERT' || m.op === 'UPDATE' || m.op === 'DELETE') && typeof m.table === 'string' && !!m.row && typeof m.row === 'object' && !Array.isArray(m.row)
+}
+
+export interface ChannelEvents {
+  message(m: Message): void
+  status(t: Topic, s: ChannelStatus, err?: Error): void
+}
+
+/** what an open workspace needs from its channels (tests give it pretend ones) */
+export interface ChannelsLike {
+  readonly status: Record<Topic, ChannelStatus>
+  readonly closing: boolean
+  join(): Promise<'up' | 'slow' | 'denied'>
+  close(): Promise<void>
+}
+
 /** a refusal: the database rules said no (not "can't reach") */
 const isDenied = (err: Error | undefined) => !!err && /permission|unauthori[sz]ed|not allowed|denied/i.test(err.message)
 
-export class Channels {
+export class Channels implements ChannelsLike {
   readonly status: Record<Topic, ChannelStatus> = { ws: 'joining', me: 'joining' }
   closing = false
   private db: Db
   private topics: Record<Topic, string>
-  private on: { message(m: Message): void; status(t: Topic, s: ChannelStatus, err?: Error): void }
+  private on: ChannelEvents
   private list: RealtimeChannel[] = []
 
-  constructor(db: Db, workspaceId: string, profileId: string, on: Channels['on']) {
+  constructor(db: Db, workspaceId: string, profileId: string, on: ChannelEvents) {
     this.db = db
     this.topics = { ws: `ws:${workspaceId}`, me: `me:${profileId}` }
     this.on = on
@@ -55,7 +74,7 @@ export class Channels {
       for (const topic of ['ws', 'me'] as const) {
         const ch = this.db.channel(this.topics[topic], { config: { private: true } })
         ch.on('broadcast', { event: 'change' }, (m) => {
-          if (!this.closing) this.on.message(m.payload as Message)
+          if (!this.closing && isMessage(m.payload)) this.on.message(m.payload)
         })
         ch.subscribe((s, err) => {
           this.status[topic] = s
@@ -73,6 +92,7 @@ export class Channels {
   async close(): Promise<void> {
     this.closing = true
     // the client keeps one channel per topic: opening the same workspace again must wait until these are gone
+    // a channel that can't say goodbye (offline) is dropped by the client all the same
     await Promise.all(this.list.map((ch) => this.db.removeChannel(ch).catch(() => {})))
     this.list = []
     this.status.ws = 'CLOSED'

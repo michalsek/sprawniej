@@ -8,6 +8,7 @@ import { useLocation } from 'wouter'
 import { Loader2 } from 'lucide-react'
 import { backend, useBackend } from '@/backend'
 import { useAuth } from '@/backend/auth'
+import { friendlyDbError } from '@/backend/problem'
 import { ensureProfile, type MyProfile } from '@/backend/profiles'
 import { useSaveStatus } from '@/backend/status'
 import { useSignOut } from '@/components/SignOut'
@@ -16,18 +17,31 @@ import { PickLogin } from '@/features/onboarding/PickLogin'
 import { PickWorkspace } from '@/features/onboarding/PickWorkspace'
 import { Problem, Step } from '@/features/onboarding/Step'
 import { SignIn, SignInForm } from '@/features/onboarding/Welcome'
-import type { Person } from '@/model/schema'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog'
 
-function Waiting({ title }: { title: string }) {
+/** a title and a spinner; `line`: how far it got, when there's something to say */
+function Waiting({ title, line }: { title: string; line?: string }) {
   return (
     <Step title={title}>
-      <p className="flex items-center gap-2 text-muted-foreground">
-        <Loader2 className="size-4 animate-spin" /> Just a moment.
+      <p className="flex items-center gap-2 text-muted-foreground" role="status">
+        <Loader2 className="size-4 animate-spin" aria-label="Loading" /> {line}
       </p>
     </Step>
+  )
+}
+
+/** a dialog that stays until its own button is used (nothing else may close it) */
+function Blocking({ title, text, children }: { title: string; text: string; children: ReactNode }) {
+  return (
+    <Dialog open>
+      <DialogContent className="sm:max-w-md" showCloseButton={false} onEscapeKeyDown={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+        <DialogTitle>{title}</DialogTitle>
+        <DialogDescription>{text}</DialogDescription>
+        {children}
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -41,7 +55,7 @@ function JoinLater() {
   )
 }
 
-function ProfileFailed({ onRetry }: { onRetry: () => void }) {
+function ProfileFailed({ problem, onRetry }: { problem: string; onRetry: () => void }) {
   const { signOut, dialog } = useSignOut()
   return (
     <Step
@@ -58,21 +72,8 @@ function ProfileFailed({ onRetry }: { onRetry: () => void }) {
       }
     >
       {dialog}
-      <Problem>Can't reach Sprawniej. Check your internet connection and try again.</Problem>
+      <Problem>{problem}</Problem>
     </Step>
-  )
-}
-
-/** the sign-in ran out: sign in again without leaving the page */
-function SignInAgain() {
-  return (
-    <Dialog open>
-      <DialogContent className="sm:max-w-md" showCloseButton={false} onEscapeKeyDown={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
-        <DialogTitle>Please sign in again</DialogTitle>
-        <DialogDescription>You were signed out, maybe because it's been a while. Sign in to carry on; everything here stays as it is.</DialogDescription>
-        <SignInForm />
-      </DialogContent>
-    </Dialog>
   )
 }
 
@@ -83,6 +84,7 @@ const GONE = {
 }
 
 function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me: MyProfile; children: ReactNode }) {
+  const [, navigate] = useLocation()
   const signedIn = useAuth((s) => !!s.user)
   // before this workspace's opening starts, what the backend says is about the last one
   const ours = useBackend((s) => s.workspaceId === workspaceId)
@@ -92,6 +94,7 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
   const progress = useSaveStatus((s) => s.progress)
   const name = useData((s) => s.workspace?.name)
   const [attempt, setAttempt] = useState(0)
+  // the person as they were when it opened: a new name from the database shows through the store, not by reopening
   const [person] = useState(me.person)
 
   useEffect(() => {
@@ -104,9 +107,11 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
     if (phase === 'open' && name) useSession.getState().open({ id: workspaceId, name })
   }, [phase, name, workspaceId])
 
-  const another = () => {
-    useSession.getState().forget(workspaceId)
-    void backend.close()
+  /** back to the list, from the start (the route was this workspace's) */
+  const chooseAnother = (forget: boolean) => {
+    navigate('/', { replace: true })
+    if (forget) useSession.getState().forget(workspaceId)
+    else useSession.getState().close()
   }
 
   if (phase === 'failed') {
@@ -119,12 +124,12 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
               <Button size="lg" onClick={() => setAttempt((n) => n + 1)}>
                 Try again
               </Button>
-              <Button variant="outline" size="lg" onClick={() => useSession.getState().close()}>
+              <Button variant="outline" size="lg" onClick={() => chooseAnother(false)}>
                 Choose another workspace
               </Button>
             </>
           ) : (
-            <Button size="lg" onClick={another}>
+            <Button size="lg" onClick={() => chooseAnother(true)}>
               Choose another workspace
             </Button>
           )
@@ -138,36 +143,28 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
       </Step>
     )
   }
-  if (phase !== 'open' && phase !== 'gone') {
-    return (
-      <Step title="Opening your workspace…">
-        <p className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> {progress ?? 'Just a moment.'}
-        </p>
-      </Step>
-    )
-  }
+  if (phase !== 'open' && phase !== 'gone') return <Waiting title="Opening your workspace…" line={progress} />
   const ended = phase === 'gone' && gone ? GONE[gone] : null
   return (
     <>
       {children}
       {ended && (
-        <Dialog open>
-          <DialogContent className="sm:max-w-md" showCloseButton={false} onEscapeKeyDown={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
-            <DialogTitle>{ended.title}</DialogTitle>
-            <DialogDescription>{ended.text}</DialogDescription>
-            <div className="flex justify-end">
-              <Button onClick={another}>Choose another workspace</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <Blocking title={ended.title} text={ended.text}>
+          <div className="flex justify-end">
+            <Button onClick={() => chooseAnother(true)}>Choose another workspace</Button>
+          </div>
+        </Blocking>
       )}
-      {!signedIn && !ended && <SignInAgain />}
+      {!signedIn && !ended && (
+        <Blocking title="Please sign in again" text="You were signed out, maybe because it's been a while. Sign in to carry on; everything here stays as it is.">
+          <SignInForm />
+        </Blocking>
+      )}
     </>
   )
 }
 
-type ProfileLoad = { uid: string; state: 'ready' | 'none' | 'failed' }
+type ProfileLoad = { uid: string; state: 'ready' | 'none' } | { uid: string; state: 'failed'; problem: string }
 
 export function Gate({ children }: { children: ReactNode }) {
   const [loc] = useLocation()
@@ -193,7 +190,7 @@ export function Gate({ children }: { children: ReactNode }) {
       },
       (e: unknown) => {
         console.warn('Sprawniej couldn’t find your profile', e)
-        if (!stop) setLoad({ uid, state: 'failed' })
+        if (!stop) setLoad({ uid, state: 'failed', problem: friendlyDbError(e, 'Something went wrong while signing you in. Try again in a moment.') })
       },
     )
     return () => {
@@ -203,8 +200,7 @@ export function Gate({ children }: { children: ReactNode }) {
 
   if (!ready) return <Waiting title="Just a moment…" />
   if (loc.startsWith('/join/')) return <JoinLater />
-  const me = (person: Person | null, id: string | null): MyProfile | null => (person && id ? { id, person } : null)
-  const mine = me(user, profileId)
+  const mine = user && profileId ? { id: profileId, person: user } : null
   // signed out while working (it ran out): everything stays on screen, with "Please sign in again" on top
   if (workspaceId && mine && (authUser || lost)) {
     return (
@@ -214,10 +210,10 @@ export function Gate({ children }: { children: ReactNode }) {
     )
   }
   if (!authUser) return <SignIn />
-  const state = load?.uid === authUser.id ? load.state : 'loading'
-  if (state === 'loading') return <Waiting title="Signing you in…" />
-  if (state === 'failed') return <ProfileFailed onRetry={() => setAttempt((n) => n + 1)} />
-  if (state === 'none' || !mine) {
+  const state = load?.uid === authUser.id ? load : undefined
+  if (!state) return <Waiting title="Signing you in…" />
+  if (state.state === 'failed') return <ProfileFailed problem={state.problem} onRetry={() => setAttempt((n) => n + 1)} />
+  if (state.state === 'none' || !mine) {
     return (
       <PickLogin
         onDone={(p) => {

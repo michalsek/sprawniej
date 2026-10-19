@@ -20,8 +20,6 @@ export interface Session {
   workspaceId: string | null
   /** workspaces opened before, newest first */
   recent: RecentWorkspace[]
-  /** first-visit tips already shown */
-  toured: boolean
   setProfile: (profileId: string | null, user: Person | null) => void
   /** opens it, and moves it to the top of `recent` (with its name as it is now) */
   open: (ws: RecentWorkspace) => void
@@ -29,7 +27,7 @@ export interface Session {
   /** a workspace that was deleted or that you left: off the list, and closed if it was open */
   forget: (id: string) => void
   signOut: () => void
-  set: (patch: Partial<Pick<Session, 'toured' | 'user'>>) => void
+  set: (patch: Partial<Pick<Session, 'user'>>) => void
 }
 
 export const useSession = create<Session>()(
@@ -39,14 +37,13 @@ export const useSession = create<Session>()(
       profileId: null,
       workspaceId: null,
       recent: [],
-      toured: false,
       setProfile: (profileId, user) => set({ profileId, user }),
       open: (ws) => set((s) => ({ workspaceId: ws.id, recent: [ws, ...s.recent.filter((r) => r.id !== ws.id)].slice(0, 10) })),
       close: () => set({ workspaceId: null }),
       forget: (id) => set((s) => ({ workspaceId: s.workspaceId === id ? null : s.workspaceId, recent: s.recent.filter((r) => r.id !== id) })),
-      signOut: () => set({ user: null, profileId: null, workspaceId: null, recent: [], toured: false }),
+      signOut: () => set({ user: null, profileId: null, workspaceId: null, recent: [] }),
       set: (patch) => set(patch),
     }),
-    { name: 'sprawniej-session-v2', partialize: (s) => ({ workspaceId: s.workspaceId, recent: s.recent, toured: s.toured }) },
+    { name: 'sprawniej-session-v2', partialize: (s) => ({ workspaceId: s.workspaceId, recent: s.recent }) },
   ),
 )

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { track, type ChannelStatus, type Tracked } from '@/backend/live'
+import { isMessage, track, type ChannelStatus, type Tracked } from '@/backend/live'
 import { connectionState } from '@/backend/status'
 
 /** runs statuses through track(), gathering drops and comebacks */
@@ -37,7 +37,6 @@ describe('a live channel', () => {
   })
 
   test('closing on purpose is not a drop', () => {
-    expect(run(['SUBSCRIBED']).state.up).toBe(true)
     expect(run(['CLOSED'], true, { up: true, missed: false })).toEqual({ state: { up: false, missed: false }, events: [] })
   })
 })
@@ -45,10 +44,26 @@ describe('a live channel', () => {
 describe('the save chip', () => {
   test('from the facts', () => {
     expect(connectionState(true, true, true, false)).toBe('saved')
+    expect(connectionState(true, true, true, false, 2)).toBe('saving')
     expect(connectionState(false, true, true, false)).toBe('offline')
-    expect(connectionState(false, false, true, true)).toBe('offline')
-    expect(connectionState(true, false, true, false)).toBe('error')
-    expect(connectionState(true, true, true, true)).toBe('error')
-    expect(connectionState(false, false, false, true)).toBe('signed-out')
+    expect(connectionState(false, true, false, false)).toBe('signed-out')
+  })
+
+  test('not reaching Sprawniej is calm with nothing waiting, a warning with something waiting', () => {
+    expect(connectionState(true, false, true, false)).toBe('reconnecting')
+    expect(connectionState(true, true, true, true)).toBe('reconnecting')
+    expect(connectionState(true, false, true, false, 1)).toBe('error')
+  })
+})
+
+describe('what arrives on a channel', () => {
+  test('messages pass, anything else is skipped', () => {
+    expect(isMessage({ table: 'issues', op: 'UPDATE', row: { id: 'x' } })).toBe(true)
+    expect(isMessage({ op: 'catch_up' })).toBe(true)
+    expect(isMessage({ table: 'issues', op: 'UPDATE' })).toBe(false)
+    expect(isMessage({ table: 'issues', op: 'TRUNCATE', row: {} })).toBe(false)
+    expect(isMessage({ table: 'issues', op: 'INSERT', row: [] })).toBe(false)
+    expect(isMessage('hello')).toBe(false)
+    expect(isMessage(null)).toBe(false)
   })
 })

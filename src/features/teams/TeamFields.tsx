@@ -3,7 +3,7 @@ import { useState } from 'react'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { suggestKey } from '@/data/actions'
 import { Input } from '@/ui/input'
-import { KEY_PATTERN, type TeamDraft } from './teamDraft'
+import { KEY_PATTERN, type TeamDraft } from '@/model/teamDraft'
 
 
 export function TeamFields({ value, onChange, takenKeys = [] }: { value: TeamDraft; onChange: (v: TeamDraft) => void; takenKeys?: string[] }) {
