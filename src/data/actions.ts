@@ -15,12 +15,14 @@ import type { Json } from '@/backend/database.types'
 import type { KeyOf, LiveTable, Row } from '@/backend/tables'
 import { context, tell, write, type NoteRow, type WriteContext } from '@/backend/writes'
 import { MESSAGES } from '@/backend/writes/problems'
+import { PictureError, pictures, type PictureProblem } from '@/backend/pictures'
 import { createWorkspace } from '@/backend/workspaces'
 import type { Comment, Display, Filters, Issue, Label, Person, Project, Team, View } from '@/model/schema'
 import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
 import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
+import { IMAGE_TYPES, MAX_IMAGE_MB, pictureName } from './assets'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
 import { isUnread } from './select'
@@ -872,12 +874,29 @@ export function renameWorkspace(name: string) {
 
 // ---------- pictures ----------
 
-const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
-export const MAX_IMAGE_MB = 10
+export { MAX_IMAGE_MB }
 
-/** Keep a pasted or dropped picture in the workspace. Returns the address to put in the Markdown. Coming back soon. */
+/** what to tell someone whose picture couldn't be added */
+export const PICTURE_MESSAGES: Record<PictureProblem, string> = {
+  'too-big': `This picture is too big. Pictures can be up to ${MAX_IMAGE_MB} MB.`,
+  'wrong-type': 'Only PNG, JPEG, GIF and WebP pictures can be added.',
+  refused: "You can't add pictures to this workspace.",
+  'signed-out': 'Please sign in again, then add the picture.',
+  network: "This picture couldn't be added. Check your connection and try again.",
+}
+
+/** Keep a pasted or dropped picture with the workspace. Returns the address to put in the Markdown. */
 export async function addImage(file: Blob): Promise<string> {
-  if (!IMAGE_TYPES[file.type]) throw new Error('Only PNG, JPEG, GIF and WebP pictures can be added.')
-  if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(`This picture is too big. Pictures can be up to ${MAX_IMAGE_MB} MB.`)
-  throw new Error("Pictures can't be added just yet. They're coming back soon.")
+  if (!IMAGE_TYPES[file.type]) throw new Error(PICTURE_MESSAGES['wrong-type'])
+  if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(PICTURE_MESSAGES['too-big'])
+  const ws = context()?.workspaceId
+  if (!ws) throw new Error('Pictures can be added once your workspace is open.')
+  const name = await pictureName(file)
+  if (!name) throw new Error(PICTURE_MESSAGES['wrong-type'])
+  try {
+    await pictures.add(`${ws}/${name}`, file)
+  } catch (e) {
+    throw new Error(PICTURE_MESSAGES[e instanceof PictureError ? e.kind : 'network'], { cause: e })
+  }
+  return `/assets/${name}`
 }

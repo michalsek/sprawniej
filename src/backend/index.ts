@@ -8,6 +8,9 @@ import { useData } from '@/data/store'
 import { useAuth } from './auth'
 import { getClient } from './client'
 import { watchConnection } from './connection'
+import type { EventRow } from '@/data/history'
+import { fetchIssueEvents } from './history'
+import { pictures, usePictures } from './pictures'
 import { Channels, type ChannelStatus, type Topic } from './live'
 import { Loader } from './load'
 import type { MyProfile } from './profiles'
@@ -65,6 +68,8 @@ const life: Lifecycle = new Lifecycle(
   useBackend,
   registry,
   writes,
+  // signed addresses work for whoever holds them: switching workspace or signing out forgets them
+  () => pictures.clear(),
 )
 
 const CLOSED_CHANNELS: Record<Topic, ChannelStatus> = { ws: 'CLOSED', me: 'CLOSED' }
@@ -83,6 +88,15 @@ export const backend = {
   pending,
   /** how many archived issues a team has */
   countArchived: (teamKey: string): Promise<number> => life.current?.countArchived(teamKey) ?? Promise.resolve(0),
+  /** an issue's history events after `afterId`, oldest first (src/data/history.ts reads them) */
+  history: (issueId: string, afterId?: number): Promise<EventRow[]> => {
+    const ws = life.current
+    const db = getClient()
+    if (!ws || ws.closed || !db) return Promise.reject(new Error('No workspace is open.'))
+    return fetchIssueEvents(db, ws.workspaceId, issueId, afterId)
+  },
+  /** keep a picture under `<workspace id>/<name>` (actions.ts addImage) */
+  addPicture: (path: string, file: Blob): Promise<void> => pictures.add(path, file),
   /** for scripted checks */
   debug: () => {
     const ws = life.current
@@ -94,6 +108,7 @@ export const backend = {
       channels: ws?.channels && !ws.closed ? { ...ws.channels.status } : { ...CLOSED_CHANNELS },
       catchUps: ws?.catchUps ?? 0,
       writes: debugWrites(),
+      pictures: Object.keys(usePictures.getState().entries).length,
     }
   },
 }

@@ -1,72 +1,131 @@
 import { describe, expect, test } from 'bun:test'
-import { issueToFile } from '@/data/files'
-import { issueEvents, type Version } from '@/data/history'
-import type { Issue } from '@/model/schema'
+import { AT_CREATION_MS, historySignature, issueEvents, type EventRow, type HistoryContext } from '@/data/history'
+import type { ArchivedIssue, Issue } from '@/model/schema'
 
-const base: Issue = {
-  id: 'i1', team: 'ENG', number: 3, title: 'Charts', description: 'Old', status: 'todo', priority: 0, assignee: null, labels: [],
-  project: null, parent: null, sortOrder: 'a0', createdBy: 'ana', createdAt: '2026-10-01T10:00:00Z', updatedAt: '2026-10-01T10:00:00Z',
-}
-let n = 0
-const at = (min: number) => new Date(Date.parse('2026-10-01T10:00:00Z') + min * 60_000).toISOString()
-const v = (min: number, who: string, issue: Issue | null, path = `teams/${issue?.team ?? 'ENG'}/issues/i1.md`, message = 'x'): Version => ({
-  oid: `c${++n}`, at: at(min), message, login: who, name: who.toUpperCase(), path, text: issue ? issueToFile(issue) : null,
-})
+const START = Date.parse('2026-10-01T10:00:00.000Z')
+const at = (minute: number) => new Date(START + minute * 60_000).toISOString()
+const row = (id: number, minute: number, actor: string | null, changes: unknown): EventRow => ({ id, actorId: actor, at: at(minute), changes })
+const logins: Record<string, string> = { pa: 'ana', pb: 'bob', pg: '~gina' }
+const login = (id: string) => logins[id]
+const ctx: HistoryContext = { login, createdBy: 'ana', createdAt: at(0) }
+const kinds = (rows: EventRow[], c: HistoryContext = ctx) => issueEvents(rows, c).map((e) => e.change.kind)
 
 describe('issue history', () => {
-  test('one event per changed property, oldest first; the first version is the creation', () => {
-    const events = issueEvents([
-      v(0, 'ana', base),
-      v(60, 'bob', { ...base, status: 'in_progress', assignee: 'bob' }),
-      v(120, 'ana', { ...base, status: 'in_progress', assignee: 'bob', labels: ['bug'], dueDate: '2026-10-31', estimate: 3 }),
+  test('one line per field, in the order the page shows them, whatever order they were stored in', () => {
+    expect(kinds([row(1, 5, 'pa', { status: ['todo', 'done'], title: ['A', 'B'], team: ['ENG-3', 'DES-7'] })])).toEqual(['team', 'title', 'status'])
+  })
+
+  test('the same person changing a field twice in a row reads as one change', () => {
+    const folded = issueEvents([row(1, 1, 'pa', { status: ['todo', 'in_progress'] }), row(2, 2, 'pa', { status: ['in_progress', 'done'] })], ctx)
+    expect(folded).toEqual([{ id: 1, at: at(2), by: 'ana', change: { kind: 'status', from: 'todo', to: 'done' } }])
+    const apart = issueEvents([row(1, 1, 'pa', { status: ['todo', 'in_progress'] }), row(2, 4, 'pa', { status: ['in_progress', 'done'] })], ctx)
+    expect(apart).toHaveLength(2)
+  })
+
+  test('typing a title over a few saves is one rename', () => {
+    const events = issueEvents([row(1, 1, 'pa', { title: ['A', 'Ab'] }), row(2, 6, 'pa', { title: ['Ab', 'Abc'] }), row(3, 14, 'pa', { title: ['Abc', 'Abcd'] })], ctx)
+    expect(events.map((e) => e.change)).toEqual([{ kind: 'title', from: 'A', to: 'Abcd' }])
+  })
+
+  test('there and back again leaves nothing; someone else in between keeps every line', () => {
+    expect(kinds([row(1, 1, 'pa', { status: ['todo', 'done'] }), row(2, 1.5, 'pa', { status: ['done', 'todo'] })])).toEqual([])
+    const kept = issueEvents(
+      [row(1, 1, 'pa', { status: ['todo', 'done'] }), row(2, 1.2, 'pb', { priority: [0, 1] }), row(3, 1.5, 'pa', { status: ['done', 'todo'] })],
+      ctx,
+    )
+    expect(kept.map((e) => [e.by, e.change.kind])).toEqual([
+      ['ana', 'status'],
+      ['bob', 'priority'],
+      ['ana', 'status'],
     ])
-    expect(events.map((e) => [e.by, e.change.kind])).toEqual([
-      ['bob', 'status'], ['bob', 'assignee'], ['ana', 'labels'], ['ana', 'dueDate'], ['ana', 'estimate'],
+  })
+
+  test('labels on and off again leave nothing; two labels one after the other are one line', () => {
+    expect(kinds([row(1, 5, 'pa', { labels: { added: ['L1'] } }), row(2, 6, 'pa', { labels: { removed: ['L1'] } })])).toEqual([])
+    const two = issueEvents([row(1, 5, 'pa', { labels: { added: ['L1'] } }), row(2, 6, 'pa', { labels: { added: ['L2'] } })], ctx)
+    expect(two.map((e) => e.change)).toEqual([{ kind: 'labels', added: ['L1', 'L2'], removed: [] }])
+  })
+
+  test('moves between teams', () => {
+    expect(issueEvents([row(1, 5, 'pa', { team: ['ENG-3', 'DES-7'] })], ctx)[0].change).toEqual({ kind: 'team', from: 'ENG-3', to: 'DES-7' })
+    expect(issueEvents([row(1, 5, 'pa', { team: [null, 'DES-7'] })], ctx)[0].change).toEqual({ kind: 'team', from: null, to: 'DES-7' })
+  })
+
+  test('archived and restored are two lines, never folded', () => {
+    expect(kinds([row(1, 5, 'pa', { archived: true }), row(2, 5.5, 'pa', { restored: true })])).toEqual(['archived', 'restored'])
+    expect(kinds([row(1, 5, 'pa', { archived: true }), row(2, 5.5, 'pa', { archived: true })])).toEqual(['archived', 'archived'])
+  })
+
+  test('archived by the nightly tidy-up: nobody did it', () => {
+    expect(issueEvents([row(1, 5, null, { archived: true })], ctx)).toEqual([{ id: 1, at: at(5), by: null, change: { kind: 'archived' } }])
+  })
+
+  test('guests show by their login; ids nobody knows stay as they are', () => {
+    expect(issueEvents([row(1, 5, 'pb', { assignee: [null, 'pg'] })], ctx)[0]).toMatchObject({ by: 'bob', change: { kind: 'assignee', from: null, to: '~gina' } })
+    const odd = issueEvents([row(1, 5, 'px', { assignee: ['py', null] })], ctx)[0]
+    expect(odd).toMatchObject({ by: 'px', change: { kind: 'assignee', from: 'py', to: null } })
+  })
+
+  test('labels put on while creating the issue are part of creating it', () => {
+    const soon = START + 2_000
+    const r = (actor: string, ms: number, changes: unknown, id = 1): EventRow => ({ id, actorId: actor, at: new Date(ms).toISOString(), changes })
+    expect(kinds([r('pa', soon, { labels: { added: ['L1'] } })])).toEqual([])
+    expect(kinds([r('pa', START + 40_000, { labels: { added: ['L1'] } })])).toEqual(['labels'])
+    expect(kinds([r('pa', START + AT_CREATION_MS + 1, { labels: { added: ['L1'] } })])).toEqual(['labels'])
+    expect(kinds([r('pb', soon, { labels: { added: ['L1'] } })])).toEqual(['labels'])
+    expect(kinds([r('pa', soon, { labels: { added: ['L1'] } }), r('pa', soon, { status: ['todo', 'done'] }, 2)])).toEqual(['status'])
+    expect(issueEvents([r('pa', soon, { labels: { added: ['L1'], removed: ['L2'] } })], ctx)[0].change).toEqual({ kind: 'labels', added: [], removed: ['L2'] })
+    expect(kinds([r('pa', soon, { labels: { added: ['L1'] } })], { login })).toEqual(['labels'])
+  })
+
+  test('anything it cannot read is left out', () => {
+    const rows = [
+      row(1, 1, 'pa', { status: ['todo', 'blocked'] }),
+      row(2, 5, 'pa', { priority: [0, 9] }),
+      row(3, 10, 'pa', { title: 'x' }),
+      row(4, 15, 'pa', null),
+      row(5, 20, 'pa', { foo: 1 }),
+      row(6, 25, 'pa', { estimate: [null, '3'] }),
+      row(7, 30, 'pa', { dueDate: [null, '2026-10-31'] }),
+      row(8, 35, 'pa', { dueDate: [null, 'soon'] }),
+      row(9, 40, 'pa', { labels: { added: [1] } }),
+      row(10, 45, 'pa', [1, 2]),
+    ]
+    expect(issueEvents(rows, ctx).map((e) => e.change)).toEqual([
+      { kind: 'estimate', from: null, to: 3 },
+      { kind: 'dueDate', from: null, to: '2026-10-31' },
     ])
-    expect(events[0].change).toEqual({ kind: 'status', from: 'todo', to: 'in_progress' })
   })
-  test('the same person typing a title over a few saves reads as one change', () => {
-    const events = issueEvents([v(0, 'ana', base), v(1, 'ana', { ...base, title: 'Chart' }), v(2, 'ana', { ...base, title: 'Charts are slow' })])
-    expect(events).toEqual([{ at: at(2), by: 'ana', change: { kind: 'title', from: 'Charts', to: 'Charts are slow' } }])
+
+  test('the order they were saved in decides, not their times', () => {
+    const events = issueEvents([row(3, 1, 'pa', { priority: [0, 2] }), row(1, 9, 'pb', { title: ['A', 'B'] }), row(2, 5, 'pa', { status: ['todo', 'done'] })], ctx)
+    expect(events.map((e) => e.id)).toEqual([1, 2, 3])
   })
-  test('there and back again leaves nothing; someone else in between keeps both', () => {
-    expect(issueEvents([v(0, 'ana', base), v(1, 'ana', { ...base, status: 'done' }), v(2, 'ana', base)])).toEqual([])
-    const kept = issueEvents([v(0, 'ana', base), v(1, 'ana', { ...base, status: 'done' }), v(2, 'bob', { ...base, status: 'done', priority: 1 }), v(3, 'ana', { ...base, priority: 1 })])
-    expect(kept.map((e) => e.change.kind)).toEqual(['status', 'priority', 'status'])
-  })
-  test('a move between teams is one event, read across both paths', () => {
-    const moved = { ...base, team: 'DES', number: 7 }
-    const oid = 'move'
-    const events = issueEvents([
-      v(0, 'ana', base),
-      { ...v(10, 'ana', null), oid },
-      { ...v(10, 'ana', moved, 'teams/DES/issues/i1.md'), oid },
-    ])
-    expect(events.map((e) => e.change)).toEqual([{ kind: 'team', from: 'ENG-3', to: 'DES-7' }])
-  })
-  test('archived and restored', () => {
-    const events = issueEvents([v(0, 'ana', base), v(10, 'bob', null, undefined, 'Archive ENG-3'), v(20, 'ana', base)])
-    expect(events.map((e) => e.change)).toEqual([{ kind: 'removed', message: 'Archive ENG-3' }, { kind: 'restored' }])
-  })
-  test('a broken version is skipped', () => {
-    const broken = { ...v(5, 'ana', base), text: '---\nnot: [valid\n---\n' }
-    expect(issueEvents([v(0, 'ana', base), broken, v(10, 'bob', { ...base, priority: 2 })]).map((e) => e.change.kind)).toEqual(['priority'])
+
+  test('editing the description over a while is one line', () => {
+    expect(kinds([row(1, 1, 'pa', { description: true }), row(2, 5, 'pa', { description: true }), row(3, 12, 'pa', { description: true })])).toEqual(['description'])
   })
 })
 
-describe('following moves', () => {
-  test('a move is found alone or as one line of a bigger save, and only for this issue', async () => {
-    const { movedFrom } = await import('@/features/issues/useHistory')
-    expect(movedFrom('Move ENG-3 to Design as DES-7', 'DES-7')).toBe('ENG')
-    expect(movedFrom('ENG-9: edit title (and 2 more changes)\n\n- ENG-9: edit title\n- Move ENG-3 to Design as DES-7\n', 'DES-7')).toBe('ENG')
-    expect(movedFrom('Move ENG-4 to Design as DES-8', 'DES-7')).toBeUndefined()
+describe('when the history has something new', () => {
+  const issue: Issue = {
+    id: 'i1', team: 'ENG', number: 3, title: 'Charts', description: 'Old', status: 'todo', priority: 0, assignee: null, labels: ['a', 'b'],
+    project: null, parent: null, sortOrder: 'a0', createdBy: 'ana', createdAt: at(0), updatedAt: at(0),
+  }
+  const sig = historySignature(issue)
+
+  test('changes for what writes history', () => {
+    expect(historySignature({ ...issue, labels: ['a'] })).not.toBe(sig)
+    expect(historySignature({ ...issue, team: 'DES', number: 7 })).not.toBe(sig)
+    const archived: ArchivedIssue = { ...issue, archivedAt: at(5), archivedBy: 'ana', comments: [] }
+    expect(historySignature(archived)).not.toBe(sig)
+    // archived and restored straight away: only "last changed" says so
+    expect(historySignature({ ...issue, updatedAt: at(6) })).not.toBe(sig)
   })
-  test('save order decides, not the clocks of the people saving', () => {
-    // bob's clock runs late: his later save carries an earlier time
-    const events = issueEvents([v(10, 'ana', base), v(20, 'ana', { ...base, status: 'in_progress' }), v(5, 'bob', { ...base, status: 'done' })])
-    expect(events.map((e) => e.change)).toEqual([
-      { kind: 'status', from: 'todo', to: 'in_progress' },
-      { kind: 'status', from: 'in_progress', to: 'done' },
-    ])
+
+  test('not for the order or following alone, nor for the order of labels', () => {
+    expect(historySignature({ ...issue, sortOrder: 'b0' })).toBe(sig)
+    expect(historySignature({ ...issue, subscribers: ['bob'], unsubscribed: ['cy'] })).toBe(sig)
+    expect(historySignature({ ...issue, labels: ['b', 'a'] })).toBe(sig)
   })
 })

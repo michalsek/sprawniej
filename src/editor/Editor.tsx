@@ -16,7 +16,7 @@ import Image from '@tiptap/extension-image'
 import { createLowlight } from 'lowlight'
 import { toast } from 'sonner'
 import { addImage } from '@/data/actions'
-import { assetUrl } from '@/data/assets'
+import { assetUrl, onPicturesChange } from '@/data/assets'
 import { cn } from '@/lib/utils'
 import { MentionSuggest } from './MentionSuggest'
 import { References } from './references'
@@ -29,7 +29,10 @@ const lowlight = createLowlight(LANGUAGES)
 
 const SAVE_AFTER = 400
 
-/** pictures keep their workspace address in the Markdown and show from the app's own copy */
+/**
+ * Pictures keep their workspace address in the Markdown and show from a signed one, which may arrive a moment later:
+ * each picture redraws itself when it does.
+ */
 const Picture = Image.extend({
   addAttributes() {
     return {
@@ -39,6 +42,35 @@ const Picture = Image.extend({
         parseHTML: (el: HTMLElement) => el.getAttribute('data-src') ?? el.getAttribute('src'),
         renderHTML: (attrs: { src?: string | null }) => ({ src: assetUrl(attrs.src), 'data-src': attrs.src }),
       },
+    }
+  },
+  addNodeView() {
+    return ({ node }) => {
+      const img = document.createElement('img')
+      let current = node
+      const draw = () => {
+        const src = current.attrs.src as string | null
+        const url = assetUrl(src)
+        if (url) {
+          if (img.getAttribute('src') !== url) img.src = url
+        } else img.removeAttribute('src')
+        img.alt = (current.attrs.alt as string | null) ?? ''
+        img.dataset.src = src ?? ''
+        if (current.attrs.title) img.title = current.attrs.title as string
+        else img.removeAttribute('title')
+      }
+      draw()
+      const stop = onPicturesChange(draw)
+      return {
+        dom: img,
+        update: (next) => {
+          if (next.type !== current.type) return false
+          current = next
+          draw()
+          return true
+        },
+        destroy: stop,
+      }
     }
   },
 })

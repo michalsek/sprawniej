@@ -4,7 +4,8 @@
  * these files and skips them: nothing here may connect or throw at import time.
  *
  * The project comes from VITE_SUPABASE_URL and VITE_SUPABASE_KEY (the environment, or .env.local).
- * Test accounts are dbtest-<run>-<name>@<domain>; supabase/dev/cleanup-tests.sql removes them afterwards.
+ * Test accounts are dbtest-<run>-<name>@<domain>; supabase/dev/cleanup-tests.sql removes them afterwards. Set
+ * SPRAWNIEJ_TEST_RUN to name the run yourself, so only its own accounts and workspaces can be removed afterwards.
  * Only for a development or throwaway project.
  */
 import { expect } from 'bun:test'
@@ -17,7 +18,7 @@ import type { Database } from '@/backend/database.types'
 export const enabled = !!process.env.SPRAWNIEJ_DB_TESTS
 
 /** one run of the tests: every account, login and workspace name carries it */
-export const RUN = Date.now().toString(36) + Math.random().toString(36).slice(2, 4)
+export const RUN = process.env.SPRAWNIEJ_TEST_RUN || Date.now().toString(36) + Math.random().toString(36).slice(2, 4)
 
 /** Auth refuses example and test domains, so the default is a real (throwaway) mail domain. */
 const DOMAIN = process.env.SPRAWNIEJ_TEST_EMAIL_DOMAIN ?? 'mailinator.com'

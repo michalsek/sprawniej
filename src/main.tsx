@@ -16,7 +16,7 @@ import './index.css'
 window.sprawniej = {
   ...window.sprawniej,
   actions: { ...actions },
-  backend: { status: useSaveStatus, catchUp: backend.catchUp, debug: backend.debug, pending: backend.pending, flush: backend.flush, writes: debugWrites },
+  backend: { status: useSaveStatus, catchUp: backend.catchUp, debug: backend.debug, pending: backend.pending, flush: backend.flush, writes: debugWrites, history: backend.history },
 }
 
 // a page that loaded fine clears the "reloaded once for a new version" mark, so the next update can do it again
