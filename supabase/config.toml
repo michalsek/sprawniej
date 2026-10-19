@@ -164,7 +164,7 @@ site_url = "env(SPRAWNIEJ_SITE_URL)"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 # The app on localhost (vite dev, vite preview, the two-people test ports). The GitHub Pages address, with "/**",
 # joins this list before teammates sign in (stage B).
-additional_redirect_urls = ["http://localhost:5173", "http://localhost:4173", "http://localhost:5297", "http://localhost:5298", "http://localhost:5299"]
+additional_redirect_urls = ["http://localhost:5173/**", "http://localhost:4173/**", "http://localhost:5297/**", "http://localhost:5298/**", "http://localhost:5299/**"]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
 # JWT issuer URL. If not set, defaults to auth.external_url.
@@ -328,7 +328,7 @@ max_frequency = "5s"
 # GitHub sign-in. Each Supabase project needs its own GitHub OAuth app (one callback per app). Put its id and secret in
 # your shell for the one "supabase config push" command; never in a file.
 [auth.external.github]
-enabled = false
+enabled = true
 client_id = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_CLIENT_ID)"
 secret = "env(SUPABASE_AUTH_EXTERNAL_GITHUB_SECRET)"
 redirect_uri = ""
