@@ -1,95 +1,144 @@
 /**
- * What to show before the app itself: the join wizard, sign-in, choosing a workspace, downloading it, or setting
- * it up. Once a workspace is open, the app (children) takes over.
+ * What to show before the app itself: signing in, picking your @handle, choosing a workspace, opening it. Once a
+ * workspace is open, the app (children) takes over. A sign-in that runs out while you work keeps everything on
+ * screen and asks you to sign in again on top of it.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { useLocation } from 'wouter'
 import { Loader2 } from 'lucide-react'
-import { GitHubError, isOffline, listPeople, plainError, repoKey } from '@/github/api'
-import { introduceMe, tidyArchive, tidyInbox } from '@/data/actions'
-import { setCollaborators } from '@/data/project'
+import { backend, useBackend } from '@/backend'
+import { useAuth } from '@/backend/auth'
+import { ensureProfile, type MyProfile } from '@/backend/profiles'
+import { useSaveStatus } from '@/backend/status'
+import { useSignOut } from '@/components/SignOut'
 import { useData } from '@/data/store'
-import { JoinWizard } from '@/features/onboarding/JoinWizard'
-import { KeyStep } from '@/features/onboarding/KeyStep'
+import { PickLogin } from '@/features/onboarding/PickLogin'
 import { PickWorkspace } from '@/features/onboarding/PickWorkspace'
-import { SetupWorkspace } from '@/features/onboarding/SetupWorkspace'
 import { Problem, Step } from '@/features/onboarding/Step'
-import { Welcome } from '@/features/onboarding/Welcome'
-import { setWorkspace, useSync, workspace, Workspace } from '@/sync/engine'
+import { SignIn, SignInForm } from '@/features/onboarding/Welcome'
+import type { Person } from '@/model/schema'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog'
 
-type Load = { state: 'loading' } | { state: 'ready' } | { state: 'failed'; message: string; noAccess?: boolean }
-
-function OpenWorkspace({ children }: { children: ReactNode }) {
-  const repo = useSession((s) => s.workspace)
-  const user = useSession((s) => s.user)
-  // a fresh component per workspace and person, so nothing from the last one lingers
+function Waiting({ title }: { title: string }) {
   return (
-    <Loader key={`${repo ? repoKey(repo) : ''}:${user?.login ?? ''}`}>{children}</Loader>
+    <Step title={title}>
+      <p className="flex items-center gap-2 text-muted-foreground">
+        <Loader2 className="size-4 animate-spin" /> Just a moment.
+      </p>
+    </Step>
   )
 }
 
-function Loader({ children }: { children: ReactNode }) {
-  const { token, user, workspace: repo, close } = useSession()
-  const [load, setLoad] = useState<Load>({ state: 'loading' })
-  const progress = useSync((s) => s.progress)
-  const hasWorkspaceFile = useData((s) => !!s.workspace)
+/** invite links come with phase 8 */
+function JoinLater() {
+  const [, navigate] = useLocation()
+  return (
+    <Step title="Invite links don't work yet" footer={<Button onClick={() => navigate('/', { replace: true })}>Go to Sprawniej</Button>}>
+      <p>Sprawniej can't open invite links yet. Ask your teammate again in a few days.</p>
+    </Step>
+  )
+}
+
+function ProfileFailed({ onRetry }: { onRetry: () => void }) {
+  const { signOut, dialog } = useSignOut()
+  return (
+    <Step
+      title="We couldn't sign you in"
+      footer={
+        <>
+          <Button size="lg" onClick={onRetry}>
+            Try again
+          </Button>
+          <Button variant="outline" size="lg" onClick={signOut}>
+            Sign out
+          </Button>
+        </>
+      }
+    >
+      {dialog}
+      <Problem>Can't reach Sprawniej. Check your internet connection and try again.</Problem>
+    </Step>
+  )
+}
+
+/** the sign-in ran out: sign in again without leaving the page */
+function SignInAgain() {
+  return (
+    <Dialog open>
+      <DialogContent className="sm:max-w-md" showCloseButton={false} onEscapeKeyDown={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+        <DialogTitle>Please sign in again</DialogTitle>
+        <DialogDescription>You were signed out, maybe because it's been a while. Sign in to carry on; everything here stays as it is.</DialogDescription>
+        <SignInForm />
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+const GONE = {
+  deleted: { title: 'This workspace was deleted', text: "Its owner deleted it, so there's nothing left to show here." },
+  removed: { title: "You're no longer in this workspace", text: "If that's a mistake, ask a teammate to invite you again." },
+  missing: { title: "This workspace isn't here any more", text: "It may have been deleted, or you're no longer one of its members." },
+}
+
+function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me: MyProfile; children: ReactNode }) {
+  const signedIn = useAuth((s) => !!s.user)
+  // before this workspace's opening starts, what the backend says is about the last one
+  const ours = useBackend((s) => s.workspaceId === workspaceId)
+  const phase = useBackend((s) => (ours ? s.phase : 'closed'))
+  const failure = useBackend((s) => s.failure)
+  const gone = useBackend((s) => s.gone)
+  const progress = useSaveStatus((s) => s.progress)
+  const name = useData((s) => s.workspace?.name)
+  const [attempt, setAttempt] = useState(0)
+  const [person] = useState(me.person)
+
   useEffect(() => {
-    if (!repo || !user) return
-    let stop = false
-    const giveUp = new AbortController()
-    Workspace.open(repo, token, user, giveUp.signal).then(
-      (ws) => {
-        if (stop) return ws.close()
-        setWorkspace(ws)
-        setLoad({ state: 'ready' })
-        listPeople(token, repo).then(
-          (list) => setCollaborators(list.map((c) => ({ login: c.login, githubId: c.id, name: c.login, avatarUrl: c.avatar_url }))),
-          () => {},
-        )
-      },
-      (e: unknown) => {
-        if (stop) return
-        if (e instanceof GitHubError && e.status === 404) setLoad({ state: 'failed', noAccess: true, message: `You don't have access to ${repoKey(repo)}, or it doesn't exist.` })
-        else if (isOffline(e)) setLoad({ state: 'failed', message: 'You seem to be offline, and this workspace hasn’t been opened on this device before.' })
-        else setLoad({ state: 'failed', message: plainError(e) })
-      },
+    void backend.open(workspaceId, { id: me.id, person })
+    return () => void backend.close()
+  }, [workspaceId, me.id, person, attempt])
+
+  // the list of workspaces shows each with its name as it is now
+  useEffect(() => {
+    if (phase === 'open' && name) useSession.getState().open({ id: workspaceId, name })
+  }, [phase, name, workspaceId])
+
+  const another = () => {
+    useSession.getState().forget(workspaceId)
+    void backend.close()
+  }
+
+  if (phase === 'failed') {
+    return (
+      <Step
+        title="We couldn't open this workspace"
+        footer={
+          failure === 'network' ? (
+            <>
+              <Button size="lg" onClick={() => setAttempt((n) => n + 1)}>
+                Try again
+              </Button>
+              <Button variant="outline" size="lg" onClick={() => useSession.getState().close()}>
+                Choose another workspace
+              </Button>
+            </>
+          ) : (
+            <Button size="lg" onClick={another}>
+              Choose another workspace
+            </Button>
+          )
+        }
+      >
+        {failure === 'network' ? (
+          <Problem>Can't reach Sprawniej. Check your internet connection.</Problem>
+        ) : (
+          <p>It may have been deleted, or you're no longer one of its members.</p>
+        )}
+      </Step>
     )
-    return () => {
-      stop = true
-      giveUp.abort()
-      setWorkspace(null)
-    }
-  }, [repo, token, user])
-
-  // keep your people/ file in step with your GitHub profile, and old inbox notes from piling up
-  useEffect(() => {
-    if (load.state !== 'ready' || !hasWorkspaceFile || !user) return
-    introduceMe(user)
-    tidyInbox()
-  }, [load.state, hasWorkspaceFile, user])
-
-  // once a day, after the first sync: archive issues finished long ago (actions.tidyArchive)
-  useEffect(() => {
-    if (load.state !== 'ready' || !hasWorkspaceFile || !repo) return
-    const key = `sprawniej:archived:${repoKey(repo)}`
-    const run = () => {
-      const last = Number(localStorage.getItem(key) ?? 0)
-      if (Date.now() - last < 20 * 3_600_000) return true
-      localStorage.setItem(key, String(Date.now()))
-      void tidyArchive()
-      return true
-    }
-    // only once teammates' latest changes are in, so nothing is archived from an old copy
-    const ready = (s: { state: string; synced?: boolean }) => s.state === 'saved' && !!s.synced
-    if (ready(useSync.getState()) && run()) return
-    const stop = useSync.subscribe((s) => ready(s) && run() && stop())
-    return stop
-  }, [load.state, hasWorkspaceFile, repo])
-
-  if (load.state === 'loading') {
+  }
+  if (phase !== 'open' && phase !== 'gone') {
     return (
       <Step title="Opening your workspace…">
         <p className="flex items-center gap-2 text-muted-foreground">
@@ -98,50 +147,85 @@ function Loader({ children }: { children: ReactNode }) {
       </Step>
     )
   }
-  if (load.state === 'failed') {
-    return (
-      <Step title="We couldn't open this workspace" footer={<Button onClick={close}>Choose another workspace</Button>}>
-        <Problem>{load.message}</Problem>
-        {load.noAccess && <p className="mt-4 text-muted-foreground">If someone invited you, open the join link they sent you.</p>}
-      </Step>
-    )
-  }
-  if (!hasWorkspaceFile) return <SetupWorkspace hasOtherFiles={(workspace()?.paths().length ?? 0) > 0} />
+  const ended = phase === 'gone' && gone ? GONE[gone] : null
   return (
     <>
       {children}
-      <BadKeyDialog />
+      {ended && (
+        <Dialog open>
+          <DialogContent className="sm:max-w-md" showCloseButton={false} onEscapeKeyDown={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
+            <DialogTitle>{ended.title}</DialogTitle>
+            <DialogDescription>{ended.text}</DialogDescription>
+            <div className="flex justify-end">
+              <Button onClick={another}>Choose another workspace</Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+      {!signedIn && !ended && <SignInAgain />}
     </>
   )
 }
 
-/** the key was revoked or expired: ask for a new one without leaving the page (nothing unsaved is lost) */
-function BadKeyDialog() {
-  const bad = useSync((s) => s.state === 'bad-key')
-  const signIn = useSession((s) => s.signIn)
-  return (
-    <Dialog open={bad}>
-      <DialogContent className="sm:max-w-2xl" showCloseButton={false}>
-        <DialogTitle>Your GitHub key stopped working</DialogTitle>
-        <DialogDescription>Keys expire after a while. Make a new one and paste it below. Your changes are safe on this device and will be saved once you do.</DialogDescription>
-        <KeyStep
-          intro={<></>}
-          onDone={(token, me) => {
-            signIn(token, me)
-            workspace()?.restartOtherTabs() // they pick up the new key too
-            location.reload()
-          }}
-        />
-      </DialogContent>
-    </Dialog>
-  )
-}
+type ProfileLoad = { uid: string; state: 'ready' | 'none' | 'failed' }
 
 export function Gate({ children }: { children: ReactNode }) {
   const [loc] = useLocation()
-  const { token, user, workspace: repo } = useSession()
-  if (loc.startsWith('/join/')) return <JoinWizard />
-  if (!token || !user) return <Welcome />
-  if (!repo) return <PickWorkspace />
-  return <OpenWorkspace>{children}</OpenWorkspace>
+  const ready = useAuth((s) => s.ready)
+  const authUser = useAuth((s) => s.user)
+  const lost = useAuth((s) => s.lost)
+  const workspaceId = useSession((s) => s.workspaceId)
+  const profileId = useSession((s) => s.profileId)
+  const user = useSession((s) => s.user)
+  const [load, setLoad] = useState<ProfileLoad>()
+  const [attempt, setAttempt] = useState(0)
+  const uid = authUser?.id
+
+  // who you are here: your profile, found again on every start
+  useEffect(() => {
+    if (!uid) return
+    let stop = false
+    ensureProfile().then(
+      (p) => {
+        if (stop) return
+        if (p) useSession.getState().setProfile(p.id, p.person)
+        setLoad({ uid, state: p ? 'ready' : 'none' })
+      },
+      (e: unknown) => {
+        console.warn('Sprawniej couldn’t find your profile', e)
+        if (!stop) setLoad({ uid, state: 'failed' })
+      },
+    )
+    return () => {
+      stop = true
+    }
+  }, [uid, attempt])
+
+  if (!ready) return <Waiting title="Just a moment…" />
+  if (loc.startsWith('/join/')) return <JoinLater />
+  const me = (person: Person | null, id: string | null): MyProfile | null => (person && id ? { id, person } : null)
+  const mine = me(user, profileId)
+  // signed out while working (it ran out): everything stays on screen, with "Please sign in again" on top
+  if (workspaceId && mine && (authUser || lost)) {
+    return (
+      <OpenWorkspace key={`${workspaceId}:${mine.id}`} workspaceId={workspaceId} me={mine}>
+        {children}
+      </OpenWorkspace>
+    )
+  }
+  if (!authUser) return <SignIn />
+  const state = load?.uid === authUser.id ? load.state : 'loading'
+  if (state === 'loading') return <Waiting title="Signing you in…" />
+  if (state === 'failed') return <ProfileFailed onRetry={() => setAttempt((n) => n + 1)} />
+  if (state === 'none' || !mine) {
+    return (
+      <PickLogin
+        onDone={(p) => {
+          useSession.getState().setProfile(p.id, p.person)
+          setLoad({ uid: authUser.id, state: 'ready' })
+        }}
+      />
+    )
+  }
+  return <PickWorkspace />
 }

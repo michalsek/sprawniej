@@ -8,7 +8,7 @@
 import { registerSW } from 'virtual:pwa-register'
 import { toast } from 'sonner'
 import { create } from 'zustand'
-import { workspace } from '@/sync/engine'
+import { backend } from '@/backend'
 
 const CHECK_EVERY = 60_000
 
@@ -29,7 +29,7 @@ export async function applyUpdate() {
   if (useUpdate.getState().applying) return
   useUpdate.setState({ applying: true })
   // anything not saved yet stays on this device anyway; this just sends it before the page reloads
-  await Promise.race([workspace()?.flush().catch(() => {}), new Promise((r) => setTimeout(r, 8_000))])
+  await Promise.race([backend.flush().catch(() => {}), new Promise((r) => setTimeout(r, 8_000))])
   // the new version waits in this browser: let it take over (it reloads the page). Another tab may have done that
   // already, in which case a plain reload picks it up.
   if (registration?.waiting && switchOver) await switchOver(true)

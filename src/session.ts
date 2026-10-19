@@ -1,24 +1,33 @@
 /**
- * Who is signed in and which workspace is open. Lives in this browser only (localStorage), never in the repo.
- * The GitHub key is kept here; signing out removes it together with the local copies of workspaces.
+ * Who is signed in and which workspace is open, in this browser only. The sign-in itself is kept by the database
+ * client (src/backend/auth.ts); this remembers the workspace you had open and the ones you opened before, so a reload
+ * comes back to the same place. Your profile is looked up again on every start, never stored here.
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { RepoRef } from '@/github/api'
 import type { Person } from '@/model/schema'
 
+export interface RecentWorkspace {
+  id: string
+  name: string
+}
+
 export interface Session {
-  token: string
-  /** you, as GitHub knows you */
+  /** your profile as a person (null: not known yet, or no name picked yet). Not stored */
   user: Person | null
-  workspace: RepoRef | null
+  /** your profile's id. Not stored */
+  profileId: string | null
+  workspaceId: string | null
   /** workspaces opened before, newest first */
-  recent: RepoRef[]
+  recent: RecentWorkspace[]
   /** first-visit tips already shown */
   toured: boolean
-  signIn: (token: string, user: Person) => void
-  open: (ws: RepoRef) => void
+  setProfile: (profileId: string | null, user: Person | null) => void
+  /** opens it, and moves it to the top of `recent` (with its name as it is now) */
+  open: (ws: RecentWorkspace) => void
   close: () => void
+  /** a workspace that was deleted or that you left: off the list, and closed if it was open */
+  forget: (id: string) => void
   signOut: () => void
   set: (patch: Partial<Pick<Session, 'toured' | 'user'>>) => void
 }
@@ -26,21 +35,18 @@ export interface Session {
 export const useSession = create<Session>()(
   persist(
     (set) => ({
-      token: '',
       user: null,
-      workspace: null,
+      profileId: null,
+      workspaceId: null,
       recent: [],
       toured: false,
-      signIn: (token, user) => set({ token, user }),
-      open: (ws) =>
-        set((s) => ({
-          workspace: ws,
-          recent: [ws, ...s.recent.filter((r) => `${r.owner}/${r.repo}`.toLowerCase() !== `${ws.owner}/${ws.repo}`.toLowerCase())].slice(0, 10),
-        })),
-      close: () => set({ workspace: null }),
-      signOut: () => set({ token: '', user: null, workspace: null, recent: [], toured: false }),
+      setProfile: (profileId, user) => set({ profileId, user }),
+      open: (ws) => set((s) => ({ workspaceId: ws.id, recent: [ws, ...s.recent.filter((r) => r.id !== ws.id)].slice(0, 10) })),
+      close: () => set({ workspaceId: null }),
+      forget: (id) => set((s) => ({ workspaceId: s.workspaceId === id ? null : s.workspaceId, recent: s.recent.filter((r) => r.id !== id) })),
+      signOut: () => set({ user: null, profileId: null, workspaceId: null, recent: [], toured: false }),
       set: (patch) => set(patch),
     }),
-    { name: 'sprawniej-session' },
+    { name: 'sprawniej-session-v2', partialize: (s) => ({ workspaceId: s.workspaceId, recent: s.recent, toured: s.toured }) },
   ),
 )

@@ -1,7 +1,7 @@
 /** Issues for project progress: active and archived ones both count (the archive is read when a project page opens). */
 import { useEffect } from 'react'
 import { useShallow } from 'zustand/react/shallow'
-import { loadArchive } from '@/data/project'
+import { loadArchive } from '@/backend'
 import { useData } from '@/data/store'
 import type { Issue } from '@/model/schema'
 

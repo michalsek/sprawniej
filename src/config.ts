@@ -12,3 +12,11 @@ export function publicAppUrl(): string | null {
   if (PUBLIC_URL) return PUBLIC_URL.endsWith('/') ? PUBLIC_URL : `${PUBLIC_URL}/`
   return `${location.origin}${location.pathname}`
 }
+
+/**
+ * Where sign-in (GitHub, later email links) comes back to: this page, without #route or ?query. Unlike publicAppUrl
+ * it works on this computer too, and it's always the address that started the sign-in (which holds its secret half).
+ */
+export function authRedirectUrl(): string {
+  return `${location.origin}${location.pathname}`
+}

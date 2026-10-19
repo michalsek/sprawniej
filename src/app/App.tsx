@@ -1,5 +1,6 @@
 import { Redirect, Route, Router, Switch } from 'wouter'
 import { useHashLocation } from 'wouter/use-hash-location'
+import { isSetUp } from '@/backend/client'
 import { Toaster } from '@/ui/sonner'
 import { TooltipProvider } from '@/ui/tooltip'
 import { useData } from '@/data/store'
@@ -17,6 +18,7 @@ import { ImportPage } from '@/features/import/ImportPage'
 import { WhatsNewPage } from '@/features/whatsnew/WhatsNewPage'
 import { Gate } from './Gate'
 import { NotFound } from './NotFound'
+import { NotSetUp } from './NotSetUp'
 import { Shell } from './Shell'
 
 function Home() {
@@ -26,6 +28,7 @@ function Home() {
 
 /** Hash routes (#/team/ENG/issues/active) because GitHub Pages serves one static file. */
 export function App() {
+  if (!isSetUp()) return <NotSetUp />
   return (
     <TooltipProvider delayDuration={300}>
       <Router hook={useHashLocation}>

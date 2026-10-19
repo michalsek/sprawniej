@@ -17,6 +17,7 @@ import { inviteMessage, joinLink } from '@/features/onboarding/joinLink'
 import { Problem } from '@/features/onboarding/Step'
 import { getRepo, GitHubError, invite, listSentInvitations, plainError, repoKey, type SentInvitation } from '@/github/api'
 import { useSession } from '@/session'
+import { useGitHubSession } from '@/sync/githubSession'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
@@ -63,7 +64,9 @@ function copy(text: string, what: string) {
 }
 
 function People() {
-  const { token, workspace: repo, user } = useSession()
+  // the GitHub version's people and invitations: always empty now, so this part shows nothing until phase 8
+  const { token, workspace: repo } = useGitHubSession()
+  const user = useSession((s) => s.user)
   const people = useData(useShallow((s) => Object.values(s.people).sort((a, b) => a.name.localeCompare(b.name))))
   const wsName = useData((s) => s.workspace?.name ?? '')
   const [admin, setAdmin] = useState(false)
@@ -326,7 +329,7 @@ function Account() {
           {busy ? <Loader2 className="animate-spin" /> : <LogOut />} Sign out
         </Button>
       </div>
-      <p className="text-sm text-muted-foreground">Signing out removes your GitHub key and the workspace copy from this browser. Do it on shared computers.</p>
+      <p className="text-sm text-muted-foreground">Signing out forgets you in this browser, in every tab. Do it on shared computers.</p>
       {dialog}
     </div>
   )
@@ -362,7 +365,7 @@ function ArchiveSettings() {
 }
 
 export function SettingsPage() {
-  const repo = useSession((s) => s.workspace)
+  const repo = useGitHubSession((s) => s.workspace)
   useCrumbs([{ label: 'Settings' }])
   return (
     <div className="flex-1 overflow-y-auto px-4 md:px-8">

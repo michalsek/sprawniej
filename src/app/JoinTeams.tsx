@@ -8,21 +8,19 @@ import { useLocation } from 'wouter'
 import { useShallow } from 'zustand/react/shallow'
 import { joinTeam } from '@/data/actions'
 import { useData } from '@/data/store'
-import { repoKey } from '@/github/api'
+import { useSaveStatus } from '@/backend/status'
 import { useSession } from '@/session'
-import { useSync } from '@/sync/engine'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
 import { skipJoining, skippedJoining, useJoinTeams } from './joinTeamsState'
 
 export function JoinTeams() {
   const [, navigate] = useLocation()
-  const repo = useSession((s) => s.workspace)
+  const where = useSession((s) => s.workspaceId ?? '')
   const me = useData((s) => s.me?.login)
   const teams = useData(useShallow((s) => Object.values(s.teams).sort((a, b) => a.name.localeCompare(b.name))))
-  const synced = useSync((s) => !!s.synced)
+  const synced = useSaveStatus((s) => !!s.synced)
   const inNone = !!me && teams.length > 0 && !teams.some((t) => t.members.includes(me))
-  const where = repo ? repoKey(repo) : ''
   const [skipped, setSkipped] = useState(false)
   const open = synced && inNone && !!where && !skipped && !skippedJoining(where, me!)
   // nothing ticked yet: with one team there's nothing to choose, so it starts ticked

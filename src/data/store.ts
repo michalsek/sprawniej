@@ -67,8 +67,8 @@ export function findArchivedByRef(s: Pick<DataState, 'archive' | 'issues'>, ref:
 
 declare global {
   interface Window {
-    /** for scripted checks in tests: window.sprawniej.data.getState(), window.sprawniej.actions.createIssue(…) */
-    sprawniej?: { data?: typeof useData; actions?: Record<string, unknown>; sync?: unknown }
+    /** for scripted checks in tests: window.sprawniej.data.getState(), window.sprawniej.backend.catchUp() */
+    sprawniej?: { data?: typeof useData; actions?: Record<string, unknown>; backend?: unknown }
   }
 }
 if (typeof window !== 'undefined') window.sprawniej = { ...window.sprawniej, data: useData }
