@@ -20,6 +20,7 @@ with a reason.
 - 2026-10-19: `import_rows` matches rows on the primary key (`unique (workspace_id, linear_id)` stays as a guard); `views` got `linear_id`; `invites.for_profile` is `on delete set null`; `ensure_profile`/`create_profile` return a set (no rows = pick a name); one catch-up message per import batch; workspaces leave no deletion notes.
 - 2026-10-19: Accepted advisor warnings: "signed-in users can execute SECURITY DEFINER function" for the 11 public functions (they are the API, each checks the caller, `anon` can't run them); leaked-password protection (paid plan); "insufficient MFA options" (no MFA in stage A).
 - 2026-10-19: Sign-out keeps only `sprawniej-chrome` (whether the sidebar is open): it says nothing about the person or the work.
+- 2026-10-19: GitHub Pages is on for the fork (source: GitHub Actions, https://michalsek.github.io/sprawniej/). The build's public settings are repository variables `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` (publishable key) and `VITE_PUBLIC_URL`. The user approved releasing 2.0.0 and starting the Pages build once everything is green.
 - 2026-10-19: Work happens in the session's worktree; `main` is fast-forwarded to it after each step (the session
   can't write in the main checkout directly).
 
@@ -36,9 +37,9 @@ Status: `todo`, `doing`, `done`.
 | 4 | Signing in and opening a workspace (read path, realtime, catch-up in memory) | done | 537747e + fix round; 23/23 browser scenarios, 59/59 DB tests |
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | done | 80d144b + fix round; QA's Q1-Q15 and 22 browser cases pass |
 | 6 | Linear import end to end (`import_rows`) | doing | being built in its own worktree |
-| 7 | History and pictures | doing | built on its branch (773dc82); QA and review in; fix round running |
-| 8 | Team features: invites, members and roles, people from Linear, ways to sign in | todo | after 5 |
-| 9 | Read cache and catch-up from IndexedDB | todo | after 5 |
+| 7 | History and pictures | done | 773dc82 + fix round, merged in cca59f9 |
+| 8 | Team features: invites, members and roles, people from Linear, ways to sign in | doing | built on its branch (632eef6); QA and review running |
+| 9 | Read cache and catch-up from IndexedDB | doing | being built in its own worktree |
 | 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | todo | after 6 to 9 |
 | 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | todo | last |
 
@@ -117,7 +118,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E23 | phase 1 planner | `actions.ts` `createIssue`: an issue created as Done gets `completedAt: null`; the new trigger sets it (small behaviour change) | fixed | phase 5 |
 | E24 | phase 1 planner | `actions.ts` `toldRecently` moves to the database (`check_note` trigger); delete it | fixed | phase 5 (the `check_note` trigger) |
 | E25 | phase 1 planner | `.github/workflows/pages.yml` runs `bun test`; safe only while `tests/db` stays gated on `SPRAWNIEJ_DB_TESTS` | open | document in supabase-setup.md |
-| E26 | phase 1 planner | Labels added right after an issue is created will write history rows (today none); history folding or one-call create should hide them | open | phase 7 |
+| E26 | phase 1 planner | Labels added right after an issue is created will write history rows (today none); history folding or one-call create should hide them | fixed | phase 7 (merged in cca59f9) |
 | E27 | phase 1 planner | Someone with a fresh profile who later links GitHub should have their old imported profile merged into theirs (needs a cross-workspace move) | open | phase 8 |
 | E28 | phase 2 implementer | `linearMap.ts` `orderKeys`: when two Linear teams join one team here, their issues can get the same `sortOrder` | fixed | phase 2 fix round (F4) |
 | E29 | phase 2 implementer | `linearMap.ts` comment loop: `archivedHere` doesn't check the team, so a comment on an archived issue of a team not chosen could be added (low risk) | open |  |
@@ -203,7 +204,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E109 | phase 4 review | New uses of the deprecated `FormEvent` type | fixed | phase 4 fix round |
 | E110 | phase 4 review | A failed fetch of asked-for rows is never retried | fixed | phase 4 fix round |
 | E111 | phase 4 review | Paging stops by comparing with 1000 rows, the server's row limit | fixed | phase 4 fix round |
-| E112 | phase 4 implementer | `useHistory.ts:57` and `ImportPage.tsx:72` still read the old save status | open | phases 6, 7 |
+| E112 | phase 4 implementer | `useHistory.ts:57` and `ImportPage.tsx:72` still read the old save status | fixed | phase 7 (merged in cca59f9) |
 | E113 | phase 4 implementer | After a workspace goes away while open, the chip keeps saying Saved behind the dialog | fixed | phase 4 fix round |
 | E114 | phase 5 planner | Settings: "Your GitHub profile stays as it is" / "Use your GitHub name" mean nothing now | open | phase 8 |
 | E115 | phase 5 planner | TeamMenu offers "Delete team" and Settings an editable workspace name to members who can't | open | phase 8 |
@@ -214,7 +215,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E120 | phase 6 planner | Views can't change `team_id` through `import_rows` | won't do | a Linear view moving teams is rare; recreate it by hand |
 | E121 | phase 6 planner | `loadTable` reloads only active issues, so a big catch-up misses archived rows | open | phase 9 (catch-up pages every changed row) |
 | E122 | phase 6 planner | Existing teams never get newly matched people as members on re-import | open | phase 6 |
-| E123 | phase 7 planner | `statusOf` uses a non-null assertion: an unknown status crashes a screen | open | phase 7 |
+| E123 | phase 7 planner | `statusOf` uses a non-null assertion: an unknown status crashes a screen | fixed | phase 7 (merged in cca59f9) |
 | E124 | phase 7 planner | Every description save writes its own history row | won't do | folded on screen; about 100 bytes a row is fine for 8 people |
 | E125 | phase 7 planner | The nightly archive doesn't take sub-issues along, while archiving by hand does | won't do | each finished issue goes on its own, as the old tidy-up did |
 | E126 | phase 7 planner | Pictures nobody uses any more are never removed, and pictures aren't in any backup | open | phase 10 (backup workflow notes) |
@@ -244,15 +245,15 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E150 | phase 5 review + QA | The test fake isn't faithful (duplicates, foreign keys, column grants, note filters), so writer tests miss real failures | fixed | phase 5 fix round (W8) |
 | E151 | phase 5 QA | "It was deleted meanwhile" doesn't say what was deleted | fixed | phase 5 fix round (W10) |
 | E152 | phase 5 QA | Deleting test users leaves their profiles behind; the cleanup recipe in the briefs was incomplete | fixed | briefs now delete profiles first |
-| E153 | phase 7 QA | Pasting a picture right after another replaces the first; only one of several pasted files is kept; a slow upload replaces a later selection | open | phase 7 fix round (P1) |
-| E154 | phase 7 review | A shown picture whose re-sign fails is asked for again every 30 ms (empty store updates wake every listener) | open | phase 7 fix round (P2) |
-| E155 | phase 7 QA + review | Pictures in comments never retry, and a page left open hands out expired addresses | open | phase 7 fix round (P3) |
-| E156 | phase 7 QA + review | History opened while offline never recovers once back online | open | phase 7 fix round (P4) |
-| E157 | phase 7 QA | A guest linked to a member reads as "someone" in history until a reload | open | phase 7 fix round (P5) |
-| E158 | phase 7 QA | Any change made with nobody signed in reads as "Archived automatically" | open | phase 7 fix round (P6) |
-| E159 | phase 7 review | The history signature claims reordering doesn't reload history, but `updatedAt` makes it | open | phase 7 fix round (P7) |
-| E160 | phase 7 QA | Clicking into a description and out saves a tidied version and writes a history line | open | phase 7 fix round (P8) |
-| E161 | phase 7 QA | After removal, signed picture addresses stay in memory for up to a day | open | phase 7 fix round (P9) |
+| E153 | phase 7 QA | Pasting a picture right after another replaces the first; only one of several pasted files is kept; a slow upload replaces a later selection | fixed | phase 7 (merged in cca59f9) |
+| E154 | phase 7 review | A shown picture whose re-sign fails is asked for again every 30 ms (empty store updates wake every listener) | fixed | phase 7 (merged in cca59f9) |
+| E155 | phase 7 QA + review | Pictures in comments never retry, and a page left open hands out expired addresses | fixed | phase 7 (merged in cca59f9) |
+| E156 | phase 7 QA + review | History opened while offline never recovers once back online | fixed | phase 7 (merged in cca59f9) |
+| E157 | phase 7 QA | A guest linked to a member reads as "someone" in history until a reload | fixed | phase 7 (merged in cca59f9) |
+| E158 | phase 7 QA | Any change made with nobody signed in reads as "Archived automatically" | fixed | phase 7 (merged in cca59f9) |
+| E159 | phase 7 review | The history signature claims reordering doesn't reload history, but `updatedAt` makes it | fixed | phase 7 (merged in cca59f9) |
+| E160 | phase 7 QA | Clicking into a description and out saves a tidied version and writes a history line | fixed | phase 7 (merged in cca59f9) |
+| E161 | phase 7 QA | After removal, signed picture addresses stay in memory for up to a day | fixed | phase 7 (merged in cca59f9) |
 | E162 | phase 7 review | Every history line subscribes to the whole people/projects/labels/issues maps | open |  |
 | E163 | phase 6 review | Database and network error text can reach the import screen | open | phase 6 fix round |
 | E164 | phase 6 review | `carry` for Try again has two sources of truth and is lost on reload; a simpler rule exists | open | phase 6 fix round |
@@ -270,4 +271,4 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | Realtime "Allow public access" off (dashboard, Realtime, Settings) | done 2026-10-19 |
 | Run the Linear import with your own Linear key (phase 6) | later |
 | Database password for `db push`, approve the final wipe (phase 11) | later |
-| Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | later |
+| Switch on GitHub Pages for the fork, repository variables for the build (phase 11) | done 2026-10-19 |

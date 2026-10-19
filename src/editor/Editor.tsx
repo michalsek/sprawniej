@@ -2,8 +2,9 @@
  * The rich text editor for descriptions and comments. It formats as you type (**bold**, "- " lists, "[] " checklists,
  * ``` code), turns pasted links into links (paste a link onto selected words to link them), and stores plain Markdown.
  *
- * Saving: `onChange` gets the Markdown a moment after you stop typing, and at once when you leave the field.
- * A teammate's change shows up here too, unless you're typing in this field right now.
+ * Saving: `onChange` gets the Markdown a moment after you stop typing, and at once when you leave the field. Only
+ * your own edits are saved: clicking in and out again saves nothing. A teammate's change shows up here too (merged
+ * into yours if you're writing here).
  */
 import { useEffect, useRef } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
@@ -12,11 +13,9 @@ import { Markdown } from '@tiptap/markdown'
 import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { Placeholder } from '@tiptap/extensions'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
-import Image from '@tiptap/extension-image'
 import { createLowlight } from 'lowlight'
 import { toast } from 'sonner'
 import { addImage } from '@/data/actions'
-import { assetUrl } from '@/data/assets'
 import { cn } from '@/lib/utils'
 import { MentionSuggest } from './MentionSuggest'
 import { References } from './references'
@@ -24,24 +23,11 @@ import { LANGUAGES } from './languages'
 import { tidyMarkdown } from './tidy'
 import { onBeforeHide } from '@/lib/beforeHide'
 import { mergeText } from './mergeText'
+import { hasPending, Picture, savedMarkdown, settlePicture } from './picture'
 
 const lowlight = createLowlight(LANGUAGES)
 
 const SAVE_AFTER = 400
-
-/** pictures keep their workspace address in the Markdown and show from the app's own copy */
-const Picture = Image.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      src: {
-        default: null,
-        parseHTML: (el: HTMLElement) => el.getAttribute('data-src') ?? el.getAttribute('src'),
-        renderHTML: (attrs: { src?: string | null }) => ({ src: assetUrl(attrs.src), 'data-src': attrs.src }),
-      },
-    }
-  },
-})
 
 interface Props {
   value: string
@@ -57,6 +43,11 @@ interface Props {
 
 export function Editor({ value, onChange, placeholder = 'Add a description…', autoFocus, className, onSubmit, label = 'Description' }: Props) {
   const lastSent = useRef(value)
+  /** you changed something since the last save */
+  const dirty = useRef(false)
+  /** a teammate's change came while a picture was still being added: it's taken in once the picture is */
+  const waiting = useRef(false)
+  const latestValue = useRef(value)
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const changeRef = useRef(onChange)
   const submitRef = useRef(onSubmit)
@@ -101,8 +92,8 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
       },
     },
     onUpdate: () => {
-      clearTimeout(timer.current)
-      timer.current = setTimeout(flush, SAVE_AFTER)
+      dirty.current = true
+      saveLater()
     },
     onBlur: () => flush(),
   })
@@ -126,27 +117,57 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
     return editor.commands.insertContent(text, { contentType: 'markdown' })
   }
 
-  /** pasted or dropped pictures: kept in the workspace, then shown where they landed */
+  /**
+   * Pasted or dropped pictures go in at once, where they landed, and never in place of anything: after what's
+   * selected, or where they were dropped, with the cursor after them. Each is saved once it's kept with the
+   * workspace, and taken out again (with a note why) if it can't be.
+   */
   function addPictures(files: FileList | undefined, at?: number): boolean {
-    const pictures = [...(files ?? [])].filter((f) => f.type.startsWith('image/'))
-    if (!pictures.length) return false
-    for (const f of pictures) {
-      addImage(f).then(
-        (src) => {
-          if (!editor || editor.isDestroyed) return
-          const chain = editor.chain().focus()
-          ;(at === undefined ? chain : chain.setTextSelection(at)).setImage({ src, alt: f.name.replace(/\.[^.]+$/, '') }).run()
+    const list = [...(files ?? [])].filter((f) => f.type.startsWith('image/'))
+    const editor = editorRef.current
+    if (!list.length || !editor || editor.isDestroyed) return false
+    const added = list.map((file) => ({ file, token: crypto.randomUUID() }))
+    const nodes = added.map(({ file, token }) => ({ type: 'image', attrs: { src: null, alt: file.name.replace(/\.[^.]+$/, ''), pending: token } }))
+    editor
+      .chain()
+      .focus()
+      .insertContentAt(at ?? editor.state.selection.to, nodes)
+      .run()
+    for (const { file, token } of added) {
+      addImage(file, (src) => settlePicture(editor, token, { src })).then(
+        () => {
+          settlePicture(editor, token, { pending: null })
+          pictureDone()
         },
-        (e: Error) => toast(e.message),
+        (e: Error) => {
+          settlePicture(editor, token, null)
+          pictureDone()
+          toast(e.message)
+        },
       )
     }
     return true
   }
 
+  /** a picture is in (or out): a teammate's change that waited for it shows now */
+  function pictureDone() {
+    const editor = editorRef.current
+    if (!editor || editor.isDestroyed || !waiting.current || hasPending(editor.state.doc)) return
+    waiting.current = false
+    takeTheirs(latestValue.current)
+  }
+
+  function saveLater() {
+    clearTimeout(timer.current)
+    timer.current = setTimeout(flush, SAVE_AFTER)
+  }
+
   function flush() {
     clearTimeout(timer.current)
-    if (!editor || editor.isDestroyed) return
-    const md = tidyMarkdown(editor.getMarkdown())
+    // a teammate's change still waits to be merged in: saving now would undo it
+    if (!editor || editor.isDestroyed || !dirty.current || waiting.current) return
+    dirty.current = false
+    const md = tidyMarkdown(savedMarkdown(editor))
     if (md === lastSent.current) return
     lastSent.current = md
     changeRef.current(md)
@@ -157,25 +178,36 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
   // closing or hiding the tab right after typing: the same
   useEffect(() => onBeforeHide(() => flush()), [editor]) // oxlint-disable-line react-hooks/exhaustive-deps
 
-  // someone else changed it: show the new text. If you're writing here, their change is merged into yours line by
-  // line (yours wins where you both changed the same lines), so saving your text never undoes theirs.
-  useEffect(() => {
+  /**
+   * Someone else changed it: show the new text. If you're writing here, their change is merged into yours line by
+   * line (yours wins where you both changed the same lines), so saving your text never undoes theirs.
+   */
+  function takeTheirs(value: string) {
     if (!editor || editor.isDestroyed || value === lastSent.current) return
+    // a picture is still being added: replacing the text now would take it out
+    if (hasPending(editor.state.doc)) {
+      waiting.current = true
+      return
+    }
     const base = lastSent.current
     lastSent.current = value
-    if (!editor.isFocused) {
+    if (!dirty.current && !editor.isFocused) {
       editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false })
       return
     }
-    const mine = tidyMarkdown(editor.getMarkdown())
+    const mine = dirty.current ? tidyMarkdown(savedMarkdown(editor)) : base
     const merged = mine === base ? value : mergeText(base, mine, value)
     if (merged === mine) return
     replaceChanged(editor, merged)
     // what you added is still to be saved: `lastSent` is their text, the editor has both
     if (merged !== value) {
-      clearTimeout(timer.current)
-      timer.current = setTimeout(flush, SAVE_AFTER)
+      dirty.current = true
+      saveLater()
     }
+  }
+  useEffect(() => {
+    latestValue.current = value
+    takeTheirs(value)
   }, [value, editor]) // oxlint-disable-line react-hooks/exhaustive-deps
 
   return <EditorContent editor={editor} className={cn('min-h-24 cursor-text', className)} />

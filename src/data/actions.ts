@@ -17,6 +17,7 @@ import type { KeyOf, LiveTable, Row } from '@/backend/tables'
 import { context, tell, write, type NoteRow, type WriteContext } from '@/backend/writes'
 import { MESSAGES } from '@/backend/writes/problems'
 import { backend } from '@/backend'
+import { PictureError, pictures, type PictureProblem } from '@/backend/pictures'
 import {
   acceptInvite,
   createInvite as makeInvite,
@@ -37,6 +38,7 @@ import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
 import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
+import { IMAGE_TYPES, MAX_IMAGE_MB, openWorkspaceId, pictureName, picturePath } from './assets'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
 import { isAdmin, isUnread, ownerCount } from './select'
@@ -967,12 +969,34 @@ export function renameWorkspace(name: string) {
 
 // ---------- pictures ----------
 
-const IMAGE_TYPES: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/gif': 'gif', 'image/webp': 'webp' }
-export const MAX_IMAGE_MB = 10
+/** what to tell someone whose picture couldn't be added */
+export const PICTURE_MESSAGES: Record<PictureProblem, string> = {
+  'too-big': `This picture is too big. Pictures can be up to ${MAX_IMAGE_MB} MB.`,
+  'wrong-type': 'Only PNG, JPEG, GIF and WebP pictures can be added.',
+  refused: "You can't add pictures to this workspace.",
+  'signed-out': 'Please sign in again, then add the picture.',
+  network: "This picture couldn't be added. Check your connection and try again.",
+}
 
-/** Keep a pasted or dropped picture in the workspace. Returns the address to put in the Markdown. Coming back soon. */
-export async function addImage(file: Blob): Promise<string> {
-  if (!IMAGE_TYPES[file.type]) throw new Error('Only PNG, JPEG, GIF and WebP pictures can be added.')
-  if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(`This picture is too big. Pictures can be up to ${MAX_IMAGE_MB} MB.`)
-  throw new Error("Pictures can't be added just yet. They're coming back soon.")
+/**
+ * Keep a pasted or dropped picture with the workspace. Returns the address to put in the Markdown; `named` hears it
+ * as soon as it's known, while the picture already shows from this browser's own copy.
+ */
+export async function addImage(file: Blob, named?: (src: string) => void): Promise<string> {
+  const ext = IMAGE_TYPES[file.type]
+  if (!ext) throw new Error(PICTURE_MESSAGES['wrong-type'])
+  if (file.size > MAX_IMAGE_MB * 1024 * 1024) throw new Error(PICTURE_MESSAGES['too-big'])
+  const ws = openWorkspaceId()
+  if (!ws) throw new Error('Pictures can be added once your workspace is open.')
+  const name = await pictureName(file, ext)
+  const path = picturePath(ws, name)
+  const src = `/assets/${name}`
+  pictures.preview(path, file)
+  named?.(src)
+  try {
+    await pictures.add(path, file)
+  } catch (e) {
+    throw new Error(PICTURE_MESSAGES[e instanceof PictureError ? e.kind : 'network'], { cause: e })
+  }
+  return src
 }

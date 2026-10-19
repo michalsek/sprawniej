@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { chipState } from '@/backend/status'
+import { statusOf, type StatusId } from '@/model/status'
 
 const up = { online: true, channelsUp: true, signedIn: true, failing: false }
 
@@ -15,5 +16,11 @@ describe('the save chip', () => {
     expect(chipState({ ...up, online: false }, { pending: 1, waiting: true })).toBe('offline')
     expect(chipState({ ...up, online: false }, { pending: 1, waiting: false })).toBe('offline')
     expect(chipState({ ...up, signedIn: false }, { pending: 3, waiting: true })).toBe('signed-out')
+  })
+})
+
+describe('statuses', () => {
+  test('a status this app does not know reads as Backlog instead of breaking the screen', () => {
+    expect(statusOf('blocked' as StatusId)).toMatchObject({ id: 'backlog', group: 'backlog' })
   })
 })

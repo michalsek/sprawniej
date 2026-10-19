@@ -146,8 +146,10 @@ Big issues can be split into smaller **sub-issues**. The parent shows a counter 
 ### Comments and history
 
 Under each issue, **Activity** shows its comments and everything that happened to it, oldest first: who changed the
-status, who it was given to, when the due date moved, and so on. The history comes from your workspace's saved
-versions, so it goes all the way back (it needs a connection to show).
+status, who it was given to, when the due date moved, and so on. It shows every change made in Sprawniej, and your
+teammates' changes appear as they make them (it needs a connection to show). Changes from before your work was
+brought over aren't shown. Issues that were finished and left alone for a while are archived by themselves at
+night; their history says "Archived automatically".
 
 Talk about an issue in the comments. Type, then press `⌘` `Enter` or **Comment**. Formatting, links,
 `@` mentions and issue IDs work just like in descriptions. A comment you haven't sent yet waits in this browser,
@@ -315,8 +317,9 @@ issue to drag it.
 
 ## Pictures
 
-Paste a picture (or drop one) into a description or a comment. It's kept in your workspace with everything else,
-so only your teammates can see it. Pictures can be up to 10 MB.
+Paste a picture (or drop one) into a description or a comment. It's kept with your workspace, so only your
+teammates can see it. PNG, JPEG, GIF and WebP pictures can be added, up to 10 MB each. The same picture pasted
+twice is kept once. A grey space shows where a picture goes until it has loaded.
 
 ## Something went wrong?
 
