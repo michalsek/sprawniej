@@ -65,10 +65,9 @@ starting over is the same short runbook, kept as `docs/supabase-setup.md` (writt
 supabase/
   config.toml        auth and API settings as code; secrets only as env(...)
   migrations/        every table, rule, function, trigger, the pictures bucket, the realtime rule, pg_cron jobs
-  tests/             pgTAP tests for the rules and triggers
-  seed.sql           a small test workspace, for the local stack only
+  dev/               cleanup-tests.sql (removes what the database tests left behind)
   templates/         email templates (when we have a sender)
-  .env.example       the names of the secrets config.toml reads (never the values)
+  .env.example       the names of the values config.toml reads (never the secrets)
 ```
 
 1. Create a project in the Supabase dashboard (any account, any region). Write down its ref.
@@ -82,8 +81,11 @@ supabase/
 5. Put the project's URL and publishable key in `.env.local` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY`) and run the app.
 6. Sign in, create the workspace, import (section 8).
 
-The same files drive the local stack: `supabase start` and `supabase db reset` rebuild everything from scratch, which is
-also the proof that the runbook works. Step 10 of the plan repeats the runbook on a second, throwaway project.
+There is no local stack (no Docker). Development and tests use the project itself, which holds nothing that can't be
+imported again: `supabase db reset --linked` removes everything and applies the migrations again,
+which is also the proof that the files are the whole truth. The database tests (`tests/db`, `bun run test:db`) are bun
+tests that talk to the project through its API as throwaway accounts; plain `bun test` skips them. Step 10 of the plan
+repeats the runbook on a second, throwaway project.
 
 Rules that keep it repeatable:
 
@@ -91,13 +93,15 @@ Rules that keep it repeatable:
   happens by accident, `supabase db pull` turns it into a migration.
 - **Every setting is in `config.toml`** (`supabase config push`), with secrets read from the environment.
 - **No project ref, URL or key in the code**; the app reads them at build time.
-- Seed data is only for the local stack (`db push` doesn't send it).
 
 The MCP server (`apply_migration`) is fine for looking around and for emergencies; normal changes go through the
-CLI so that the files in the repo stay the truth. Database branches cost money, so the local stack is where we try
-things. Types for the client come from `supabase gen types typescript` into `src/backend/database.types.ts`.
+CLI so that the files in the repo stay the truth. Database branches cost money, so we try things on the development
+project and wipe it when needed. Types for the client come from `supabase gen types typescript` into `src/backend/database.types.ts`.
 
 ## 2. Tables
+
+The real SQL is in `supabase/migrations`; where it differs from this section and sections 3 to 5, the migrations win
+(work log P1 to P22).
 
 ### Choices behind the tables
 
@@ -857,7 +861,7 @@ for notes. (If it turns out not to be, an `update_issue(id, patch, notes)` funct
 
 | Function | What it does | Who may call it |
 | --- | --- | --- |
-| `ensure_profile()` | After sign-in: finds your profile; or claims an imported one whose `github_id` matches your GitHub sign-in (read from `auth.identities`, never from the browser); or makes one from your GitHub login if it's free. Returns null when you still need to pick a login. | anyone signed in |
+| `ensure_profile()` | After sign-in: finds your profile; or claims an imported one whose `github_id` matches your GitHub sign-in (read from `auth.identities`, never from the browser); or makes one from your GitHub login if it's free. Returns no rows when you still need to pick a login. | anyone signed in |
 | `create_profile(login, name)` | Picks your login (Google and email sign-ups, or a taken GitHub login) | anyone signed in without a profile |
 | `create_workspace(name, team_key, team_name, team_emoji)` | The workspace, you as owner, a first team with you in it | anyone with a profile |
 | `invite_info(token)` | Workspace name, who invited, who it's for: what the join wizard shows before you join | anyone signed in |
@@ -865,7 +869,7 @@ for notes. (If it turns out not to be, an `update_issue(id, patch, notes)` funct
 | `leave_workspace(workspace)` | Sets your own `removed_at` (not for the last owner) | members |
 | `move_issue_to_team(issue, team)` | See above | members |
 | `link_person(workspace, guest, to)` | Someone from Linear who hadn't joined is this person: every reference moves over (issues, comments, projects, views' filters, followers, team members, inbox), `linear_ids` merge, the guest profile goes. One transaction, replacing `src/data/relink.ts`'s file rewriting. | admins |
-| `import_rows(workspace, table, rows jsonb)` | Upsert for the imports (Linear first) with `sprawniej.importing` on: keeps numbers, no history or realtime noise. Re-imports match on `(workspace_id, linear_id)`. | admins |
+| `import_rows(workspace, table, rows jsonb)` | Upsert for the imports (Linear first) with `sprawniej.importing` on: keeps numbers, no history or realtime noise. Re-imports match on the primary key (the caller reuses the id of a row it imported before); `unique (workspace_id, linear_id)` makes a second copy fail loudly. | admins |
 | `set_guest_email(profile, email)` | The Linear import keeps a person's Linear email in `private.guest_emails`, so Settings can suggest inviting them at that address | admins |
 
 `auth.users` gets **no trigger**: a failing trigger there breaks sign-up for everyone, so profiles are made by
@@ -1139,7 +1143,7 @@ src/backend/
   cache.ts           the read cache in IndexedDB (rows + mark per workspace)
   pictures.ts        upload, signed URLs
   history.ts         issue_events for one issue
-  importRepo.ts      the one-time import from a GitHub workspace (section 8)
+  importRepo.ts      the import from a GitHub workspace, later and only if someone needs it (section 8)
 ```
 
 ```ts
@@ -1183,8 +1187,8 @@ export interface Backend {
 | `src/editor/*`, `src/features/issues/composer.ts` | **small changes** | Picture upload and URLs through the backend. |
 | `src/features/help`, `docs/user-guide.md` | **changed** | Signing in, inviting, no GitHub key. |
 | `window.sprawniej` | **changed** | `data`, `actions` stay; `sync` becomes `backend` (`status`, `catchUp()`). |
-| `tests/` | `merge`, `pace`, `archive` (packing), `relink` (file rewriting), `repoNames` tests go; `files` tests move with the importer; new tests for `rows.ts` (including times), `applyRows` (newer only, in-flight fields, per field), `history` from events, the status lists matching the SQL checks. SQL rules and triggers get pgTAP tests run against `supabase start`. |
-| `supabase/` | **new** | `config.toml`, `migrations/`, `tests/` (pgTAP), email templates, later `functions/github-webhook/`. |
+| `tests/` | `merge`, `pace`, `archive` (packing), `relink` (file rewriting), `repoNames` tests go; `files` tests move with the importer; new tests for `rows.ts` (including times), `applyRows` (newer only, in-flight fields, per field), `history` from events, the status lists matching the SQL checks (`tests/statusLists.test.ts`). SQL rules and triggers get bun tests in `tests/db` run against the development project (`bun run test:db`). |
+| `supabase/` | **new** | `config.toml`, `migrations/`, `dev/` (test cleanup), email templates, later `functions/github-webhook/`. |
 
 ## 8. Imports: Linear first
 
@@ -1213,9 +1217,10 @@ is what `buildImport` returns and how it is saved.
   today ("ENG-12 came in as ENG-40" in the check step). The database refuses a used number anyway.
 - **Saving.** Rows go through `import_rows` in dependency order (guest profiles, teams and team members, labels,
   projects and project teams, issues without parent or duplicate, then those two fields, issue labels and followers,
-  comments, views), in batches of 500, with the same progress bar. `import_rows` upserts on `(workspace_id,
-  linear_id)`, so running the import again updates what came over and adds what's new, as it does now; issues archived
-  here since stay archived.
+  comments, views), in batches of 500, with the same progress bar. `import_rows` upserts on the primary key: the
+  import reuses the id of each row that came over before (matched by its Linear id, or by name for a label or a team
+  taking a Linear team), so running the import again updates what came over and adds what's new, as it does now;
+  issues archived here since stay archived. `unique (workspace_id, linear_id)` stays as the guard against a second copy.
 - **Pictures** pasted in Linear stay links to Linear, as today.
 - **Archived issues for matching.** A second import needs to know archived issues too; it asks the database for
   `id, linear_id` of the workspace's issues with a `linear_id` (a small query) instead of loading the archive.
@@ -1312,7 +1317,7 @@ jobs:
 ```
 
 Pictures aren't in the dump. A weekly job copies the bucket through Storage's S3-compatible endpoint (`rclone sync`)
-into the same place. A restore is tried once, into the local stack, before we go live, and written down in
+into the same place. A restore is tried once, into a throwaway project, before we go live, and written down in
 `docs/architecture.md`.
 
 ### Keeping egress low
@@ -1355,7 +1360,7 @@ never whole descriptions. Pictures stay at 10 MB at most; the editor could shrin
 | No agents or AI features. | **Stays.** | |
 | Releasing: "`main` deploys to GitHub Pages and real people use it." | Publishing is by hand: merging into `main` doesn't publish; running the Pages workflow does. The rest (branches, checks, version bump and changelog before merging) stays. | The workflow now runs only when started by hand (changed 2026-10-19). |
 | Code map: `src/github`, `src/sync`. | `src/backend` (all Supabase calls), `supabase/` (migrations, SQL tests, email templates, Edge Functions). | |
-| Testing: sync tests on a throwaway repo; `window.sprawniej.sync`; two origins and two tabs. | Tests run against the local stack (`supabase start`), **never the real project**. `window.sprawniej.backend`. Two people = two browsers signed in as two test accounts; also test one person in two tabs, and a dropped connection. | |
+| Testing: sync tests on a throwaway repo; `window.sprawniej.sync`; two origins and two tabs. | Database tests (`bun run test:db`) run against the development project with throwaway accounts and their own workspaces, wiped and re-applied when needed; never against a team's real workspace. `window.sprawniej.backend`. Two people = two browsers signed in as two test accounts; also test one person in two tabs, and a dropped connection. | |
 | Never write a GitHub key into a file. | Never write a Supabase secret key, database password or GitHub key into a file. The publishable key and project URL may be in the build. | |
 | Writing: screens never say commit, push, pull, merge, repo or token. | Also never say database, server, row, Supabase or sync. "Saved", "Can't save right now, we'll keep trying", "updated with your teammates' changes". | |
 
@@ -1376,25 +1381,26 @@ email; your workspace owner brings your work over once."
 Each step ends with something we can check. The work happens on a branch; `main` keeps serving today's version until
 the switch.
 
-**Building (local stack only)**
+**Building (on the development project, no local stack)**
 
-1. **Schema and settings in the repo.** `supabase/` with `config.toml`, the migrations from sections 2 to 5, a small
-   `seed.sql`, pgTAP tests (members only, comment authors, inbox privacy, numbers under two parallel inserts, history
-   rows, deletions, broadcasts, the import flag), and the runbook `docs/supabase-setup.md`. Done = `supabase db reset`
-   builds everything from nothing, `supabase test db` passes, the advisors report nothing.
+1. **Schema and settings in the repo.** `supabase/` with `config.toml`, the migrations from sections 2 to 5, bun
+   database tests in `tests/db` (members only, comment authors, inbox privacy, numbers under parallel inserts, history
+   rows, deletions, broadcasts, the import flag), and the runbook `docs/supabase-setup.md`. Done = wiping the project
+   and applying the migrations again builds everything from nothing, `bun run test:db` passes, the advisors report no
+   errors and every warning is explained in the work log.
 2. **`src/backend` and `rows.ts`.** Client, generated types, row mapping with tests (times, logins, `extra`). Done =
    `bun test`.
 3. **Opening a workspace.** `load.ts` (loads everything for now) and `live.ts` with `applyRows` and its tests. Done = two
-   browsers on the local stack see each other's changes within a second, and one that lost its connection catches up,
+   browsers on the development project see each other's changes within a second, and one that lost its connection catches up,
    including deletions.
 4. **Saving.** `writes.ts`, `actions.ts` rewired function by function (issues, comments, labels, projects, views, teams,
    inbox, pictures, move to team, archive and restore). Done = `tests/actions.test.ts` updated and green; the whole app
-   works against the local stack; the two-person table in docs/architecture.md checked by hand.
+   works against the development project; the two-person table in docs/architecture.md checked by hand.
 5. **Signing in, stage A.** Sign-in screen (GitHub, email and password), pick a login, choose or create a workspace,
-   Settings › ways to sign in, sign out. Done = sign in both ways on the local stack and reach the workspace.
+   Settings › ways to sign in, sign out. Done = sign in both ways on the development project and reach the workspace.
 6. **History.** `issue_events` on the issue page. Done = the history test cases pass with event rows.
 7. **The Linear import on rows** (section 8). Done = `tests/linearImport.test.ts` passes on rows; the real Linear
-   project imports into the local stack with the same counts the check step promised (teams, issues, archived issues,
+   project imports into the development project with the same counts the check step promised (teams, issues, archived issues,
    comments, labels, projects, views); a second run changes nothing; a change made in Linear in between comes over on
    a third run.
 
@@ -1412,7 +1418,7 @@ the switch.
 
 11. **What a team needs:** invites and Settings › members and roles, the read cache (section 9), Google sign-in, our own
     email sender and templates with confirmations on, the backup workflow and picture backup, and a restore tried once
-    into the local stack.
+    into a throwaway project.
 12. **Where the team opens it:** `https://michalsek.github.io/sprawniej/`. Turn on GitHub Pages for the fork (Settings › Pages › Source:
     GitHub Actions), add the address to `site_url` and the redirect URLs in `config.toml` (`supabase config push`), and
     give the Pages workflow `VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` and `VITE_PUBLIC_URL` as repository variables
