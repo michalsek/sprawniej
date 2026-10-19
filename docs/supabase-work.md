@@ -38,8 +38,8 @@ Status: `todo`, `doing`, `done`.
 | 5 | Saving: `writes.ts` and `actions.ts` on rows | done | 80d144b + fix round; QA's Q1-Q15 and 22 browser cases pass |
 | 6 | Linear import end to end (`import_rows`) | doing | being built in its own worktree |
 | 7 | History and pictures | doing | built on its branch (773dc82); QA and review in; fix round running |
-| 8 | Team features: invites, members and roles, people from Linear, ways to sign in | todo | after 5 |
-| 9 | Read cache and catch-up from IndexedDB | todo | after 5 |
+| 8 | Team features: invites, members and roles, people from Linear, ways to sign in | doing | built on its branch (632eef6); QA and review running |
+| 9 | Read cache and catch-up from IndexedDB | doing | being built in its own worktree |
 | 10 | Remove the old code, docs, CLAUDE.md, inactive backup workflow | todo | after 6 to 9 |
 | 11 | Prove the runbook on a wiped project, GitHub Pages, release 2.0.0 | todo | last |
 
