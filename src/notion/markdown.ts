@@ -52,7 +52,12 @@ const same = (a: Run, b: Run) => a.bold === b.bold && a.italic === b.italic && a
 /** no HTML comes through: the editor would read it as such */
 const escapeHtml = (s: string) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-const isSpace = (c: string) => c.trim() === ''
+/** what `\s` matches, by character code (the code of the character at `i`) */
+function isSpace(text: string, i: number): boolean {
+  const c = text.charCodeAt(i)
+  return (c >= 9 && c <= 13) || c === 32 || c === 160 || c === 5760 || (c >= 8192 && c <= 8202) || c === 8232 || c === 8233 ||
+    c === 8239 || c === 8287 || c === 12288 || c === 65279
+}
 
 /**
  * marks and links wrap the words, not the spaces around them, or Markdown doesn't see them ("** x**"). Found by
@@ -61,8 +66,8 @@ const isSpace = (c: string) => c.trim() === ''
 function around(text: string, f: (words: string) => string): string {
   let from = 0
   let to = text.length
-  while (from < to && isSpace(text[from])) from++
-  while (to > from && isSpace(text[to - 1])) to--
+  while (from < to && isSpace(text, from)) from++
+  while (to > from && isSpace(text, to - 1)) to--
   if (from === to) return text
   return `${text.slice(0, from)}${f(text.slice(from, to))}${text.slice(to)}`
 }
@@ -96,6 +101,11 @@ function runsOf(parts: unknown): Run[] {
   return runs
 }
 
+/**
+ * Rich text as Markdown. Neighbouring parts with the same marks and link are one run, so a word bold in part reads
+ * right. A line break inside the text stays a line break (Markdown's two spaces), a blank line a new paragraph.
+ * Mentions and equations read as their text. What someone typed as Markdown is left as they wrote it.
+ */
 function markdownOf(runs: Run[]): string {
   return runs
     .map(render)
@@ -106,13 +116,6 @@ function markdownOf(runs: Run[]): string {
     .join('\n\n')
     .trim()
 }
-
-/**
- * Rich text as Markdown. Neighbouring parts with the same marks and link are one run, so a word bold in part reads
- * right. A line break inside the text stays a line break (Markdown's two spaces), a blank line a new paragraph.
- * Mentions and equations read as their text. What someone typed as Markdown is left as they wrote it.
- */
-export const richTextToMarkdown = (parts: unknown): string => markdownOf(runsOf(parts))
 
 /** the runs' first `n` characters (`chars`: each run's text, character by character) */
 function firstChars(runs: Run[], chars: string[][], n: number): Run[] {
@@ -133,7 +136,8 @@ function cutMarkdown(runs: Run[], room: number): string {
   const chars = runs.map((r) => [...r.text])
   const fits = (n: number) => charCount(markdownOf(firstChars(runs, chars, n))) + 1 <= room
   let lo = 0
-  let hi = chars.reduce((sum, c) => sum + c.length, 0)
+  // each character kept writes at least one (but spaces dropped at a line's end), so the search stops at `room`
+  let hi = Math.min(room, chars.reduce((sum, c) => sum + c.length, 0))
   while (lo < hi) {
     const mid = Math.ceil((lo + hi) / 2)
     if (fits(mid)) lo = mid

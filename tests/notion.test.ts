@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
 import fixture from './fixtures/notion-page.json'
 import { handle, MAX_BODY, type Env, type Lookup } from '@/notion/handler'
 import { keyFrom, sha256Hex } from '@/notion/key'
-import { descriptionFor, MAX_DESCRIPTION, richTextToMarkdown, type RichText } from '@/notion/markdown'
+import { descriptionFor, MAX_DESCRIPTION, type RichText } from '@/notion/markdown'
 import { notesFor } from '@/notion/notes'
 import { issueFromPage, readPage, statusFrom, type Page, type Property } from '@/notion/page'
 
@@ -14,6 +14,12 @@ const select = (name: string | null): Property => ({ type: 'select', select: nam
 const status = (name: string): Property => ({ type: 'status', status: { name } })
 const person = (email?: string) => ({ object: 'user', id: 'u', type: email ? 'person' : 'bot', ...(email && { person: { email } }) })
 const of = (properties: Record<string, Property>) => issueFromPage(page(properties))
+const LINK = '[Notion page](https://www.notion.so/x)'
+/** rich text as the description has it, without the link back */
+const richTextToMarkdown = (parts: unknown) => {
+  const d = descriptionFor(parts, 'https://www.notion.so/x')
+  return d === LINK ? '' : d.slice(0, -(LINK.length + 2))
+}
 
 describe('reading a page', () => {
   test('a page id with dashes and capitals becomes 32 lower-case hex digits', () => {
@@ -462,16 +468,17 @@ describe('the handler', () => {
   })
 
   test('the address replaced between the two calls is a wrong key; anything else refused still fails', async () => {
-    const refuse = (message: string) =>
+    const refuse = (code: string, message: string) =>
       (async (url: string) =>
-        url.endsWith('notion_lookup') ? Response.json(ok) : Response.json({ code: '42501', message }, { status: 403 })) as unknown as typeof fetch
-    const replaced = await send(fixture, { env: { fetch: refuse('This address was replaced.') } })
+        url.endsWith('notion_lookup') ? Response.json(ok) : Response.json({ code, message }, { status: 400 })) as unknown as typeof fetch
+    const replaced = await send(fixture, { env: { fetch: refuse('SP020', 'This address was replaced.') } })
     expect(replaced.status).toBe(401)
-    await expect(send(fixture, { env: { fetch: refuse('That person isn’t in this workspace.') } })).rejects.toThrow(/notion_apply: 403 42501/)
+    await expect(send(fixture, { env: { fetch: refuse('42501', 'That person isn’t in this workspace.') } })).rejects.toThrow(/notion_apply: 400 42501/)
   })
 
-  test('a megabyte of spaces in bold is answered quickly, with the right key or not', async () => {
-    const spaces = { type: 'rich_text', rich_text: [{ type: 'text', plain_text: ' '.repeat(MAX_BODY - 20_000), annotations: { bold: true } }] }
+  test('a long run of spaces in bold is answered quickly, with the right key or not', async () => {
+    // words with a long run of spaces between them: what a pattern for "the spaces around the words" is slow on
+    const spaces = { type: 'rich_text', rich_text: [{ type: 'text', plain_text: `x${' '.repeat(200_000)}x`, annotations: { bold: true } }] }
     const big = { ...fixture, data: { ...fixture.data, properties: { ...fixture.data.properties, Description: spaces } } }
     for (const lookup of [{ state: 'wrong_key' } as Lookup, ok]) {
       const started = performance.now()
