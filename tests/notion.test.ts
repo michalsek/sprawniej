@@ -223,6 +223,12 @@ describe('rich text as Markdown', () => {
     const d = descriptionFor([text('x'.repeat(60_000))], url)
     expect(d.length).toBeLessThanOrEqual(MAX_DESCRIPTION)
     expect(d.endsWith(`…\n\n[Notion page](${url})`)).toBe(true)
+    // marks go round what is kept, so none is left open
+    const bold = descriptionFor([text('x'.repeat(60_000), { annotations: { bold: true } }), text(' and more')], url)
+    expect([...bold].length).toBeLessThanOrEqual(MAX_DESCRIPTION)
+    expect(bold).toMatch(/^\*\*x+\*\*…\n\n\[Notion page\]/)
+    const code = descriptionFor([text('plain '), text('y'.repeat(60_000), { annotations: { code: true } })], url)
+    expect(code).toMatch(/^plain `y+`…\n\n/)
     // by characters, as Postgres counts them, never half of an emoji
     const e = descriptionFor([text('😀'.repeat(60_000))], url)
     expect([...e].length).toBeLessThanOrEqual(MAX_DESCRIPTION)
@@ -250,15 +256,11 @@ describe('notes', () => {
       [ANA, 'mentioned'],
     ])
   })
-
 })
 
 describe('the key', () => {
-  test('sha256 of "abc"', async () => {
+  test('from the address, or the header; only its sha256 goes on', async () => {
     expect(await sha256Hex('abc')).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
-  })
-
-  test('from the address, or the header', () => {
     const k = 'a'.repeat(64)
     expect(keyFrom(new Request(`https://x.co/f?c=1&k=${k}`))).toBe(k)
     expect(keyFrom(new Request('https://x.co/f?c=1', { headers: { 'X-Sprawniej-Secret': k.toUpperCase() } }))).toBe(k)
@@ -457,6 +459,26 @@ describe('the handler', () => {
     expect(r.calls[1].args.p_actor).toBeNull()
     expect((r.calls[1].args.p_issue as Record<string, unknown>).assignee_id).toBeNull()
     expect(r.calls[1].args.p_notes).toEqual([])
+  })
+
+  test('the address replaced between the two calls is a wrong key; anything else refused still fails', async () => {
+    const refuse = (message: string) =>
+      (async (url: string) =>
+        url.endsWith('notion_lookup') ? Response.json(ok) : Response.json({ code: '42501', message }, { status: 403 })) as unknown as typeof fetch
+    const replaced = await send(fixture, { env: { fetch: refuse('This address was replaced.') } })
+    expect(replaced.status).toBe(401)
+    await expect(send(fixture, { env: { fetch: refuse('That person isn’t in this workspace.') } })).rejects.toThrow(/notion_apply: 403 42501/)
+  })
+
+  test('a megabyte of spaces in bold is answered quickly, with the right key or not', async () => {
+    const spaces = { type: 'rich_text', rich_text: [{ type: 'text', plain_text: ' '.repeat(MAX_BODY - 20_000), annotations: { bold: true } }] }
+    const big = { ...fixture, data: { ...fixture.data, properties: { ...fixture.data.properties, Description: spaces } } }
+    for (const lookup of [{ state: 'wrong_key' } as Lookup, ok]) {
+      const started = performance.now()
+      const r = await send(big, { lookup })
+      expect(r.status).toBe(lookup.state === 'ok' ? 200 : 401)
+      expect(performance.now() - started).toBeLessThan(500)
+    }
   })
 
   test('a failing database call throws, so the function answers 500', async () => {

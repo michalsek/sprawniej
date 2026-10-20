@@ -52,11 +52,19 @@ const same = (a: Run, b: Run) => a.bold === b.bold && a.italic === b.italic && a
 /** no HTML comes through: the editor would read it as such */
 const escapeHtml = (s: string) => s.replace(/</g, '&lt;').replace(/>/g, '&gt;')
 
-/** marks and links wrap the words, not the spaces around them, or Markdown doesn't see them ("** x**") */
+const isSpace = (c: string) => c.trim() === ''
+
+/**
+ * marks and links wrap the words, not the spaces around them, or Markdown doesn't see them ("** x**"). Found by
+ * walking in from both ends: a pattern for this takes seconds on a long run of spaces.
+ */
 function around(text: string, f: (words: string) => string): string {
-  const m = text.match(/^(\s*)([\s\S]*?)(\s*)$/)
-  if (!m || !m[2]) return text
-  return `${m[1]}${f(m[2])}${m[3]}`
+  let from = 0
+  let to = text.length
+  while (from < to && isSpace(text[from])) from++
+  while (to > from && isSpace(text[to - 1])) to--
+  if (from === to) return text
+  return `${text.slice(0, from)}${f(text.slice(from, to))}${text.slice(to)}`
 }
 
 const wrap = (text: string, mark: string) => around(text, (w) => `${mark}${w}${mark}`)
@@ -76,12 +84,8 @@ function render(r: Run): string {
   return text
 }
 
-/**
- * Rich text as Markdown. Neighbouring parts with the same marks and link are one run, so a word bold in part reads
- * right. A line break inside the text stays a line break (Markdown's two spaces), a blank line a new paragraph.
- * Mentions and equations read as their text. What someone typed as Markdown is left as they wrote it.
- */
-export function richTextToMarkdown(parts: unknown): string {
+/** the parts as runs: neighbouring parts with the same marks and link are one */
+function runsOf(parts: unknown): Run[] {
   const runs: Run[] = []
   for (const r of (Array.isArray(parts) ? parts : []).map(run)) {
     if (!r.text) continue
@@ -89,6 +93,10 @@ export function richTextToMarkdown(parts: unknown): string {
     if (last && same(last, r)) last.text += r.text
     else runs.push(r)
   }
+  return runs
+}
+
+function markdownOf(runs: Run[]): string {
   return runs
     .map(render)
     .join('')
@@ -99,11 +107,48 @@ export function richTextToMarkdown(parts: unknown): string {
     .trim()
 }
 
+/**
+ * Rich text as Markdown. Neighbouring parts with the same marks and link are one run, so a word bold in part reads
+ * right. A line break inside the text stays a line break (Markdown's two spaces), a blank line a new paragraph.
+ * Mentions and equations read as their text. What someone typed as Markdown is left as they wrote it.
+ */
+export const richTextToMarkdown = (parts: unknown): string => markdownOf(runsOf(parts))
+
+/** the runs' first `n` characters (`chars`: each run's text, character by character) */
+function firstChars(runs: Run[], chars: string[][], n: number): Run[] {
+  const out: Run[] = []
+  for (let i = 0; i < runs.length && n > 0; i++) {
+    const take = chars[i].slice(0, n)
+    out.push({ ...runs[i], text: take.join('') })
+    n -= take.length
+  }
+  return out
+}
+
+/**
+ * Markdown of at most `room` characters with "…" at the end. The text is cut before its marks go round it, so no
+ * `**` or `` ` `` is left open: the most text that fits, found by halving.
+ */
+function cutMarkdown(runs: Run[], room: number): string {
+  const chars = runs.map((r) => [...r.text])
+  const fits = (n: number) => charCount(markdownOf(firstChars(runs, chars, n))) + 1 <= room
+  let lo = 0
+  let hi = chars.reduce((sum, c) => sum + c.length, 0)
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2)
+    if (fits(mid)) lo = mid
+    else hi = mid - 1
+  }
+  const text = markdownOf(firstChars(runs, chars, lo)).trimEnd()
+  return text ? `${text}…` : ''
+}
+
 /** the issue's description: the page's own (cut to fit), then a link back to the page (`url`: a checked Notion address) */
 export function descriptionFor(parts: unknown, url: string): string {
   const link = `[Notion page](${url})`
   const room = MAX_DESCRIPTION - charCount(link) - 2
-  let text = richTextToMarkdown(parts)
-  if (charCount(text) > room) text = `${cut(text, room - 1).trimEnd()}…`
+  const runs = runsOf(parts)
+  let text = markdownOf(runs)
+  if (charCount(text) > room) text = cutMarkdown(runs, room)
   return text ? `${text}\n\n${link}` : link
 }

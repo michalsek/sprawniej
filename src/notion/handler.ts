@@ -13,7 +13,7 @@ import { plainName } from '@/lib/plain'
 import { UUID } from '@/model/notion'
 import { keyFrom, sha256Hex } from './key'
 import { notesFor } from './notes'
-import { issueFromPage, readPage, type Page, type PageIssue } from './page'
+import { hintsFrom, issueFromPage, readPage, type Page, type PageHints, type PageIssue } from './page'
 
 export interface Env {
   /** the project's address and its service key, which Supabase gives every function */
@@ -47,6 +47,17 @@ export type Lookup =
 /** what notion_apply says */
 type Applied = { issue: string; new: boolean; archived?: boolean } | { problem: 'team' | 'busy' }
 
+/** a database call that failed, with Postgres's code (never its details: they can hold the page's title) */
+class DbError extends Error {
+  readonly code: string
+  constructor(fn: string, status: number, code: string, message: string) {
+    super(`${fn}: ${status} ${code} ${message}`.trim())
+    this.code = code
+  }
+}
+
+const WRONG_KEY = 'This address was replaced. Paste the new one from Settings › Notion.'
+
 /** a place before every issue in the team, as a new issue made in the app gets */
 function topOf(first: string | null): string {
   try {
@@ -74,15 +85,19 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   } catch {
     // said after the key is checked, so a stranger learns nothing
   }
+  // only who and where before the key is checked: the rest (the description) is built once it's right
   let page: Page | null = null
-  let fields: PageIssue | null = null
+  let hints: PageHints | null = null
   try {
     page = readPage(payload)
-    fields = page && issueFromPage(page)
+    hints = page && hintsFrom(page)
   } catch {
     // a page shaped like nothing Notion sends: "not a page", once the key is checked
     page = null
-    fields = null
+  }
+  const notAPage = () => {
+    console.log('notion', { refused: 'not a page' })
+    return json(400, { error: "That isn't a Notion page." })
   }
 
   const call = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => {
@@ -93,7 +108,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     if (!res.ok) {
       // the code and message only: the details can hold the page's title
       const e = (await res.json().catch(() => ({}))) as { code?: string; message?: string }
-      throw new Error(`${fn}: ${res.status} ${e.code ?? ''} ${e.message ?? ''}`.trim())
+      throw new DbError(fn, res.status, e.code ?? '', e.message ?? '')
     }
     return (await res.json()) as T
   }
@@ -102,18 +117,21 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   const found = await call<Lookup>('notion_lookup', {
     p_connection: connection,
     p_secret_hash: hash,
-    p_emails: fields?.emails ?? [],
-    p_team: fields?.teamHint ?? null,
+    p_emails: hints?.emails ?? [],
+    p_team: hints?.teamHint ?? null,
   })
   if (found.state === 'unknown') return json(404, { error: "This address doesn't work any more: Notion was disconnected in Settings." })
-  if (found.state !== 'ok') return json(401, { error: 'This address was replaced. Paste the new one from Settings › Notion.' })
-  if (!page || !fields) {
-    console.log('notion', { refused: 'not a page' })
-    return json(400, { error: "That isn't a Notion page." })
-  }
+  if (found.state !== 'ok') return json(401, { error: WRONG_KEY })
+  if (!page || !hints) return notAPage()
   if (page.trashed) {
     console.log('notion', { skipped: 'trash' })
     return json(200, { skipped: 'The page is in the trash.' })
+  }
+  let fields: PageIssue
+  try {
+    fields = issueFromPage(page)
+  } catch {
+    return notAPage()
   }
 
   const member = new Map(found.emails.map((e) => [e.email.toLowerCase(), e.profile_id]))
@@ -122,7 +140,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   const wanted = new Set(fields.labelNames.map(plainName))
   const labels = found.labels.filter((l) => wanted.has(plainName(l.name))).map((l) => l.id)
 
-  const r = await call<Applied>('notion_apply', {
+  const apply = call<Applied>('notion_apply', {
     p_connection: connection,
     p_secret_hash: hash,
     p_page: { id: page.id, url: page.url },
@@ -142,6 +160,15 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     },
     p_notes: notesFor({ description: fields.description, assignee, actor, people: found.people }),
   })
+  let r: Applied
+  try {
+    r = await apply
+  } catch (e) {
+    // the address was replaced between the two calls: as for a wrong key. Anything else (the author left meanwhile)
+    // fails, and resuming the automation sends the page again.
+    if (e instanceof DbError && e.code === '42501' && /replaced/.test(e.message)) return json(401, { error: WRONG_KEY })
+    throw e
+  }
   if ('problem' in r) {
     console.log('notion', { problem: r.problem })
     return r.problem === 'team'

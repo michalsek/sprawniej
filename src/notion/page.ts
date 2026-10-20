@@ -170,35 +170,41 @@ export interface PageIssue {
   emails: string[]
 }
 
-export function issueFromPage(page: Page): PageIssue {
+/** who and where: what the database needs to answer first (cheap: it reads no text but the Team property) */
+export type PageHints = Pick<PageIssue, 'assigneeEmails' | 'authorEmail' | 'teamHint' | 'emails'>
+
+export function hintsFrom(page: Page): PageHints {
   const props = page.properties
-  const title = cut(plainText(ofType(props, 'title')?.title).replace(/\s+/g, ' ').trim(), MAX_TITLE) || 'Untitled'
-
-  const statusProp = named(props, NAMES.status, ['status', 'select']) ?? ofType(props, 'status')
-  const priorityProp = named(props, NAMES.priority, ['select', 'status'])
-
   const people = named(props, NAMES.assignee, ['people'])?.people
   const assigneeEmails = [...new Set((Array.isArray(people) ? people : []).map(emailOf).filter((e): e is string => !!e))]
   const authorEmail = emailOf(ofType(props, 'created_by')?.created_by)
+  const teamProp = named(props, NAMES.team, ['select', 'status', 'rich_text'])
+  const teamHint = (teamProp?.type === 'rich_text' ? plainText(teamProp.rich_text) : choice(teamProp)).trim() || null
+  return {
+    assigneeEmails,
+    authorEmail,
+    teamHint,
+    emails: [...new Set([authorEmail, ...assigneeEmails].filter((e): e is string => !!e))].slice(0, MAX_EMAILS),
+  }
+}
 
+/** the whole issue: the description is built here, so the webhook asks for it only once the key is right */
+export function issueFromPage(page: Page): PageIssue {
+  const props = page.properties
+  const title = cut(plainText(ofType(props, 'title')?.title).replace(/\s+/g, ' ').trim(), MAX_TITLE) || 'Untitled'
+  const statusProp = named(props, NAMES.status, ['status', 'select']) ?? ofType(props, 'status')
+  const priorityProp = named(props, NAMES.priority, ['select', 'status'])
   const labelsProp = named(props, NAMES.labels, ['multi_select', 'select'])
   const options = labelsProp?.multi_select
   const labelNames = labelsProp?.type === 'multi_select' ? (Array.isArray(options) ? options : []).map(nameOf) : [choice(labelsProp)]
-
-  const teamProp = named(props, NAMES.team, ['select', 'status', 'rich_text'])
-  const teamHint = (teamProp?.type === 'rich_text' ? plainText(teamProp.rich_text) : choice(teamProp)).trim() || null
-
   const due = named(props, NAMES.due, ['date'])?.date
   return {
+    ...hintsFrom(page),
     title,
     description: descriptionFor(named(props, NAMES.description, ['rich_text'])?.rich_text, page.url),
     status: statusFrom(choice(statusProp)),
     priority: priorityFrom(choice(priorityProp)),
-    assigneeEmails,
-    authorEmail,
     dueDate: dayFrom(isRecord(due) ? due.start : null),
     labelNames: [...new Set(labelNames.map((n) => n.trim()).filter(Boolean))].slice(0, MAX_LABELS),
-    teamHint,
-    emails: [...new Set([authorEmail, ...assigneeEmails].filter((e): e is string => !!e))].slice(0, MAX_EMAILS),
   }
 }
