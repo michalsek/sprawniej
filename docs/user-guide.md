@@ -71,9 +71,9 @@ and history stay yours. What changes:
 
 Sprawniej comes in a light look and a dark one. At first it follows your device: light by day, dark at night, if
 your device switches. To pick one yourself, press `⌘` `K` (or `Ctrl` `K`) and type **light** or **dark**: **Use
-light appearance** and **Use dark appearance** keep that look whatever your device does, and **Follow the system
-appearance** goes back to following it. Your choice saves by itself and follows you to every device you sign in on.
-Only you see it.
+light appearance** and **Use dark appearance** keep that look whatever your device does, and **Follow your device's
+appearance** goes back to following it. The one in use has a check. Your choice saves by itself and follows you to
+every device you sign in on. Only you see it.
 
 ### Ways to sign in
 

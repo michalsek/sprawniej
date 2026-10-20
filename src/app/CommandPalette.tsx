@@ -4,10 +4,11 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation } from 'wouter'
-import { Box, CircleHelp, Inbox, Layers, Monitor, Moon, PanelLeft, Settings, Sparkles, SquarePen, SquareStack, Sun, User } from 'lucide-react'
+import { Box, Check, CircleHelp, Inbox, Layers, Monitor, Moon, PanelLeft, Settings, Sparkles, SquarePen, SquareStack, Sun, User } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { loadArchive } from '@/backend'
 import { setTheme } from '@/data/actions'
+import { useTheme } from '@/lib/theme'
 import { searchIssues } from '@/data/search'
 import { isAdmin } from '@/data/select'
 import { findByRef, issueRef, useData } from '@/data/store'
@@ -29,9 +30,12 @@ interface Entry {
   words?: string
   run: () => void
   shortcut?: string
+  /** the one in use now gets a check */
+  on?: boolean
 }
 
-const THEME_WORDS = 'theme light dark mode colours colors appearance'
+/** words all three light or dark entries answer to; each has its own on top, so "dark" finds only Dark */
+const THEME_WORDS = 'theme appearance mode colours colors'
 
 const matches = (e: Entry, q: string) => plain(q).split(/\s+/).every((w) => plain(`${e.label} ${e.words ?? ''}`).includes(w))
 
@@ -45,6 +49,7 @@ function Palette() {
   const projects = useData(useShallow((s) => Object.values(s.projects)))
   // the settings pages you may open, as the settings menu lists them
   const settingsPages = useData(useShallow((s) => listedPages(PAGES, isAdmin(s), s)))
+  const theme = useTheme((s) => s.choice)
   const go = (href: string) => () => navigate(href)
 
   const pages: Entry[] = useMemo(
@@ -81,9 +86,9 @@ function Palette() {
   ]
   // only when searched for ("dark", "light", "appearance"), so the list you open with stays short
   const looks: Entry[] = [
-    { id: 'theme-light', label: 'Use light appearance', words: THEME_WORDS, icon: <Sun />, run: () => setTheme('light') },
-    { id: 'theme-dark', label: 'Use dark appearance', words: THEME_WORDS, icon: <Moon />, run: () => setTheme('dark') },
-    { id: 'theme-system', label: 'Follow the system appearance', words: `${THEME_WORDS} device`, icon: <Monitor />, run: () => setTheme('system') },
+    { id: 'theme-light', label: 'Use light appearance', words: `${THEME_WORDS} day`, icon: <Sun />, run: () => setTheme('light'), on: theme === 'light' },
+    { id: 'theme-dark', label: 'Use dark appearance', words: `${THEME_WORDS} night`, icon: <Moon />, run: () => setTheme('dark'), on: theme === 'dark' },
+    { id: 'theme-system', label: 'Follow your device’s appearance', words: `${THEME_WORDS} system auto`, icon: <Monitor />, run: () => setTheme('system'), on: theme === 'system' },
   ]
 
   const q = query.trim().toLowerCase()
@@ -153,6 +158,7 @@ function Palette() {
                     {e.icon}
                     <span className="truncate">{e.label}</span>
                     {e.shortcut && <CommandShortcut>{e.shortcut}</CommandShortcut>}
+                    {e.on && <Check className="ml-auto" aria-label="In use now" />}
                   </CommandItem>
                 ))}
               </CommandGroup>
