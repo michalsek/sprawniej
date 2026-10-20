@@ -141,33 +141,22 @@ const NotionLink = ({ url, children }: { url: string; children: ReactNode }) => 
   </a>
 )
 
-/** what a change came through: a pull request, or a Notion page */
-function ViaLink({ via }: { via: Via }) {
-  return (
-    <>
-      {' · '}
-      {isNotionVia(via) ? (
-        <NotionLink url={via.notion.url}>Notion page</NotionLink>
-      ) : (
-        <a className="underline-offset-2 hover:underline" href={via.url} target="_blank" rel="noreferrer" title={via.repo}>
-          pull request #{via.number}
-        </a>
-      )}
-    </>
-  )
-}
-
 function PersonLine({ event }: { event: HistoryEvent }) {
   const person = useData((s) => (event.by === null ? undefined : s.people[event.by]))
   const text = useText(event.change, event.by)
-  // made from a Notion page without a member as its author: Notion did it
-  const notion = event.by === null && isNotionVia(event.via)
   return (
     <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground" data-kind={event.change.kind}>
-      {notion ? <NotionMark className="mt-px" /> : <Who person={person} />}
+      <Who person={person} />
       <span className="min-w-0">
-        <B>{person?.name ?? (notion ? 'Notion' : 'Someone')}</B> {text}
-        {event.via && <ViaLink via={event.via} />}
+        <B>{person?.name ?? 'Someone'}</B> {text}
+        {event.via && (
+          <>
+            {' · '}
+            <a className="underline-offset-2 hover:underline" href={event.via.url} target="_blank" rel="noreferrer" title={event.via.repo}>
+              pull request #{event.via.number}
+            </a>
+          </>
+        )}
         <When at={event.at} />
       </span>
     </li>

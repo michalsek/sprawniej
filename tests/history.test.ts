@@ -47,14 +47,12 @@ describe('issue history', () => {
     expect(createdVia(rows)).toEqual(via)
     expect(kinds(rows)).toEqual(['status'])
     expect(createdVia([row(2, 1, 'pb', { status: ['todo', 'done'] })])).toBeUndefined()
-    // a change that came through a page shows it too
-    expect(issueEvents([row(3, 2, null, { priority: [0, 2], via })], ctx)[0]).toMatchObject({ by: null, via })
   })
 
   test('only links to Notion or GitHub count as where something came from', () => {
     expect(viaOf({ via: { notion: { url: 'https://acme.notion.site/Page-1' } } })).toEqual({ notion: { url: 'https://acme.notion.site/Page-1' } })
     expect(viaOf({ via: { notion: { url: 'https://notion.so/x' } } })).toEqual({ notion: { url: 'https://notion.so/x' } })
-    for (const url of ['https://evil.example/', 'http://www.notion.so/x', 'https://notion.so.evil.com/x', 'https://evilnotion.so/x', 'javascript:alert(1)', 3]) {
+    for (const url of ['https://evil.example/', 'http://www.notion.so/x', 'https://notion.so.evil.com/x', 'https://evilnotion.so/x', 'https://www.notion.so/a)(b', 'javascript:alert(1)', 3]) {
       expect({ url, via: viaOf({ via: { notion: { url } } }) }).toEqual({ url, via: undefined })
     }
   })

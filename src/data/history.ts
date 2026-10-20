@@ -3,6 +3,7 @@
  * (its fields, its labels, archiving and restoring it, moving it to another team), and this turns those events into
  * the lines the issue page shows. Pure, so it's unit-tested (tests/history.test.ts).
  */
+import { NOTION_URL } from '@/model/notion'
 import type { ArchivedIssue, Issue } from '@/model/schema'
 import { PRIORITY_IDS, ISSUE_CATEGORIES, type Priority, type IssueCategory } from '@/model/status'
 
@@ -46,7 +47,7 @@ export interface NotionVia {
   notion: { url: string }
 }
 
-/** what a change came through, when not the app */
+/** what a change came through, when not the app: a pull request; or a Notion page, which only making an issue does */
 export type Via = PullRequestVia | NotionVia
 
 export const isNotionVia = (v: Via | undefined): v is NotionVia => !!v && 'notion' in v
@@ -58,8 +59,8 @@ export interface HistoryEvent {
   /** a login; null when nobody was signed in (the nightly tidy-up, or a change made by hand) */
   by: string | null
   change: Change
-  /** it came through a pull request, or a Notion page */
-  via?: Via
+  /** it came through a pull request */
+  via?: PullRequestVia
 }
 
 /** one event as src/backend/history.ts reads it (times already in the app's form) */
@@ -151,9 +152,6 @@ export function changesOf(changes: unknown, login: (id: string) => string | unde
   return out
 }
 
-/** Notion's own addresses: notion.so (www. and the rest) and a team's *.notion.site */
-const NOTION_HOST = /^([a-z0-9-]+\.)*notion\.(so|site)$/
-
 /**
  * The pull request or Notion page an event came through, when it says so and the link goes to GitHub or to Notion.
  */
@@ -165,10 +163,7 @@ export function viaOf(changes: unknown): Via | undefined {
     if (!isText(repo) || typeof number !== 'number' || !isText(url) || !url.startsWith('https://github.com/')) return undefined
     return { repo, number, url }
   }
-  if (isRecord(notion) && isText(notion.url) && URL.canParse(notion.url)) {
-    const u = new URL(notion.url)
-    if (u.protocol === 'https:' && NOTION_HOST.test(u.hostname)) return { notion: { url: notion.url } }
-  }
+  if (isRecord(notion) && isText(notion.url) && NOTION_URL.test(notion.url)) return { notion: { url: notion.url } }
   return undefined
 }
 
@@ -233,7 +228,9 @@ export function issueEvents(rows: readonly EventRow[], ctx: HistoryContext): His
   // the order they were saved in decides, not their times
   for (const row of [...rows].sort((a, b) => a.id - b.id)) {
     const by = row.actorId === null ? null : (ctx.login(row.actorId) ?? row.actorId)
-    const via = viaOf(row.changes)
+    // a Notion page only ever made the issue (createdVia), which is no line here
+    const came = viaOf(row.changes)
+    const via = came && !isNotionVia(came) ? came : undefined
     for (let change of changesOf(row.changes, ctx.login)) {
       if (change.kind === 'labels' && atCreation(by, row.at, ctx)) {
         if (!change.removed.length) continue
