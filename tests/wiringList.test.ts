@@ -34,7 +34,7 @@ const wiringTest = readFileSync(join(import.meta.dir, 'db', 'wiring.test.ts'), '
 
 describe('private.wiring matches its copies', () => {
   test('the list is read', () => {
-    expect(wiring.length).toBe(24)
+    expect(wiring.length).toBe(25)
   })
 
   test('the database tests know every table and its workspace column', () => {
