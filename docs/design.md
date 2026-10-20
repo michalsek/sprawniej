@@ -38,8 +38,8 @@ button (Delete) use `text-destructive-text`.
 A status icon's **shape says its group** (its category, below), and its **colour is the status's own**: the workspace
 picks it from the same calm set as labels (`STATUS_COLORS`: two greys and the label colours). The statuses a workspace
 starts with have the colours below, and while a status keeps its group's starting colour it is painted with the
-theme's `--status-*` for that group (pull request icons use them too), so a theme can shade them. Two statuses of one group look
-alike but for their colour and name; never invent a new shape for a status.
+theme's `--status-*` for that group (pull request icons use them too), so a theme can shade them. Two statuses of
+one group look alike but for their colour and name; never invent a new shape for a status.
 
 | Group | Icon |
 | --- | --- |

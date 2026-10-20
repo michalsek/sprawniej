@@ -549,7 +549,6 @@ export const INBOX_KEEP = { read: 30 * DAY, unread: 90 * DAY }
 
 // ---------- labels ----------
 
-
 /** two labels with one name can't be told apart in pickers and filters */
 const labelNamed = (labels: Record<string, Label>, name: string, but?: string) =>
   Object.values(labels).find((l) => l.id !== but && l.name.toLowerCase() === name.trim().toLowerCase())
