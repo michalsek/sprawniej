@@ -186,17 +186,45 @@ An **issue** is one piece of work: a task, a bug, an idea. Each has a short ID l
 - **Archive:** the `⋯` button next to the title, then **Archive** (see Archive below).
 - **Delete:** the `⋯` button next to the title, then **Delete issue**.
 - **Links and formatting:** paste a link and it becomes clickable. Select some words and paste a link to turn
-  them into a link. Type `**bold**`, `- ` for a list, or `[] ` for a checklist, and it formats as you type.
+  them into a link. Type `/` at the start of a line (or after a space) for a list of what you can add: a checklist,
+  a heading, a bulleted or numbered list, a quote, a code block, a table or a divider. Keep typing to narrow it down
+  (`/tab` finds Table), pick with the arrows and `Enter` or a tap, and `Esc` closes it. Or type it straight away and
+  it formats as you type: `# `, `## ` or `### ` for a heading, `- ` for a list, `1. ` for a numbered list, `[] ` for
+  a checklist, `> ` for a quote, ```` ``` ```` for code, `---` for a divider, `**bold**`, `*italic*`, `~~struck~~`
+  and `` `code` ``.
+- **Tables:** pick **Table** from the `/` list. `Tab` goes to the next cell, and `Tab` in the last cell adds a row.
+  Inside a table, `/` also adds a row below or a column to the right, and removes a row, a column or the whole table.
+  A cell holds one line of text. On a phone, a wide table scrolls sideways.
 - **Mention someone:** type `@` and their name or handle. They'll get a note in their Inbox. A mention counts by the
   handle someone has now (see Your handle).
 - **Point to another issue:** type its ID, like `ENG-7`. Hold `⌘` (or `Ctrl`) and click it to open it.
+
+### Checklists
+
+Break an issue into steps and tick them off as you go.
+
+- **Start one:** type `[] ` at the start of a line (also in a bulleted list), or pick **Checklist** from the `/`
+  list. `Enter` adds the next item, and `Enter` on an empty item ends the checklist. `Tab` puts an item under the one
+  above it; `Shift` `Tab` takes it back out.
+- **Tick an item:** click or tap its box. You don't need to be writing in the description, and on a phone the
+  keyboard stays away. With the cursor in an item, `⌘` `Shift` `Enter` (or `Ctrl` `Shift` `Enter`) ticks it too.
+- **See how far along it is:** lists and boards show a checklist mark with a count like `2/5` (two of five items
+  ticked) on issues that have a checklist.
+- **Ticking at the same time:** when you and a teammate tick items at once, both ticks stay, even on items right next
+  to each other. A tick made while you're offline is saved once you're back, without undoing anything a teammate
+  changed meanwhile.
+- **"That checklist item changed meanwhile":** a teammate reworded or removed the item just as you ticked it. Your
+  tick is taken back; have a look at the new text and tick it again.
+- **In comments:** checklists work there too. The person who wrote a comment can tick its boxes without opening it
+  for editing; nobody else can.
 
 ### Working at the same time as others
 
 You never have to choose between your changes and a teammate's. If you both change different things, both stay. If
 you both change the same thing (say, the status), the one saved last stays. If you both type in the same description
 at once, their words come into yours as you type; if you both finish at the very same moment, the text saved last
-stays. Two people adding issues at once always get different numbers.
+stays. Ticking a checklist item saves just that box, so two people ticking at once both keep their ticks. Two people
+adding issues at once always get different numbers.
 
 ### Statuses
 
@@ -536,11 +564,21 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
   sidebar.
 - `Esc`: let go of picked issues, or go back from an issue.
 
+While writing a description or a comment:
+
+- `/`: the list of what you can add (headings, lists, a checklist, a quote, code, a table, a divider).
+- `⌘` `B` bold, `⌘` `I` italic, `⌘` `Shift` `S` struck, `⌘` `E` code (with `Ctrl` instead of `⌘` on Windows).
+- `⌘` `Alt` `1`, `2` or `3`: a heading. `⌘` `Alt` `C`: a code block. `⌘` `Shift` `B`: a quote.
+- `⌘` `Shift` `8` a bulleted list, `⌘` `Shift` `7` a numbered list, `⌘` `Shift` `9` a checklist.
+- `⌘` `Shift` `Enter`: tick the checklist item you're in.
+- `⌘` `Enter`: send a comment.
+
 ## On a phone
 
 Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar; in Settings, the
 same button opens the settings menu. Press and hold an issue to drag it, or a favourite in the sidebar to change their
-order. In the lists of projects and views, the star always shows on a phone.
+order. In the lists of projects and views, the star always shows on a phone. Tap a checklist box to tick it (the keyboard stays away). A wide
+table scrolls sideways.
 
 ## Pictures
 

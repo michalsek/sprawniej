@@ -23,6 +23,10 @@ wrote.
    `KEYS` and `LIVE_TABLES` (`src/backend/tables.ts`), its columns in `src/backend/rows.ts` and in the column grants
    (`src/backend/changes.ts` keeps a copy). `tests/wiringList.test.ts` and `tests/db/wiring.test.ts` check the lists.
    A fixed list copied into SQL gets a marker comment (`-- @list …`, `-- @seed …`) for `tests/statusLists.test.ts`.
+   A new function the app calls: `grant execute … to authenticated` in the migration, a row in the functions table
+   below, and if the writer sends it as a change, a case of `Call` (`src/backend/changes.ts`) and the same function in
+   the pretend database (`tests/support/fakeDb.ts`). A rule the app also works out itself (like finding checklist
+   items) gets shared test cases in `tests/fixtures`, run against both.
 6. `bun run test:db` on a development project (docs/supabase-setup.md), then the advisors (Dashboard, Advisors).
 7. Update this page.
 
@@ -185,7 +189,7 @@ first."). Broadcast on `ws:`.
 | `id` | text, 10 to 40 characters |
 | `team_id` (`team`) | its team; changed only by `move_issue_to_team()` |
 | `number` (`number`) | given out by the `b_number` trigger; unique per team; shown as `ENG-12` |
-| `title`, `description` | the description is Markdown |
+| `title`, `description` | the description is Markdown; ticking a checklist item in it goes through `set_checklist_item()` |
 | `status` | its **category**: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `canceled`, `duplicate` (`src/model/status.ts`). Whatever decides something (tabs, `completed_at`, the nightly archive, GitHub) reads this |
 | `status_id` (`statusId`) | its status, one of the workspace's issue statuses of that category; never null. Kept in step with `status` by the `a_category` trigger (below) |
 | `priority` | `0` none, `1` urgent, `2` high, `3` medium, `4` low |
@@ -439,8 +443,8 @@ are for the SQL editor only.
 
 ## Functions the app calls
 
-Each runs as its owner (security definer), checks who is calling, and raises errors in plain words with a code the app
-tells apart: `42501` not allowed, `P0002` not there, `23505` already taken, `23503` no such team, `22023` not valid,
+Each runs as its owner (security definer) unless the table says otherwise, checks who is calling, and raises errors
+in plain words with a code the app tells apart: `42501` not allowed, `P0002` not there, `23505` already taken, `23503` no such team, `22023` not valid,
 `23514` a workspace needs an owner, `SP001` you already have a name, `SP002` the invite was used, `SP003` it expired,
 `SP004` a sign-up code is needed first, `SP005` that sign-up code or invite can't let you in (the message says why),
 `SP006` the invite link was ended, `SP007` it is full, `SP008` it was made before you left the workspace,
@@ -461,6 +465,7 @@ are and puts everything else in our own words.
 | `end_invite(invite)` | admins | Ends a link now: nobody new joins or makes an account with it. Who joined stays written down. Ending twice keeps the first time. `P0002` for a link that isn't there or isn't yours to end. |
 | `leave_workspace(workspace)` | a member | You leave. The last owner can't. |
 | `move_issue_to_team(issue, team)` | a member | Moves an issue to another team: a new number there, the old one in `former_refs`. |
+| `set_checklist_item(issue, item, text, checked)` | whoever may change the issue (security invoker: the usual rules decide) | Ticks (or unticks) one checklist item of the description by changing only its box character, and returns the issue. The item is number `item` (from 0) if it still says `text`, else the only item that says it; neither: `P0001` "That checklist item changed meanwhile…". Items are lines like `- [ ] text`, `* [x] text` or `> + [X] text` (any of `-`, `*`, `+`, also in quotes), never inside a ``` or ~~~ code block: the same rule as `src/data/checklist.ts`, checked with the cases in `tests/fixtures/checklists.ts`. Already that way: nothing is written (no history line). |
 | `link_person(workspace, guest, to)` | admins | This person from Linear is that member: everything moves over (`move_person`). |
 | `set_guest_email(profile, email)` | admins | Keeps (or, empty, forgets) a guest's email. |
 | `guest_emails(workspace)` | admins | The workspace's guests' emails. |

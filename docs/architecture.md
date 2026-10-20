@@ -240,7 +240,8 @@ people's changes rarely touch the same thing. Checked in the browser in phase 5 
 | Edit different fields of one issue | Both stay |
 | Change the same field | The later save wins |
 | Add or remove labels on one issue | Both apply (one row each) |
-| Edit a description at the same moment | Merged in the editor while you type (`src/editor/mergeText.ts`); if both saves cross, the later whole text wins |
+| Edit a description at the same moment | Merged in the editor while you type, line by line, also on neighbouring lines (`src/editor/mergeText.ts`); if both saves cross, the later whole text wins |
+| Tick checklist items of one description | Both ticks stay, also on neighbouring items and after being offline: a tick sends only its box through `set_checklist_item()`, which changes that one character (`src/data/checklist.ts`); an item reworded meanwhile refuses the tick, which is undone with a message. A tick made while your own typing waits to be saved goes with the text instead |
 | Edit one view | Field by field; the later save wins for the whole filters |
 | Edit one project, team, label or the workspace name | Field by field; the same field: later save wins |
 | Join or leave the same team | Both kept (one row each) |
@@ -476,17 +477,17 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | --- | --- |
 | `src/app` | The frame (sidebar, top bar), the way in (`Gate.tsx`), routes, the save chip, sign-out, new versions, light or dark as it runs (`theme.ts`) |
 | `src/model` | The app's shapes (zod), the fixed status categories and priorities, team keys |
-| `src/data` | The store, pure selectors (filter, group, sort), `actions.ts`, the workspace's statuses (`statuses.ts`), inbox rules, history lines, roles |
+| `src/data` | The store, pure selectors (filter, group, sort), `actions.ts`, the workspace's statuses (`statuses.ts`), inbox rules, history lines, roles, checklist items in Markdown (`checklist.ts`) |
 | `src/backend` | Every call to Supabase: sign-in, profiles, workspaces and invites, opening, the copy in this browser, live changes, saving, pictures, history, saving imports |
 | `src/backend/apply/` | `applyRows` in parts: the copy of the database's rows, taking things in, working out the store |
 | `src/backend/writes/` | Sending saves: grouping requests, the transport, what a failure means |
 | `src/github` | The GitHub webhook (runs as the Edge Function `github-webhook`, never in the browser): signature, refs, moves, notes |
 | `src/notion` | The Notion webhook (runs as the Edge Function `notion-webhook`, never in the browser): the key, reading a page, rich text as Markdown, notes |
-| `src/editor` | TipTap editor for descriptions and comments, its Markdown, mentions, pictures and merging |
+| `src/editor` | TipTap editor for descriptions and comments: what it holds (`content.ts`: text, lists, checklists, tables, code, pictures) and its Markdown, checklist boxes (`checklist.ts`), the `/` menu (`SlashMenu.tsx`), mentions, pictures and merging |
 | `src/features/onboarding` | Sign-in, picking your handle, choosing and creating workspaces, joining with an invite |
 | `src/features/*` | Screens, one folder per area (issues, views, projects, inbox, settings, import, help…) |
 | `src/features/settings/pages.tsx` | The one list of settings pages: the routes, the settings menu and ⌘K follow it (rules in `nav.ts`) |
-| `src/components` | Small shared pieces (avatar, empty state, segmented switch) |
+| `src/components` | Small shared pieces (avatar, empty state, segmented switch, Markdown and its lazy formatter `MarkdownView.tsx`) |
 | `src/ui` | shadcn/ui components |
 | `src/lib` | Small helpers with no app knowledge (search that ignores Polish letters, `cn`, hooks, the light or dark rules in `theme.ts`) |
 | `src/config.ts` | The app's public address (invite links) and where sign-in comes back to |
@@ -514,7 +515,8 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 
 React 19, Vite, vite-plugin-pwa (the service worker), Tailwind v4, shadcn/ui (Radix), lucide icons, zustand, zod
 (types only), supabase-js, ulid (ids), fractional-indexing (manual order), node-diff3 (the editor's line merge),
-sonner (messages), TipTap (descriptions and comments, stored as Markdown), react-markdown (showing them),
+sonner (messages), TipTap (descriptions and comments, stored as Markdown; tables from @tiptap/extension-table, the `/`
+menu from @tiptap/suggestion), react-markdown with remark-gfm (showing them: checklists, tables, struck text, bare links),
 highlight.js and lowlight (code blocks), react-day-picker (due dates), dnd-kit (drag-n-drop), frimousse (emoji
 picker), cmdk (the ⌘K palette), wouter (routes).
 
