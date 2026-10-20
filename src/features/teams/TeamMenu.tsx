@@ -106,7 +106,7 @@ export function TeamMenu({ teamKey, className }: { teamKey: string; className?: 
             {admin ? (
               <Button
                 variant="ghost"
-                className="text-red-300"
+                className="text-destructive-text"
                 onClick={() => {
                   setEditing(false)
                   setDeleting(true)

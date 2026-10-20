@@ -42,6 +42,11 @@
   --status-done: #5e6ad2;
   --status-canceled: #80858e;
   --urgent: #d9661a;
+  /* due dates: overdue, and due in the next few days */
+  --due-overdue: #b91c1c;
+  --due-soon: #8a6100;
+  /* red words on a quiet button, like Delete */
+  --destructive-text: #b91c1c;
   /* the check or cross inside the Done and Canceled discs, and the "!" in the Urgent square */
   --status-mark: #ffffff;
   --urgent-mark: #18181b;
@@ -88,6 +93,10 @@
   --status-done: #5e6ad2;
   --status-canceled: #8a8f98;
   --urgent: #f2994a;
+  /* Tailwind's red-400, amber-300 and red-300, as these were before Light came */
+  --due-overdue: oklch(70.4% 0.191 22.216);
+  --due-soon: oklch(87.9% 0.169 91.605);
+  --destructive-text: oklch(80.8% 0.114 19.571);
   --status-mark: #18181b;
   --urgent-mark: #18181b;
   --dot-edge: transparent;
@@ -142,6 +151,9 @@
   --color-status-done: var(--status-done);
   --color-status-canceled: var(--status-canceled);
   --color-urgent: var(--urgent);
+  --color-due-overdue: var(--due-overdue);
+  --color-due-soon: var(--due-soon);
+  --color-destructive-text: var(--destructive-text);
 }
 
 @layer base {

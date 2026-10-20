@@ -40,7 +40,7 @@ export function SelectionBar() {
       >
         <Archive /> <span className="hidden sm:inline">Archive</span>
       </Button>
-      <Button variant="ghost" size="sm" className="text-red-300" onClick={() => setConfirm(true)}>
+      <Button variant="ghost" size="sm" className="text-destructive-text" onClick={() => setConfirm(true)}>
         <Trash2 /> <span className="hidden sm:inline">Delete</span>
       </Button>
       <Button variant="ghost" size="icon-sm" aria-label="Unpick all (Esc)" onClick={clearSelection}>

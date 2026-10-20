@@ -58,7 +58,7 @@ export function DueDatePicker({ value, onChange, children, align = 'start' }: { 
   )
 }
 
-const TONE = { overdue: 'text-red-400 border-red-400/30', soon: 'text-amber-300 border-amber-300/30', later: 'text-muted-foreground' }
+const TONE = { overdue: 'text-due-overdue border-due-overdue/30', soon: 'text-due-soon border-due-soon/30', later: 'text-muted-foreground' }
 
 /** the due date on a row or card; a finished issue is never late */
 export function DueChip({ day, closed, className }: { day: string; closed?: boolean; className?: string }) {
