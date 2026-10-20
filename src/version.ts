@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.0.0'
+export const APP_VERSION = '2.1.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,16 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.1.0',
+    date: '2026-10-20',
+    title: 'Sign-up codes',
+    notes: [
+      'Creating an account needs a sign-up code or an invite link. Ask whoever looks after Sprawniej for a code',
+      'With an invite link you don’t need a code: the link lets you in',
+      'Signing up with GitHub asks for the code on the next screen, where you pick your name',
+    ],
+  },
   {
     version: '2.0.0',
     date: '2026-10-19',

@@ -16,14 +16,24 @@ export interface MyProfile {
   person: Person
 }
 
-/** null: no handle picked yet */
+/** null: no handle picked yet (or, after a GitHub sign-up, no sign-up code given yet: SP004) */
 export async function ensureProfile(): Promise<MyProfile | null> {
   const { data, error } = await requireClient().rpc('ensure_profile').maybeSingle()
+  if (error?.code === 'SP004') return null
   if (error) throw error
   return data ? { id: data.id, person: rowToPerson(data) } : null
 }
 
-/** throws an Error whose message can be shown as it is */
+/** picking a name failed: the message can be shown as it is; `code` is the database's (SP004: a sign-up code is needed) */
+export class ProfileProblem extends Error {
+  readonly code?: string
+  constructor(message: string, code?: string) {
+    super(message)
+    this.code = code
+  }
+}
+
+/** throws a ProfileProblem */
 export async function createProfile(login: string, name: string): Promise<MyProfile> {
   const { data, error } = await requireClient().rpc('create_profile', { p_login: login.trim(), p_name: name.trim() }).maybeSingle()
   // picked already (in another tab, say): that one it is
@@ -33,7 +43,7 @@ export async function createProfile(login: string, name: string): Promise<MyProf
     if (mine) return mine
   }
   // the database words a taken handle (23505) and one that isn't a handle (22023) for people already
-  if (error || !data) throw new Error(friendlyDbError(error, "We couldn't save your name. Try again in a moment."))
+  if (error || !data) throw new ProfileProblem(friendlyDbError(error, "We couldn't save your name. Try again in a moment."), error?.code)
   return { id: data.id, person: rowToPerson(data) }
 }
 

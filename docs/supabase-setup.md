@@ -71,6 +71,49 @@ settings). These steps set up any project, in any account, and publish the app. 
    Without them the app says "Sprawniej isn't set up yet".
 7. **Check it**, on a development or throwaway project only: `bun run test:db`, then the cleanup (below).
 
+## Sign-up codes
+
+Nobody can make an account without a **sign-up code** or an open invite link (docs/data-format.md, "Who may make an
+account"). For email and password, Supabase Auth's *before user created* hook checks it before the account exists; it
+is switched on in `config.toml` and pushed with step 4 (after `db push`, which makes the function it calls). To see
+that it is on: Dashboard, Authentication, Auth Hooks, "Before User Created" pointing at
+`private.before_user_created`. Someone who signs up with GitHub is asked for the code on the next screen, and gets
+nowhere without it; such accounts are deleted after 7 days.
+
+To switch on only the hook, without touching any other setting, push a `config.toml` that declares nothing else
+(`config push` leaves settings the file doesn't declare as they are):
+
+```sh
+W=$(mktemp -d); mkdir -p "$W/supabase"
+printf 'project_id = "sprawniej"\n\n[auth.hook.before_user_created]\nenabled = true\nuri = "pg-functions://postgres/private/before_user_created"\n' > "$W/supabase/config.toml"
+bunx supabase config diff --workdir "$W" --project-ref <ref>    # only auth.hook.before_user_created changes
+bunx supabase config push --workdir "$W" --project-ref <ref>
+```
+
+**Your own first account:** make a code (below), open Sprawniej, choose **Create an account** and type it in.
+
+Everything else happens in the Dashboard, SQL editor:
+
+```sql
+-- make a code: who it's for, days it works, how many accounts it may make
+select private.make_signup_code('Ania and Bartek', 7, 2);
+
+-- every code, newest first, and who used it
+select c.code, c.note, c.uses || ' of ' || c.max_uses as used, c.expires_at, c.switched_off_at,
+       coalesce(string_agg(s.email || ' (' || to_char(s.at, 'YYYY-MM-DD HH24:MI') || ')', ', ' order by s.at), '') as used_by
+  from private.signup_codes c left join private.signups s on s.code_id = c.id
+ group by c.id order by c.created_at desc;
+
+-- switch a code off at once (accounts already made with it stay)
+select private.switch_off_signup_code('K7QX-M2PA-9RTD');
+```
+
+Codes are 12 letters and digits; case, spaces and dashes don't matter when people type them. An account made by hand
+in the dashboard (Authentication, Users, Add user) has no code, so the hook may refuse it: make a code and sign up in
+the app instead. To give a code a few more days or uses: `update private.signup_codes set expires_at = now() + interval '7 days',
+max_uses = 5 where code = 'K7QXM2PA9RTD';` (without dashes). To remove an account someone made, use Authentication,
+Users in the dashboard.
+
 ## Publishing
 
 The app is published to GitHub Pages by hand; nothing is published on a push.
@@ -98,6 +141,8 @@ project. `bun run test:db` runs `tests/db` against the project in `.env.local`. 
 (`dbtest-<run>-<name>@mailinator.com`), make their own workspaces (`dbtest <run> ...`) and check the rules, numbers,
 history, deletions, invites, imports, realtime and pictures through the same API the app uses.
 
+- They need the **Supabase CLI linked to the same project** (`bunx supabase link`): sign-ups need a sign-up code, and
+  a run makes its own (noted `dbtest <run> …`) with `bunx supabase db query --linked`.
 - They need **email confirmations off** (`enable_confirmations = false` in `config.toml`, pushed with step 4, or
   Dashboard, Authentication, Email, "Confirm email"). With confirmations on, a sign-up gets no session and the tests
   stop with a message saying so.
@@ -119,8 +164,8 @@ bunx supabase db query --linked "select distinct (storage.foldername(name))[1] a
 bunx supabase storage rm -r ss:///pictures/<dir> --linked --experimental   # for each dir listed; never the bucket root
 ```
 
-The SQL removes the test workspaces (with everything in them), the test profiles and accounts, and deletion notes of
-workspaces that are gone. Pictures need the Storage API; the database can't delete them.
+The SQL removes the test workspaces (with everything in them), the test profiles and accounts, their sign-up codes and
+the record of what they made, and deletion notes of workspaces that are gone. Pictures need the Storage API; the database can't delete them.
 
 ## Checking the advisors
 

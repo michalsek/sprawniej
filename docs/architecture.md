@@ -49,6 +49,12 @@ up). Without a copy, it reads everything except the archive.
   profile with the same GitHub id that has no account (one brought from an older workspace), and otherwise makes one
   from the GitHub login when that handle is free. Otherwise you pick a name and an @handle once (`PickLogin.tsx`, `create_profile()`). Handles follow
   GitHub's rule (letters, digits and dashes, up to 39, not starting with a dash) and never change.
+- **A new account needs a sign-up code or an invite link** (docs/data-format.md, "Who may make an account"). The
+  Create account form sends the code (or, in the invite flow, the link's token) with the sign-up, and the database
+  refuses an email account without one before it exists. A GitHub sign-up can't carry a code: its account gets no
+  profile until `PickLogin.tsx` asks for one (`signupCodeNeeded`, `giveSignupCode` in `src/backend/auth.ts`), or uses
+  the invite link it came from. A code typed before pressing Continue with GitHub is kept in sessionStorage
+  (`sprawniej:signup-code`) and filled in there.
 - The sign-in stays in this browser (the Supabase client keeps it and renews it). If it runs out while you work,
   everything stays on screen and "Please sign in again" shows on top (`Gate.tsx`).
 - **Signing out** (`src/app/signOut.ts`) first gives waiting changes a moment to go (the dialog has already asked about

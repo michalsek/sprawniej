@@ -1118,6 +1118,11 @@ export type Database = {
         Args: { p_email: string; p_profile: string }
         Returns: undefined
       }
+      signup_code_needed: { Args: never; Returns: boolean }
+      use_signup_code: {
+        Args: { p_code?: string; p_invite?: string }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

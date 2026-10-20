@@ -262,13 +262,13 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
           }
         >
           <p className="mb-6">You'll use it to sign in to Sprawniej from now on.</p>
-          <SignInForm mode={mode} onMode={setMode} onCheckEmail={setSentTo} />
+          <SignInForm mode={mode} onMode={setMode} onCheckEmail={setSentTo} invite={token} />
         </Step>
       )
     case 'profile':
       return profile.state === 'failed' ? <ProfileFailed problem={profile.problem} onRetry={profile.retry} /> : <Waiting title="Just a moment…" />
     case 'name':
-      return <PickLogin initialName={info?.forName ?? undefined} onDone={profile.picked} />
+      return <PickLogin initialName={info?.forName ?? undefined} onDone={profile.picked} invite={token} />
     case 'joining':
       return joinProblem ? (
         <Step

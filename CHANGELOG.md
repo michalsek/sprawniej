@@ -4,6 +4,13 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.1.0: Sign-up codes
+*2026-10-20*
+
+- Creating an account needs a sign-up code or an invite link. Ask whoever looks after Sprawniej for a code
+- With an invite link you don’t need a code: the link lets you in
+- Signing up with GitHub asks for the code on the next screen, where you pick your name
+
 ## 2.0.0: A new home for your work
 *2026-10-19*
 

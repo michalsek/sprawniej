@@ -1,7 +1,7 @@
 /** The first screen: sign in (with GitHub, or an email and a password), or create an account. */
 import { useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
-import { friendlyAuthError, githubAvailable, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
+import { CODE_KEY, friendlyAuthError, githubAvailable, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Separator } from '@/ui/separator'
@@ -22,15 +22,28 @@ export type Mode = 'sign-in' | 'sign-up'
  * The sign-in form, also used when a sign-in ran out (SignInAgain). Without `onMode` there's no "Create an account".
  * `onCheckEmail`: a new account has to open an emailed link first. "Continue with GitHub" shows once we know GitHub
  * sign-in is switched on, or when Sprawniej can't be reached to ask (the button then says so).
+ * A new account needs a sign-up code, unless it comes from an invite link (`invite`, its token).
  */
-export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: Mode; onMode?: (m: Mode) => void; onCheckEmail?: (email: string) => void }) {
+export function SignInForm({
+  mode = 'sign-in',
+  onMode,
+  onCheckEmail,
+  invite,
+}: {
+  mode?: Mode
+  onMode?: (m: Mode) => void
+  onCheckEmail?: (email: string) => void
+  invite?: string
+}) {
   const urlProblem = useAuth((s) => s.urlProblem)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [code, setCode] = useState('')
   const [busy, setBusy] = useState<'github' | 'email' | null>(null)
   const [problem, setProblem] = useState<string>()
   const [githubProblem, setGithubProblem] = useState<string>()
   const signUp = mode === 'sign-up'
+  const needsCode = signUp && !invite
   const [github, setGithub] = useState<'on' | 'off' | 'unknown' | null>(null)
 
   useEffect(() => {
@@ -44,6 +57,8 @@ export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: 
   async function continueWithGitHub() {
     setBusy('github')
     setGithubProblem(undefined)
+    // a new GitHub account is asked for its code when it comes back; one typed here is filled in then
+    if (needsCode && code.trim()) sessionStorage.setItem(CODE_KEY, code.trim())
     try {
       await signInWithGitHub() // leaves for GitHub
     } catch (e) {
@@ -54,12 +69,12 @@ export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: 
 
   async function submit(e: SubmitEvent<HTMLFormElement>) {
     e.preventDefault()
-    if (!email.trim() || !password || busy) return
+    if (!email.trim() || !password || (needsCode && !code.trim()) || busy) return
     setBusy('email')
     setProblem(undefined)
     try {
       if (!signUp) await signInWithPassword(email, password)
-      else if ((await signUpWithPassword(email, password)) === 'check-email') onCheckEmail?.(email.trim())
+      else if ((await signUpWithPassword(email, password, needsCode ? { code } : { invite })) === 'check-email') onCheckEmail?.(email.trim())
     } catch (err) {
       setProblem(friendlyAuthError(err))
     } finally {
@@ -108,8 +123,9 @@ export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: 
           />
           {signUp && <p className="mt-1.5 text-sm text-muted-foreground">At least 8 characters.</p>}
         </div>
+        {needsCode && <SignupCodeField value={code} onChange={setCode} />}
         <Problem>{problem}</Problem>
-        <Button type="submit" size="lg" disabled={!!busy || !email.trim() || !password}>
+        <Button type="submit" size="lg" disabled={!!busy || !email.trim() || !password || (needsCode && !code.trim())}>
           {busy === 'email' && <Loader2 className="animate-spin" />} {signUp ? 'Create account' : 'Sign in'}
         </Button>
       </form>
@@ -128,6 +144,29 @@ export function SignInForm({ mode = 'sign-in', onMode, onCheckEmail }: { mode?: 
           </button>
         </p>
       )}
+    </div>
+  )
+}
+
+/** the "Sign-up code" field: new accounts need one from whoever looks after Sprawniej */
+export function SignupCodeField({ value, onChange, autoFocus }: { value: string; onChange: (v: string) => void; autoFocus?: boolean }) {
+  return (
+    <div>
+      <label htmlFor="signup-code" className="mb-1.5 block text-sm font-medium">
+        Sign-up code
+      </label>
+      <Input
+        id="signup-code"
+        className="h-10 font-mono uppercase placeholder:normal-case"
+        autoComplete="off"
+        autoCapitalize="characters"
+        spellCheck={false}
+        autoFocus={autoFocus}
+        placeholder="XXXX-XXXX-XXXX"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <p className="mt-1.5 text-sm text-muted-foreground">New accounts need one. Ask whoever looks after Sprawniej.</p>
     </div>
   )
 }

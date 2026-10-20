@@ -11,7 +11,7 @@ import { authRedirectUrl } from '@/config'
 import { useSession } from '@/session'
 import { stopCaching } from './cacheStore'
 import { backendConfig, getClient, requireClient } from './client'
-import { isUnreachable, UNREACHABLE } from './problem'
+import { friendlyDbError, isUnreachable, UNREACHABLE } from './problem'
 
 export interface AuthUser {
   id: string
@@ -90,13 +90,26 @@ const MESSAGES: Record<string, string> = {
   manual_linking_disabled: "Adding another way to sign in isn't switched on yet. Ask whoever looks after Sprawniej.",
 }
 
+/**
+ * Why a new account wasn't let in (supabase/migrations/20261020130000_signup_codes.sql, private.let_in). They come
+ * back as the error's message; a test checks this list against the SQL.
+ */
+export const SIGNUP_REFUSALS: ReadonlySet<string> = new Set([
+  'This invite link was already used or has expired. Ask for a new one.',
+  'You need a sign-up code to make an account. Ask whoever looks after Sprawniej for one.',
+  "That sign-up code doesn't work. Check it and try again.",
+  'That sign-up code no longer works. Ask whoever looks after Sprawniej for a new one.',
+  'That sign-up code has been used up. Ask whoever looks after Sprawniej for a new one.',
+])
+
 /** our words for a code, which may come from the address bar ("constructor" isn't one of ours) */
 const messageFor = (code: unknown): string | undefined => (typeof code === 'string' && Object.hasOwn(MESSAGES, code) ? MESSAGES[code] : undefined)
 
 /** what to say when signing in or up fails */
 export function friendlyAuthError(e: unknown): string {
   if (e instanceof AuthProblem) return e.message
-  const err = (e ?? {}) as { name?: unknown; code?: unknown; status?: unknown }
+  const err = (e ?? {}) as { name?: unknown; code?: unknown; status?: unknown; message?: unknown }
+  if (typeof err.message === 'string' && SIGNUP_REFUSALS.has(err.message)) return err.message
   const known = messageFor(err.code)
   if (known) return known
   if (isUnreachable(e) || err.status === 0) return UNREACHABLE
@@ -203,11 +216,47 @@ export async function signInWithPassword(email: string, password: string): Promi
   if (error) throw new AuthProblem(friendlyAuthError(error))
 }
 
+/** what lets a new account in: a sign-up code, or the invite link it came from */
+export interface SignUpPermit {
+  code?: string
+  invite?: string
+}
+
 /** 'check-email' when new accounts have to open an emailed link first */
-export async function signUpWithPassword(email: string, password: string): Promise<'signed-in' | 'check-email'> {
-  const { data, error } = await requireClient().auth.signUp({ email: email.trim(), password, options: { emailRedirectTo: authRedirectUrl() } })
+export async function signUpWithPassword(email: string, password: string, permit: SignUpPermit): Promise<'signed-in' | 'check-email'> {
+  const meta = { signup_code: permit.code?.trim() || undefined, invite: permit.invite || undefined }
+  const { data, error } = await requireClient().auth.signUp({
+    email: email.trim(),
+    password,
+    options: { emailRedirectTo: authRedirectUrl(), data: meta },
+  })
   if (error) throw new AuthProblem(friendlyAuthError(error))
   return data.session ? 'signed-in' : 'check-email'
+}
+
+// ---------- sign-up codes after GitHub ----------
+
+/** a sign-up code typed before leaving for GitHub, so the name step can fill it in when you come back */
+export const CODE_KEY = 'sprawniej:signup-code'
+
+/**
+ * A new account made with GitHub has no code yet (GitHub can't carry one): it gets no name until it gives one. True
+ * while that's still to do.
+ */
+export async function signupCodeNeeded(): Promise<boolean> {
+  const { data, error } = await requireClient().rpc('signup_code_needed')
+  if (error) throw error
+  return data === true
+}
+
+/** lets your new account in with a sign-up code or the invite link you came from; throws an Error to show as it is */
+export async function giveSignupCode(permit: SignUpPermit): Promise<void> {
+  const { error } = await requireClient().rpc('use_signup_code', { p_code: permit.code?.trim() || undefined, p_invite: permit.invite || undefined })
+  if (!error) {
+    sessionStorage.removeItem(CODE_KEY)
+    return
+  }
+  throw new AuthProblem(friendlyDbError(error, "We couldn't check your sign-up code. Try again in a moment."))
 }
 
 export interface Providers {

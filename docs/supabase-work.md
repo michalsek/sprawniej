@@ -27,6 +27,14 @@ with a reason.
 - 2026-10-19: Release 2.0.0: `sprawniejapp` was wiped and rebuilt from the 10 migration files with `db reset --linked` (history matched, `db push` up to date with no database password asked, generated types identical, only accepted advisor warnings), then 90/90 database tests passed and the test data was removed. GitHub sign-in is off at release (the button is hidden until the OAuth app is pushed).
 - 2026-10-19: Work happens in the session's worktree; `main` is fast-forwarded to it after each step (the session
   can't write in the main checkout directly).
+- 2026-10-20: Sign-up codes (2.1.0). The user wanted control over who can make an account, codes managed in the SQL
+  editor, invite links counting as permission, and GitHub sign-up kept. Email sign-ups are checked by the free
+  "before user created" Auth hook (`private.before_user_created`, switched on with a `config push` of a config.toml
+  that declares only the hook, so the remote GitHub keys and other settings stay); GitHub can't carry a code, so its
+  accounts get no profile (trigger `a_let_in`) until `use_signup_code()`, and are deleted after 7 days without one.
+  The hook's refusal reaches supabase-js as status 403, code `unknown`, with our sentence as the message, so the app
+  recognises the sentences themselves (`SIGNUP_REFUSALS`). Accepted advisor warning, as above, for the two new
+  signed-in functions `signup_code_needed` and `use_signup_code`.
 
 ## Roadmap
 

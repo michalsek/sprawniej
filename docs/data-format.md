@@ -2,7 +2,7 @@
 
 Every workspace lives in one Supabase project: Postgres tables in the `public` schema (read and written by the app
 through the API), helpers in `private` (never exposed through the API), a private Storage bucket for pictures and
-three nightly jobs. This page describes all of it. The files in `supabase/migrations/` are the truth; keep this page in
+four nightly jobs. This page describes all of it. The files in `supabase/migrations/` are the truth; keep this page in
 step with them.
 
 The schema is a promise: an older app must keep working against it, and a newer app must never lose what an older one
@@ -245,18 +245,78 @@ Nothing is noted while the whole workspace is going. Kept 45 days.
 `profile_id` (a guest), `email`: the email a person from Linear had there. Never sent to browsers; admins read their
 workspace's with `guest_emails()` and set them with `set_guest_email()`.
 
+## Who may make an account (sign-up codes)
+
+A new account needs a **sign-up code** or an open **invite link**. Whoever looks after Sprawniej makes codes in the
+SQL editor (recipes in docs/supabase-setup.md, "Sign-up codes"); there is no screen for them in the app.
+
+**Where it is checked.** Two places, one rule (`private.let_in`):
+
+1. **Email and password: before the account exists.** Supabase Auth's *before user created* hook (on the free plan)
+   runs `private.before_user_created(event)` just before a new account is written, also for a direct call to the
+   sign-up endpoint. On no, the account is never made. `config.toml` switches the hook on
+   (`[auth.hook.before_user_created]`, pushed with `config push`, docs/supabase-setup.md), so a new project gets it
+   the same way.
+2. **GitHub: before the account gets a profile.** GitHub sign-in can't carry a code, so the hook lets GitHub accounts
+   through. Such an account can't get a profile (the `a_let_in` trigger on `profiles` refuses with `SP004`), and
+   without a profile it can see and do nothing. On the name step the app asks for a code (or uses the invite link it
+   came from) and calls `use_signup_code()`. Accounts that never give one are deleted after 7 days (nightly job).
+
+Signing in to an account that already exists runs neither, so nobody is locked out of their own account. Accounts
+made before sign-up codes were let in by the migration.
+
+**What it looks at.** The app sends `signup_code` (what the person typed) or `invite` (the invite link's token) in the
+new account's metadata (`signUp(..., { data })`), or to `use_signup_code(code, invite)`. An account is let in when:
+
+- `invite` names an invite that is not used and not expired, and no account was made with it yet (one account per
+  link: the link still has to be accepted with `accept_invite` afterwards, as before); or
+- `signup_code` matches a code that is not switched off, not expired and not used up. Case, spaces and dashes don't
+  matter (`k7qx m2pa 9rtd` is `K7QX-M2PA-9RTD`). Using it adds one to `uses`, under a row lock, so two sign-ups at once
+  can't both take the last use.
+
+Anything else is refused with a plain sentence the app shows as it is (`SIGNUP_REFUSALS` in `src/backend/auth.ts`;
+each one in the SQL has a `-- @message signup` marker, and `tests/signupMessages.test.ts` compares them). Being let in
+is written down in `private.signups`.
+
+### private.signup_codes
+
+| Column | Meaning |
+| --- | --- |
+| `id` | uuid |
+| `code` | 12 capital letters and digits, without the look-alikes `0 O 1 I L` (about 59 bits, random), unique; stored without dashes, shown as `K7QX-M2PA-9RTD` |
+| `note` | who it's for, for whoever looks after Sprawniej |
+| `created_at` | when it was made |
+| `expires_at` | after this it no longer works |
+| `max_uses` | how many accounts it may make (at least 1) |
+| `uses` | how many it made |
+| `switched_off_at` | switched off by hand: it stops working at once |
+
+### private.signups
+
+One row per account that was let in (by the hook, by `use_signup_code()`, or by the migration for older accounts): `id`, `at`, `user_id` (the new account; no foreign key, the account is written
+just after the hook says yes), `email`, `provider`, and either `code_id` (the sign-up code) or `invite_id` (the
+invite link). Deleting a code or an invite keeps the row (the link becomes null). This is the record of who used
+which code, and when.
+
+Neither table is readable or writable from browsers (the `private` schema isn't exposed, and only the hook and the SQL
+editor use them). The helpers `private.make_signup_code(note, days, uses)` and `private.switch_off_signup_code(code)`
+are for the SQL editor only.
+
 ## Functions the app calls
 
 Each runs as its owner (security definer), checks who is calling, and raises errors in plain words with a code the app
 tells apart: `42501` not allowed, `P0002` not there, `23505` already taken, `23503` no such team, `22023` not valid,
 `23514` a workspace needs an owner, `SP001` you already have a name, `SP002` the invite was used, `SP003` it expired,
+`SP004` a sign-up code is needed first, `SP005` that sign-up code or invite can't let you in (the message says why),
 `SP010` an import the database can't take (the detail says why). `src/backend/problem.ts` shows those messages as they
 are and puts everything else in our own words.
 
 | Function | Who | What it does |
 | --- | --- | --- |
-| `ensure_profile()` | signed in | Your profile; or a profile with your GitHub id that nobody has claimed; or a new one with your GitHub login when it's free. No rows: pick a name. |
-| `create_profile(login, name)` | signed in, once | Your profile with the @handle you picked. |
+| `ensure_profile()` | signed in | Your profile; or a profile with your GitHub id that nobody has claimed; or a new one with your GitHub login when it's free. No rows: pick a name. `SP004`: not let in yet (give a sign-up code first). |
+| `create_profile(login, name)` | signed in, once, let in | Your profile with the @handle you picked. |
+| `signup_code_needed()` | signed in | True while you have no profile and weren't let in (a GitHub sign-up without a code). |
+| `use_signup_code(code, invite)` | signed in | Lets your account in with a sign-up code or an open invite link's token (`SP005` with the reason when it can't). Nothing to do if you're in already. |
 | `create_workspace(name, team_key, team_name, team_emoji)` | with a profile | A workspace with you as owner, and a first team with you in it. |
 | `invite_info(token)` | anyone, also not signed in | What the join page shows (see invites); the workspace id only to someone already in it. |
 | `accept_invite(token)` | with a profile | Makes you a member (or brings you back), marks the invite used, turns an invited guest into you. |
@@ -283,6 +343,8 @@ for rows that will only be updated (Postgres checks the proposed row before it f
 - Who is asking: `my_profile_id()`, `my_workspaces()` (now, not the ones left), `my_admin_workspaces()`,
   `my_owner_workspaces()`, `my_people()`, `belongs(person, workspace)`, `actor_id()`.
 - `valid_login`, `is_completed`, `take_number`, `swap_login`, `move_person`, and the nightly jobs.
+- Sign-up codes: `let_in` (the one rule), `before_user_created` (the Auth hook; only `supabase_auth_admin` may run it),
+  `must_be_let_in` (the profiles trigger), and for the SQL editor `make_signup_code`, `switch_off_signup_code`.
 - Three settings change what triggers do within one transaction: `sprawniej.importing` (imports and `move_person`:
   no history, no broadcast per row, keep the times and numbers that came), `sprawniej.trusted` (`accept_invite` and
   `leave_workspace`: skip the role guard) and `sprawniej.actor` (who the service role, the SQL editor or a job acts
@@ -307,6 +369,8 @@ New functions are closed by default: nobody runs one unless a migration grants i
 - `live` on every broadcast table: Realtime (below).
 - `a_guard` on workspace members: only an owner makes, unmakes or removes owners; nobody but an owner changes their
   own role; someone who left comes back only through an invite.
+- `a_let_in` on profiles (insert): a profile for an account needs the account to be let in (`private.signups`);
+  `SP004` otherwise. Guests have no account and aren't checked.
 - `keep_an_owner` on workspace members: refuses a change that leaves the workspace without an owner (changes that
   could wait for each other on a lock per workspace).
 
@@ -364,3 +428,4 @@ files.
 | 02:17 | `sprawniej-auto-archive` | Archives Done, Canceled and Duplicate issues untouched (the later of `completed_at` and `updated_at`) for longer than their team's `auto_archive` months |
 | 02:27 | `sprawniej-tidy-inboxes` | Deletes read notes older than 30 days and unread ones older than 90. Read means `read_at` is set, or the note is no newer than the person's `read_until` ("Mark all as read") |
 | 02:37 | `sprawniej-forget-deletions` | Deletes `deletions` rows older than 45 days |
+| 02:47 | `sprawniej-forget-strangers` | Deletes accounts older than 7 days that were never let in and have no profile (a GitHub sign-up that never gave a sign-up code) |

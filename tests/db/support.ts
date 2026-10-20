@@ -7,6 +7,9 @@
  * Test accounts are dbtest-<run>-<name>@<domain>; supabase/dev/cleanup-tests.sql removes them afterwards. Set
  * SPRAWNIEJ_TEST_RUN to name the run yourself, so only its own accounts and workspaces can be removed afterwards.
  * Only for a development or throwaway project.
+ *
+ * New accounts need a sign-up code. The run makes its own (note "dbtest <run>") through the Supabase CLI, which must be
+ * linked to the same project (`bunx supabase link`): codes can only be made in the SQL editor or with the CLI.
  */
 import { expect } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
@@ -24,6 +27,9 @@ export const RUN = process.env.SPRAWNIEJ_TEST_RUN ?? Date.now().toString(36) + M
 const DOMAIN = process.env.SPRAWNIEJ_TEST_EMAIL_DOMAIN ?? 'mailinator.com'
 
 export type Db = SupabaseClient<Database>
+
+/** the email of a test account */
+export const testEmail = (name: string) => `dbtest-${RUN}-${name}@${DOMAIN}`
 type Tables = Database['public']['Tables']
 export type TableName = keyof Tables
 export type Row<T extends TableName> = Tables[T]['Row']
@@ -70,12 +76,51 @@ interface Person {
 /** someone who never signed in */
 export const anonClient = client
 
+/**
+ * Runs SQL as the project's owner through the Supabase CLI (`db query --linked`), for what browsers can't do: making
+ * sign-up codes, reading private tables. Returns the rows.
+ */
+export function ownerSql<T = Record<string, unknown>>(sql: string): Promise<T[]> {
+  // one at a time: two CLI calls at once trip over each other
+  const next = cliQueue.then(() => runSql<T>(sql))
+  cliQueue = next.catch(() => undefined)
+  return next
+}
+
+let cliQueue: Promise<unknown> = Promise.resolve()
+
+async function runSql<T>(sql: string): Promise<T[]> {
+  const { url } = env()
+  const refFile = join(import.meta.dir, '..', '..', 'supabase', '.temp', 'project-ref')
+  const linked = existsSync(refFile) ? readFileSync(refFile, 'utf8').trim() : ''
+  if (!linked || !url.startsWith(`https://${linked}.`)) {
+    throw new Error(`The Supabase CLI must be linked to the project in .env.local (${url}): bunx supabase link --project-ref <ref>`)
+  }
+  const proc = Bun.spawn(['bunx', 'supabase', 'db', 'query', '--linked', '--output-format', 'json', sql], { stdout: 'pipe', stderr: 'pipe' })
+  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+  const start = out.indexOf('{')
+  if (code !== 0 || start < 0) throw new Error(`SQL failed: ${sql}\n${err}${out}`)
+  return (JSON.parse(out.slice(start)) as { rows?: T[] }).rows ?? []
+}
+
+/** a new sign-up code (shown as XXXX-XXXX-XXXX), noted as this run's */
+export async function newSignupCode(label: string, days = 1, uses = 1): Promise<string> {
+  const [row] = await ownerSql<{ code: string }>(`select private.make_signup_code('dbtest ${RUN} ${label}', ${days}, ${uses}) as code`)
+  return row.code
+}
+
+let runCode: Promise<string> | undefined
+
+/** what lets a test account in: by default one code for the whole run */
+export type Permit = { signup_code?: string; invite?: string }
+
 /** a new account without a profile yet (it still has to pick its name) */
-export async function signUpBare(name: string): Promise<{ db: Db; userId: string }> {
+export async function signUpBare(name: string, permit?: Permit): Promise<{ db: Db; userId: string }> {
   const db = client()
   const { data, error } = await db.auth.signUp({
-    email: `dbtest-${RUN}-${name}@${DOMAIN}`,
+    email: testEmail(name),
     password: `${crypto.randomUUID()}Aa1!`,
+    options: { data: permit ?? { signup_code: await (runCode ??= newSignupCode('run', 1, 100)) } },
   })
   if (error) {
     throw new Error(

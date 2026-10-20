@@ -1,0 +1,127 @@
+/**
+ * Sign-up codes: a new account needs a code or an open invite link (docs/data-format.md, "Who may make an account").
+ * Email sign-ups are checked by the Auth hook before the account exists; an account made another way (GitHub) gets no
+ * profile until it gives a code with use_signup_code().
+ */
+import { beforeAll, describe, expect, test } from 'bun:test'
+import { client, enabled, RUN, expectError, getWorld, newSignupCode, newWorkspace, ok, ownerSql, signUpBare, testEmail, type Permit, type World } from './support'
+
+const NEED = 'You need a sign-up code to make an account. Ask whoever looks after Sprawniej for one.'
+const WRONG = "That sign-up code doesn't work. Check it and try again."
+const OLD = 'That sign-up code no longer works. Ask whoever looks after Sprawniej for a new one.'
+const USED_UP = 'That sign-up code has been used up. Ask whoever looks after Sprawniej for a new one.'
+const BAD_INVITE = 'This invite link was already used or has expired. Ask for a new one.'
+
+/** a sign-up that may be refused: the error's message, or null when the account was made */
+async function trySignUp(name: string, permit: Permit): Promise<string | null> {
+  const { data, error } = await client().auth.signUp({ email: testEmail(name), password: `${crypto.randomUUID()}Aa1!`, options: { data: permit } })
+  if (error) return error.message
+  expect(data.user).toBeTruthy()
+  return null
+}
+
+const usesOf = async (code: string) =>
+  (await ownerSql<{ uses: number }>(`select uses from private.signup_codes where code = '${code.replaceAll('-', '')}'`))[0]?.uses
+
+/** the CLI takes a few seconds per call */
+const SLOW = 120_000
+
+describe.skipIf(!enabled)('sign-up codes', () => {
+  let w: World
+  beforeAll(async () => {
+    w = await getWorld()
+  }, SLOW)
+
+  test('a valid code makes an account and is written down; then it is used up', async () => {
+    const code = await newSignupCode('one use')
+    expect(code).toMatch(/^[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}-[A-HJKMNP-Z2-9]{4}$/)
+    // case, spaces and dashes don't matter
+    expect(await trySignUp('code-ok', { signup_code: ` ${code.toLowerCase().replaceAll('-', ' ')} ` })).toBeNull()
+    expect(await usesOf(code)).toBe(1)
+    const [used] = await ownerSql<{ email: string; provider: string; code: string }>(
+      `select s.email, s.provider, c.code from private.signups s join private.signup_codes c on c.id = s.code_id where s.email = '${testEmail('code-ok')}'`,
+    )
+    expect(used).toEqual({ email: testEmail('code-ok'), provider: 'email', code: code.replaceAll('-', '') })
+    expect(await trySignUp('code-again', { signup_code: code })).toBe(USED_UP)
+    expect(await usesOf(code)).toBe(1)
+  }, SLOW)
+
+  test('expired, switched off, wrong or missing codes make no account', async () => {
+    const [expired, off] = await Promise.all([newSignupCode('expired', 1, 5), newSignupCode('off', 1, 5)])
+    await ownerSql(`update private.signup_codes set expires_at = now() - interval '1 minute' where code = '${expired.replaceAll('-', '')}'`)
+    expect((await ownerSql<{ r: string }>(`select private.switch_off_signup_code('${off.toLowerCase()}') as r`))[0].r).toBe('Switched off')
+    const results = await Promise.all([
+      trySignUp('expired', { signup_code: expired }),
+      trySignUp('off', { signup_code: off }),
+      trySignUp('wrong', { signup_code: 'AAAA-BBBB-CCCC' }),
+      trySignUp('none', {}),
+    ])
+    expect(results).toEqual([OLD, OLD, WRONG, NEED])
+    const made = await ownerSql(`select 1 from auth.users where email in ('${['expired', 'off', 'wrong', 'none'].map(testEmail).join("','")}')`)
+    expect(made).toHaveLength(0)
+    expect(await usesOf(expired)).toBe(0)
+  }, SLOW)
+
+  test('an open invite link makes one account, without a code', async () => {
+    const { ws } = await newWorkspace(w.ana, 'signup invite')
+    const token = (await ok(w.ana.db.from('invites').insert({ workspace_id: ws }).select('token').single())).token
+    const expiredToken = (await ok(w.ana.db.from('invites').insert({ workspace_id: ws, expires_at: '2020-01-01T00:00:00Z' }).select('token').single())).token
+    expect(await trySignUp('invite-expired', { invite: expiredToken })).toBe(BAD_INVITE)
+    const { db } = await signUpBare('invited', { invite: token })
+    // the same link can't make a second account, even before it is accepted
+    expect(await trySignUp('invite-again', { invite: token })).toBe(BAD_INVITE)
+    await ok(db.rpc('create_profile', { p_login: `dbt-${RUN}-invited`, p_name: 'Invited' }).single())
+    expect(await ok(db.rpc('accept_invite', { p_token: token }))).toBe(ws)
+  }, SLOW)
+
+  test('an account that came in without a code (GitHub) gets no name until it gives one', async () => {
+    // GitHub sign-ups pass the hook (they can't carry a code)
+    const [hook] = await ownerSql<{ r: unknown }>(
+      `select private.before_user_created('{"user": {"id": "${crypto.randomUUID()}", "email": "x@example.com", "app_metadata": {"provider": "github"}, "user_metadata": {}}}'::jsonb) as r`,
+    )
+    expect(hook.r).toEqual({})
+    // an account like that: made with a code, then the record taken away
+    const { db, userId } = await signUpBare('github-like')
+    await ownerSql(`delete from private.signups where user_id = '${userId}'`)
+
+    expect(await ok(db.rpc('signup_code_needed'))).toBe(true)
+    expect(await ok(db.rpc('ensure_profile'))).toEqual([])
+    const login = `dbt-${RUN}-ghlike`
+    await expectError(db.rpc('create_profile', { p_login: login, p_name: 'Like GitHub' }), 'SP004')
+    await expectError(db.rpc('use_signup_code', { p_code: 'AAAA-BBBB-CCCC' }), 'SP005')
+
+    const code = await newSignupCode('later')
+    await ok(db.rpc('use_signup_code', { p_code: code }))
+    expect(await ok(db.rpc('signup_code_needed'))).toBe(false)
+    expect(await usesOf(code)).toBe(1)
+    await ok(db.rpc('use_signup_code', { p_code: 'AAAA-BBBB-CCCC' }))   // in already: nothing to do
+    await ok(db.rpc('create_profile', { p_login: login, p_name: 'Like GitHub' }).single())
+    expect(await ok(db.rpc('signup_code_needed'))).toBe(false)
+  }, SLOW)
+
+  test('an account that came in without a code can use an invite link instead', async () => {
+    const { ws } = await newWorkspace(w.ana, 'signup invite later')
+    const token = (await ok(w.ana.db.from('invites').insert({ workspace_id: ws }).select('token').single())).token
+    const { db, userId } = await signUpBare('github-invite')
+    await ownerSql(`delete from private.signups where user_id = '${userId}'`)
+    await ok(db.rpc('use_signup_code', { p_invite: token }))
+    await ok(db.rpc('create_profile', { p_login: `dbt-${RUN}-ghinv`, p_name: 'Invited later' }).single())
+    expect(await ok(db.rpc('accept_invite', { p_token: token }))).toBe(ws)
+  }, SLOW)
+
+  test('accounts never let in are removed after 7 days; the rest stay', async () => {
+    const { userId: stranger } = await signUpBare('stranger')
+    const { userId: fresh } = await signUpBare('stranger-new')
+    await ownerSql(`delete from private.signups where user_id in ('${stranger}', '${fresh}')`)
+    await ownerSql(`update auth.users set created_at = now() - interval '8 days' where id = '${stranger}'`)
+    await ownerSql('select private.forget_strangers()')
+    const left = await ownerSql<{ id: string }>(`select id from auth.users where id in ('${stranger}', '${fresh}', '${w.ana.userId}')`)
+    expect(left.map((r) => r.id).sort()).toEqual([fresh, w.ana.userId].sort())
+  }, SLOW)
+
+  test('browsers can not reach the codes', async () => {
+    await expectError(w.ana.db.rpc('make_signup_code' as never, { p_note: 'x' } as never))
+    expect(await ok(w.ana.db.rpc('signup_code_needed'))).toBe(false)
+    await expectError(client().rpc('use_signup_code', { p_code: 'AAAA-BBBB-CCCC' }))
+  }, SLOW)
+})

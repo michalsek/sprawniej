@@ -9,15 +9,19 @@ A teammate sends you an **invite link**. Open it: it shows the workspace, who in
 Press **Join workspace**, then:
 
 1. **Create your account** with your email and a password (at least 8 characters), or press **Continue with
-   GitHub** if you see it and have a GitHub account. Already have an account? Choose **Sign in** instead.
+   GitHub** if you see it and have a GitHub account. The invite link lets you in, so you don't need a sign-up code.
+   Already have an account? Choose **Sign in** instead.
 2. **Pick your name and handle** ("What should we call you?"). Teammates see your name on issues and comments, and
    @mention you by your handle. The handle can't be changed later.
 
 That's it: the workspace opens. Each invite link works once, for 14 days. If yours was already used or has
 expired, ask whoever invited you for a new one.
 
-No invite link, and you want a workspace of your own? Open Sprawniej, choose **Create an account**, pick your name,
-then **Create a workspace**: give it a name and a first team. You're its owner.
+No invite link? Then you need a **sign-up code** to create an account: ask whoever looks after Sprawniej for one.
+Open Sprawniej, choose **Create an account** and type the code in with your email and password (with GitHub, you type
+it on the next screen, where you pick your name). Capital letters and dashes don't matter. A code works for a few days,
+and for as many accounts as it was made for; if yours doesn't work any more, ask for a new one. Then pick your name,
+and **Create a workspace**: give it a name and a first team. You're its owner.
 
 The first time you open your team's issues, four short tips show you around. You can see them again from the
 **Help** page (**Show the tour again**).
