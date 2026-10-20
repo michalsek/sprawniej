@@ -54,6 +54,8 @@ describe.skipIf(!enabled)('favourites', () => {
     expect(await ok(w.ana.db.from('favourites').delete().eq('profile_id', w.bob.profileId).select())).toEqual([])
     expect(await mine(w.bob, p)).toHaveLength(1)
     expect(await mine(w.bob, v)).toHaveLength(1)
+    // someone outside the workspace sees none of them either
+    expect(await ok(w.cy.db.from('favourites').select().eq('profile_id', w.bob.profileId))).toEqual([])
 
     // only the order (and extra) changes: the kind, the item and the workspace stay
     expect(await ok(w.bob.db.from('favourites').update({ sort_order: 'a5' }).eq('profile_id', w.bob.profileId).eq('item_id', p).select('sort_order'))).toEqual([

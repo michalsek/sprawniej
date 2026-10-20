@@ -24,8 +24,9 @@ create table public.favourites (
   foreign key (workspace_id, view_id) references public.views (workspace_id, id) on delete cascade
 );
 create index favourites_changed on public.favourites (workspace_id, changed_at);
-create index favourites_project on public.favourites (workspace_id, project_id);
-create index favourites_view on public.favourites (workspace_id, view_id);
+-- for the cascades when a project or view goes: only the rows of that kind
+create index favourites_project on public.favourites (workspace_id, project_id) where project_id is not null;
+create index favourites_view on public.favourites (workspace_id, view_id) where view_id is not null;
 
 insert into private.wiring (name, keys, ws_col, topic, topic_col, policies, stamp, forget) values
   ('favourites', '{profile_id,item_id}', 'workspace_id', 'me:', 'profile_id', null, 'touch', false);
