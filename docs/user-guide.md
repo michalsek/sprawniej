@@ -219,14 +219,17 @@ your workspace can have as many statuses as it likes, say **Testing** and **Desi
 group by group. Everything saves as you go:
 
 - **Add status** at the end of a group makes a new one, ready to name. Two statuses can't have the same name.
-- The dot opens the colours; the name changes in place.
-- Drag the handle (⠿) to change the order, or focus it and press `Space`, the arrow keys, then `Space` again. The order
-  is the order of menus, filters and board columns. The first status of a group (marked **Default**) is where an
-  issue lands when only its group is known: GitHub, the Linear import, and teammates on an older version of
-  Sprawniej put issues there.
-- **Hide** takes a status out of the menus. Issues that have it keep it and still show it, and so do their history
-  and the filters; **Show** brings it back. Statuses are never deleted. Each group keeps at least one status that
-  isn't hidden, so the last one can't be hidden.
+- The status's icon opens the colours; the name changes in place.
+- Drag the handle (⠿) to change the order, or focus it and press `Space`, the arrow keys, then `Space` again. On a
+  phone, press and hold the handle, or use **⋯ › Move up** and **Move down**. The order is the order of menus,
+  filters and board columns.
+- The first status of a group that isn't hidden is where an issue lands when only its group is known: GitHub, the
+  Linear import, and teammates on an older version of Sprawniej put issues there. When a group has more than one,
+  that one is marked **Default**.
+- Hover **Hidden** or **Default** to read what they mean.
+- **Hide** (on a phone, the eye) takes a status out of the menus. Issues that have it keep it and still show it,
+  and so do their history and the filters; **Show** brings it back. Statuses are never deleted. Each group keeps at
+  least one status that isn't hidden, so the last one can't be hidden.
 - Next to each status: how many issues have it now.
 
 ### Priority
@@ -279,9 +282,9 @@ follows it, and you can add or remove teammates there too.
 Every list of issues can be shown two ways. Switch with **List / Board** at the top right.
 
 - **List:** issues grouped by status, in the order of Settings › Statuses. Sub-issues sit just under their parent.
-- **Board:** a column per status, with cards. A hidden status gets a column only while an issue in view has it. Empty columns wait under **Hidden columns** on the right, together
-  with statuses the tab leaves out (like **Done** on the Active tab). Drop a card on one to move the issue there; the
-  column then shows up with that card in it.
+- **Board:** a column per status, with cards. A hidden status gets a column only while an issue in view has it.
+  Empty columns wait under **Hidden columns** on the right, together with statuses the tab leaves out (like **Done**
+  on the Active tab). Drop a card on one to move the issue there; the column then shows up with that card in it.
 
 **Drag and drop** works in both. Drag an issue up or down to change its order, or into another group or column to
 change its status. Your teammates see the new order too. No mouse? Move to an issue with `Tab` (or `J` and `K`),
@@ -396,8 +399,8 @@ When your team connects a GitHub repository, its pull requests move the issues t
 - a pull request opens, or a draft becomes ready for review: the issue moves to **In Review**;
 - it's merged: the issue moves to **Done**.
 
-If your workspace has more than one status in a group, the issue moves to the group's first one (marked **Default**
-in Settings › Statuses). An issue already in any In Review status isn't moved to review again.
+If your workspace has more than one status in a group, the issue moves to the group's first one that isn't hidden
+(marked **Default** in Settings › Statuses). An issue already in any In Review status isn't moved to review again.
 
 Mention an issue by its number, like `ENG-12`, in the branch name (`eng-12-fix-login` works too), the pull request's
 title or its description. One pull request can move several issues. An issue that moved to another team is found by

@@ -1,16 +1,16 @@
 /**
  * The workspace's statuses of one kind (Settings › Statuses), group by group: rename, recolour, reorder, hide and
  * show them, and add new ones. Every member may (like labels). Statuses are never deleted: hiding one keeps it on the
- * issues that have it. Each group keeps at least one shown status. Everything saves by itself.
+ * things that have it. Each group keeps at least one shown status. Everything saves by itself.
  *
- * On screen this says "group", never "category" (CLAUDE.md, writing). One component for every kind of status: issue
- * statuses now, project statuses later (`kind`).
+ * On screen this says "group", never "category" (CLAUDE.md, writing). One component for every kind of status; what
+ * differs per kind is in KIND_TEXT (project statuses add their entry there).
  */
 import { useMemo, useState } from 'react'
 import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, useSensor, useSensors, type Announcements, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
-import { Eye, EyeOff, GripVertical, Plus } from 'lucide-react'
+import { ArrowDown, ArrowUp, Eye, EyeOff, GripVertical, MoreHorizontal, Plus } from 'lucide-react'
 import { ColorPicker } from '@/components/ColorPicker'
 import { InlineText } from '@/components/InlineText'
 import { createStatus, moveStatus, updateStatus } from '@/data/actions'
@@ -18,41 +18,17 @@ import { canHide, defaultStatus, statusesOf, statusNamed } from '@/data/statuses
 import { useData } from '@/data/store'
 import { STATUS_COLORS } from '@/model/colors'
 import type { Status } from '@/model/schema'
-import { CATEGORIES, KIND_CATEGORIES, type StatusKind } from '@/model/status'
+import type { StatusKind } from '@/model/status'
 import { StatusIcon } from '@/features/issues/icons'
 import { Button } from '@/ui/button'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { cn } from '@/lib/utils'
-
-/** a group as the page shows it: its name, what it decides, and an idea for splitting it */
-interface GroupInfo {
-  id: string
-  name: string
-  description: string
-  /** "like Testing or Design review" */
-  example: string
-}
-
-const ISSUE_EXAMPLES: Record<string, string> = {
-  backlog: 'like Ideas or Later',
-  todo: 'like Ready or Next up',
-  in_progress: 'like Testing or Design review',
-  in_review: 'like Code review or QA',
-  done: 'like Released',
-  canceled: 'like Won’t do or Not now',
-  duplicate: 'like Already reported',
-}
-
-/** the groups of a kind, in order (project groups come with project statuses) */
-function groupsOf(kind: StatusKind): GroupInfo[] {
-  return KIND_CATEGORIES[kind].map((id) => {
-    const c = kind === 'issue' ? CATEGORIES.find((x) => x.id === id) : undefined
-    return { id, name: c?.name ?? id, description: c?.description ?? '', example: ISSUE_EXAMPLES[id] ?? '' }
-  })
-}
+import { KIND_TEXT, type GroupInfo, type KindText } from './statusKinds'
 
 const MAX_NAME = 40
 const CANT_HIDE = 'Each group needs at least one status that isn’t hidden. Add or show another one first.'
+const HIDDEN = 'Not offered when picking a status. Issues that have it keep it.'
 
 /** "New status", or "New status 2" when that's taken: names are unique */
 function freshName(statuses: Record<string, Status>, kind: StatusKind): string {
@@ -62,34 +38,43 @@ function freshName(statuses: Record<string, Status>, kind: StatusKind): string {
   }
 }
 
-const issuesText = (n: number) => (n === 1 ? '1 issue' : `${n} issues`)
-
 interface RowProps {
   status: Status
   statuses: Record<string, Status>
-  uses: number
+  /** how many have it (undefined: this kind doesn't count yet) */
+  uses: number | undefined
+  text: KindText
+  /** the group's default, marked when the group has a choice */
   isDefault: boolean
   /** just added: its name is ready to type over */
   fresh: boolean
+  /** its neighbours in the group, to move it up or down (null at an end) */
+  above: string | null
+  below: string | null
+  aboveAbove: string | null
+  belowBelow: string | null
 }
 
-function StatusRow({ status, statuses, uses, isDefault, fresh }: RowProps) {
+function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, below, aboveAbove, belowBelow }: RowProps) {
   const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: status.id })
   const [problem, setProblem] = useState<string | null>(null)
   const hideable = status.hidden || canHide(status, statuses)
   const taken = (name: string) => !!statusNamed(statuses, status.kind, name, status.id)
-  const hint = `status-hint-${status.id}`
+  const dim = status.hidden && 'opacity-60'
 
   const hide = (
     <Button
       variant="ghost"
       size="sm"
-      className="w-[4.75rem] shrink-0 justify-start text-muted-foreground"
-      disabled={!hideable}
-      aria-describedby={!hideable ? hint : undefined}
-      onClick={() => updateStatus(status.id, { hidden: !status.hidden })}
+      className={cn('w-8 shrink-0 justify-center px-0 text-muted-foreground sm:w-[4.75rem] sm:justify-start sm:px-2.5', !hideable && 'cursor-not-allowed opacity-50 hover:bg-transparent')}
+      aria-label={`${status.hidden ? 'Show' : 'Hide'} ${status.name}`}
+      // stays focusable, so the reason can be read
+      aria-disabled={!hideable || undefined}
+      onClick={() => hideable && updateStatus(status.id, { hidden: !status.hidden })}
     >
-      {status.hidden ? <Eye /> : <EyeOff />} {status.hidden ? 'Show' : 'Hide'}
+      {status.hidden ? <Eye /> : <EyeOff />}
+      {/* a phone shows only the eye, so the name has room */}
+      <span className="hidden sm:inline">{status.hidden ? 'Show' : 'Hide'}</span>
     </Button>
   )
 
@@ -112,56 +97,56 @@ function StatusRow({ status, statuses, uses, isDefault, fresh }: RowProps) {
         >
           <GripVertical className="size-4" />
         </button>
-        <ColorPicker
-          value={status.color}
-          colors={STATUS_COLORS}
-          onPick={(color) => updateStatus(status.id, { color })}
-          label={`Colour of ${status.name}`}
-          swatch={(color, where) => <StatusIcon status={{ ...status, color }} className={where === 'menu' ? 'size-4' : undefined} />}
-        />
-        <span className={cn('flex min-w-0 flex-1 items-center gap-2', status.hidden && 'opacity-60')}>
-          <InlineText
-            value={status.name}
-            onSave={(name) => updateStatus(status.id, { name })}
-            allowed={(v) => !taken(v)}
-            onTyping={(v) => setProblem(v === null ? null : !v.trim() ? 'Give it a name.' : taken(v.trim()) ? 'Another status is called that. Pick another name.' : null)}
-            label={`Name of ${status.name}`}
-            required
-            maxLength={MAX_NAME}
-            autoFocus={fresh}
-            className="h-8 min-w-0 text-[15px]"
+        <span className={cn('shrink-0', dim)}>
+          <ColorPicker
+            value={status.color}
+            colors={STATUS_COLORS}
+            onPick={(color) => updateStatus(status.id, { color })}
+            label={`Colour of ${status.name}`}
+            swatch={(color, where) => <StatusIcon status={{ ...status, color }} className={where === 'menu' ? 'size-4' : undefined} />}
           />
-          {status.hidden && <span className="shrink-0 text-sm text-muted-foreground">Hidden</span>}
-          {isDefault && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span tabIndex={0} className="hidden shrink-0 rounded-sm text-sm text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none sm:inline">
-                  Default
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>Issues that come into this group without a status of their own (from GitHub or the import) get this one</TooltipContent>
-            </Tooltip>
-          )}
         </span>
-        <span className="w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums sm:w-20">{issuesText(uses)}</span>
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className={cn('min-w-0 flex-1', dim)}>
+            <InlineText
+              value={status.name}
+              onSave={(name) => updateStatus(status.id, { name })}
+              allowed={(v) => !taken(v)}
+              onTyping={(v) => setProblem(v === null ? null : !v.trim() ? 'Give it a name.' : taken(v.trim()) ? 'Another status is called that. Pick another name.' : null)}
+              label={`Name of ${status.name}`}
+              required
+              maxLength={MAX_NAME}
+              autoFocus={fresh}
+              className="h-8 min-w-0 text-[15px]"
+            />
+          </span>
+          {status.hidden && <Hint text={HIDDEN}>Hidden</Hint>}
+          {isDefault && <Hint text={text.defaultHint}>Default</Hint>}
+        </span>
+        {uses !== undefined && <span className={cn('w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums sm:w-20', dim)}>{text.count(uses)}</span>}
         {hideable ? (
           hide
         ) : (
           <Tooltip>
-            <TooltipTrigger asChild>
-              {/* a disabled button hears no pointer, so the reason sits on what holds it */}
-              <span tabIndex={0} className="rounded-md focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
-                {hide}
-              </span>
-            </TooltipTrigger>
+            <TooltipTrigger asChild>{hide}</TooltipTrigger>
             <TooltipContent>{CANT_HIDE}</TooltipContent>
           </Tooltip>
         )}
-        {!hideable && (
-          <span id={hint} className="sr-only">
-            {CANT_HIDE}
-          </span>
-        )}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground" aria-label={`More for ${status.name}`}>
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem disabled={!above} onSelect={() => moveStatus(status.id, { prev: aboveAbove, next: above })}>
+              <ArrowUp /> Move up
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!below} onSelect={() => moveStatus(status.id, { prev: below, next: belowBelow })}>
+              <ArrowDown /> Move down
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {problem && (
         <p role="status" className="pb-1 pl-[4.75rem] text-sm text-destructive-text">
@@ -172,23 +157,38 @@ function StatusRow({ status, statuses, uses, isDefault, fresh }: RowProps) {
   )
 }
 
+/** a quiet word with its longer meaning in a tooltip */
+function Hint({ text, children }: { text: string; children: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={0} className="shrink-0 rounded-sm text-sm text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{text}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 interface GroupProps {
   kind: StatusKind
   group: GroupInfo
   list: Status[]
   statuses: Record<string, Status>
-  uses: ReadonlyMap<string, number>
+  uses: ReadonlyMap<string, number> | undefined
   fresh: string | null
   onAdd: (group: string) => void
 }
 
-function StatusGroup({ kind, group, list, statuses, uses, fresh, onAdd }: GroupProps) {
+function GroupSection({ kind, group, list, statuses, uses, fresh, onAdd }: GroupProps) {
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
     // on a touch screen, press and hold the handle a moment; a swipe elsewhere still scrolls
     useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 8 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   )
+  const text = KIND_TEXT[kind]
   const ids = list.map((s) => s.id)
   const nameOf = (id: unknown) => statuses[String(id)]?.name ?? 'The status'
   const at = (id: unknown) => `position ${ids.indexOf(String(id)) + 1} of ${ids.length}`
@@ -205,6 +205,8 @@ function StatusGroup({ kind, group, list, statuses, uses, fresh, onAdd }: GroupP
     moveStatus(String(active.id), { prev: order[n - 1] ?? null, next: order[n + 1] ?? null })
   }
   const first = defaultStatus(statuses, kind, group.id)
+  // Default says something only when the group has more than one status to pick from
+  const choice = list.filter((s) => !s.hidden).length > 1
 
   return (
     <section aria-labelledby={`group-${kind}-${group.id}`} className="py-3">
@@ -222,8 +224,20 @@ function StatusGroup({ kind, group, list, statuses, uses, fresh, onAdd }: GroupP
       >
         <SortableContext id={`${kind}-${group.id}`} items={ids} strategy={verticalListSortingStrategy}>
           <ul className="mt-2 flex flex-col">
-            {list.map((s) => (
-              <StatusRow key={s.id} status={s} statuses={statuses} uses={uses.get(s.id) ?? 0} isDefault={s.id === first?.id} fresh={s.id === fresh} />
+            {list.map((s, n) => (
+              <StatusRow
+                key={s.id}
+                status={s}
+                statuses={statuses}
+                uses={uses ? (uses.get(s.id) ?? 0) : undefined}
+                text={text}
+                isDefault={choice && s.id === first?.id}
+                fresh={s.id === fresh}
+                above={ids[n - 1] ?? null}
+                aboveAbove={ids[n - 2] ?? null}
+                below={ids[n + 1] ?? null}
+                belowBelow={ids[n + 2] ?? null}
+              />
             ))}
           </ul>
         </SortableContext>
@@ -245,14 +259,11 @@ function StatusGroup({ kind, group, list, statuses, uses, fresh, onAdd }: GroupP
 export function StatusesSettings({ kind }: { kind: StatusKind }) {
   const statuses = useData((s) => s.statuses)
   const issues = useData((s) => s.issues)
+  const projects = useData((s) => s.projects)
+  const counter = KIND_TEXT[kind].uses
+  const uses = useMemo(() => counter?.({ issues, projects }), [counter, issues, projects])
   const [fresh, setFresh] = useState<string | null>(null)
   const all = useMemo(() => statusesOf(statuses, kind), [statuses, kind])
-  // open issues per status (the archive isn't counted: it isn't read until something needs it)
-  const uses = useMemo(() => {
-    const out = new Map<string, number>()
-    if (kind === 'issue') for (const i of Object.values(issues)) out.set(i.statusId, (out.get(i.statusId) ?? 0) + 1)
-    return out
-  }, [issues, kind])
   const add = (group: string) => {
     const made = createStatus(kind, group, freshName(statuses, kind))
     if (made) setFresh(made.id)
@@ -260,8 +271,8 @@ export function StatusesSettings({ kind }: { kind: StatusKind }) {
 
   return (
     <div className="flex flex-col divide-y">
-      {groupsOf(kind).map((g) => (
-        <StatusGroup key={g.id} kind={kind} group={g} list={all.filter((s) => s.category === g.id)} statuses={statuses} uses={uses} fresh={fresh} onAdd={add} />
+      {KIND_TEXT[kind].groups.map((g) => (
+        <GroupSection key={g.id} kind={kind} group={g} list={all.filter((s) => s.category === g.id)} statuses={statuses} uses={uses} fresh={fresh} onAdd={add} />
       ))}
     </div>
   )

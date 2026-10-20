@@ -46,8 +46,11 @@ statuses of one group look alike but for their colour and name; never invent a n
 **Settings › Statuses** (`StatusesSettings`, one component for every kind of status) lists the groups in order, each
 with a small grey heading and one line about what it decides, then its statuses as rows: a drag handle, the colour
 button (the same popover as labels, `ColorPicker`), the name edited in place (a plain message under it while it is
-blank or taken), **Default** on the first shown one, how many issues have it, and **Hide** / **Show** (off, with the
-reason, for the last shown status of a group). **Add status** ends each group. On screen it says "group", never
+blank or taken), **Default** on the first shown one when the group has more than one, how many issues have it,
+**Hide** / **Show** (`aria-disabled`, with the reason in a tooltip, for the last shown status of a group), and a ⋯
+menu with **Move up** / **Move down**. A hidden row is dimmed but for its buttons. **Add status** ends each group.
+What differs per kind (group names, counts, the Default tooltip) is in `KIND_TEXT`
+(`src/features/settings/statusKinds.ts`). On screen it says "group", never
 "category".
 
 | Group | Icon |

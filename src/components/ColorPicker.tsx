@@ -1,5 +1,6 @@
 /** The colour button for a label or a status: a small swatch that opens the calm set to pick from. */
 import type { ReactNode } from 'react'
+import { COLOR_NAMES } from '@/model/colors'
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
 import { cn } from '@/lib/utils'
 
@@ -27,7 +28,7 @@ export function ColorPicker({ value, colors, onPick, label, swatch }: Props) {
             type="button"
             onClick={() => onPick(c)}
             className={cn('flex size-8 items-center justify-center rounded-md hover:bg-accent', c === value && 'bg-accent')}
-            aria-label={`Use ${c}`}
+            aria-label={`Use ${COLOR_NAMES[c] ?? c}`}
             aria-pressed={c === value}
           >
             {swatch(c, 'menu')}
