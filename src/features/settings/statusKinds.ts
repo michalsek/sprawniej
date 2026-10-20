@@ -1,10 +1,9 @@
 /**
  * What Settings › Statuses says for each kind of status: its groups (names, what they decide, an idea for splitting
- * one), how many things have each status, and what Default means. Project statuses add their entry here.
+ * one), how many things have each status, and what Default means.
  */
 import type { DataState } from '@/data/store'
-import { PROJECT_STATUS_NAMES } from '@/features/projects/status'
-import { CATEGORIES, PROJECT_CATEGORIES, type StatusKind } from '@/model/status'
+import { CATEGORIES, PROJECT_CATEGORY_INFO, type StatusKind } from '@/model/status'
 
 /** a group as the page shows it: its name, what it decides, and an idea for splitting it */
 export interface GroupInfo {
@@ -38,6 +37,15 @@ const ISSUE_EXAMPLES: Record<string, string> = {
   duplicate: 'like Already reported',
 }
 
+const PROJECT_EXAMPLES: Record<string, string> = {
+  backlog: 'like Ideas or Someday',
+  planned: 'like Next up or Approved',
+  in_progress: 'like Building or Testing',
+  paused: 'like On hold or Waiting',
+  completed: 'like Launched',
+  canceled: 'like Dropped or Not now',
+}
+
 const tally = (ids: Iterable<string>) => {
   const out = new Map<string, number>()
   for (const id of ids) out.set(id, (out.get(id) ?? 0) + 1)
@@ -53,9 +61,9 @@ export const KIND_TEXT: Record<StatusKind, KindText> = {
     defaultHint: 'Issues that come into this group without a status of their own (from GitHub or the import) get this one',
     hiddenHint: 'Not offered when picking a status. Issues that have it keep it.',
   },
-  // project statuses: their descriptions, examples and count come with them
   project: {
-    groups: PROJECT_CATEGORIES.map((id) => ({ id, name: PROJECT_STATUS_NAMES[id], description: '', example: '' })),
+    groups: PROJECT_CATEGORY_INFO.map((c) => ({ id: c.id, name: c.name, description: c.description, example: PROJECT_EXAMPLES[c.id] ?? '' })),
+    uses: (s) => tally(Object.values(s.projects).map((p) => p.statusId)),
     count: (n) => (n === 1 ? '1 project' : `${n} projects`),
     defaultHint: 'Projects that come into this group without a status of their own get this one',
     hiddenHint: 'Not offered when picking a status. Projects that have it keep it.',

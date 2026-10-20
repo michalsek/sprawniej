@@ -20,6 +20,7 @@ import { STATUS_COLORS } from '@/model/colors'
 import type { Status } from '@/model/schema'
 import type { StatusKind } from '@/model/status'
 import { StatusIcon } from '@/features/issues/icons'
+import { StatusDot } from '@/features/projects/ProjectProperties'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
@@ -102,7 +103,13 @@ function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, belo
             colors={STATUS_COLORS}
             onPick={(color) => updateStatus(status.id, { color })}
             label={`Colour of ${status.name}`}
-            swatch={(color, where) => <StatusIcon status={{ ...status, color }} className={where === 'menu' ? 'size-4' : undefined} />}
+            swatch={(color, where) =>
+              status.kind === 'project' ? (
+                <StatusDot status={{ ...status, color }} className={where === 'menu' ? 'size-3.5' : 'size-3'} />
+              ) : (
+                <StatusIcon status={{ ...status, color }} className={where === 'menu' ? 'size-4' : undefined} />
+              )
+            }
           />
         </span>
         <span className="flex min-w-0 flex-1 items-center gap-2">
