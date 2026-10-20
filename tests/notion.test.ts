@@ -255,6 +255,12 @@ describe('notes', () => {
     expect(notesFor({ description: '', assignee: ANA, actor: ANA, people })).toEqual([])
   })
 
+  test('a mention finds someone by the handle they changed to, not by their old one', () => {
+    const renamed = [{ id: ANA, login: 'ana', handle: null }, { id: BOB, login: 'bob', handle: 'robert' }]
+    expect(notesFor({ description: 'Ask @robert', assignee: null, actor: ANA, people: renamed }).map((n) => [n.to, n.type])).toEqual([[BOB, 'mentioned']])
+    expect(notesFor({ description: 'Ask @bob', assignee: null, actor: ANA, people: renamed })).toEqual([])
+  })
+
   test('mentioned people hear about it; without an author the assignee still does', () => {
     expect(notesFor({ description: 'Ask @bob and @nobody', assignee: null, actor: ANA, people }).map((n) => [n.to, n.type])).toEqual([[BOB, 'mentioned']])
     expect(notesFor({ description: 'cc @ana', assignee: BOB, actor: null, people }).map((n) => [n.to, n.type])).toEqual([

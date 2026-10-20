@@ -14,11 +14,21 @@ interface NewIssueNote {
   type: 'assigned' | 'mentioned'
 }
 
-/** `people`: the workspace's members; `actor` and `assignee` are profile ids (null: nobody) */
-export function notesFor(o: { description: string; assignee: string | null; actor: string | null; people: { id: string; login: string }[] }): NewIssueNote[] {
+/**
+ * `people`: the workspace's members, with the handle each shows now when they changed it, so an @mention of that
+ * handle counts; `actor` and `assignee` are profile ids (null: nobody)
+ */
+export function notesFor(o: {
+  description: string
+  assignee: string | null
+  actor: string | null
+  people: { id: string; login: string; handle?: string | null }[]
+}): NewIssueNote[] {
   const loginOf = new Map(o.people.map((p) => [p.id, p.login]))
   const idOf = new Map(o.people.map((p) => [p.login, p.id]))
-  const people: Record<string, Person> = Object.fromEntries(o.people.map((p) => [p.login, { login: p.login, githubId: 0, name: '', avatarUrl: '' }]))
+  const people: Record<string, Person> = Object.fromEntries(
+    o.people.map((p) => [p.login, { login: p.login, ...(p.handle && { handle: p.handle }), githubId: 0, name: '', avatarUrl: '' }]),
+  )
   const actor = (o.actor && loginOf.get(o.actor)) || ''
   const issue: Issue = {
     id: '',

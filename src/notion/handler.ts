@@ -37,8 +37,8 @@ export type Lookup =
       workspace: string
       /** where the page goes, with the first place in its list (null: the team is gone) */
       team: { id: string; key: string; first_sort: string | null } | null
-      /** the workspace's members now */
-      people: { id: string; login: string }[]
+      /** the workspace's members now; `handle` when they changed it (null: the same as the login) */
+      people: { id: string; login: string; handle?: string | null }[]
       /** the members whose sign-in email the page names */
       emails: { email: string; profile_id: string }[]
       labels: { id: string; name: string }[]

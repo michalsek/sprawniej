@@ -17,6 +17,7 @@ import {
   newWorkspace,
   ok,
   ownerSql,
+  RUN,
   signUp,
   testEmail,
   ulid,
@@ -26,7 +27,7 @@ import {
 
 // Notion: one connection per workspace (notion_connections), the page each issue came from (private.notion_pages),
 // the two functions for admins and the two only the webhook may call
-// (supabase/migrations/20261020160000_notion.sql, docs/notion.md).
+// (supabase/migrations/20261021140000_notion.sql, docs/notion.md).
 
 type Applied = { issue?: string; new?: boolean; archived?: boolean; problem?: string }
 
@@ -152,6 +153,10 @@ describe.skipIf(!enabled)('Notion', () => {
     expect(got.team).toEqual({ id: eng, key: 'ENG', first_sort: first.sort_order })
     expect(got.emails.map((e) => e.profile_id).sort()).toEqual([ana.profileId, bob.profileId].sort())
     expect(got.people.map((p) => p.id).sort()).toEqual([ana.profileId, bob.profileId, una.profileId].sort())
+    // each with the handle they show now: null until they change it
+    expect(got.people.find((p) => p.id === ana.profileId)?.handle).toBeNull()
+    await ok(una.db.rpc('set_handle', { p_handle: `dbt-${RUN}-una-new` }))
+    expect((await found(conn, hash)).people.find((p) => p.id === una.profileId)?.handle).toBe(`dbt-${RUN}-una-new`)
     expect(got.labels.map((l) => l.name)).toEqual(['Bug'])
 
     // the Team property: by key or name; never another workspace's; anything else is the connection's

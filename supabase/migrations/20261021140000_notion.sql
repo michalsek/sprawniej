@@ -122,8 +122,9 @@ end $$;
 -- ---------- what the webhook needs to know ----------
 
 -- With the right secret: the workspace, the team the page goes to (the page's Team property by key or name, else the
--- connection's team) with the place at the top of its list, the members, those whose sign-in email is one the page
--- names (at most 20), and the labels. Otherwise only {"state": "unknown"} or {"state": "wrong_key"}.
+-- connection's team) with the place at the top of its list, the members (with their handles), those whose sign-in
+-- email is one the page names (at most 20), and the labels. Otherwise only {"state": "unknown"} or
+-- {"state": "wrong_key"}.
 create function public.notion_lookup(p_connection uuid, p_secret_hash text, p_emails text[], p_team text)
 returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
@@ -153,7 +154,8 @@ begin
       'key', t.key,
       'first_sort', (select min(i.sort_order) from public.issues i
                       where i.workspace_id = c.workspace_id and i.team_id = t.id and i.archived_at is null)) end,
-    'people', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'login', p.login))
+    -- each member's handle as github_lookup gives it (null: the same as the login), so @mentions find them
+    'people', coalesce((select jsonb_agg(jsonb_build_object('id', p.id, 'login', p.login, 'handle', p.handle))
                           from public.workspace_members m join public.profiles p on p.id = m.profile_id
                          where m.workspace_id = c.workspace_id and m.removed_at is null), '[]'),
     'emails', coalesce((select jsonb_agg(jsonb_build_object('email', lower(u.email), 'profile_id', p.id))

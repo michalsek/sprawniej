@@ -71,7 +71,7 @@ People at the top level (`source.user_id`, `data.created_by`) carry only an id, 
 person properties (`people`, `created_by`) as `person.email`. That is why the author comes from a **Created by**
 property. `tests/fixtures/notion-page.json` is a full example with made-up ids.
 
-## 2. The database (`supabase/migrations/20261020160000_notion.sql`)
+## 2. The database (`supabase/migrations/20261021140000_notion.sql`)
 
 Only adds, so older apps keep working.
 
@@ -110,8 +110,8 @@ browsers.
 - `notion_lookup(connection, secret_hash, emails, team)`: `{"state": "unknown"}` or `{"state": "wrong_key"}` and
   nothing else, unless the hash matches. Then the workspace, the team (the page's Team property by key or name, never
   another workspace's, else the connection's) with `first_sort` (the smallest `sort_order` of its open issues), the
-  members, the members whose confirmed sign-in email is one of `emails` (at most 20; the emails never leave the
-  database except as that match) and the labels.
+  members (each with the `handle` they show now, null when it is their login), the members whose confirmed sign-in
+  email is one of `emails` (at most 20; the emails never leave the database except as that match) and the labels.
 - `notion_apply(connection, secret_hash, page, actor, issue, notes)`, in one transaction:
   1. locks the connection and checks the hash (`SP020` "This address was replaced.", which the webhook answers with
      401 like a wrong key);
@@ -193,7 +193,8 @@ rule and the uuid and page id patterns are in `src/model/notion.ts`; `notion_app
 them with `-- @regex notion-…` markers, which `tests/statusLists.test.ts` compares.
 
 **Notes** (`notes.ts`): `issueNotes()` from `src/data/notify.ts` for a new issue, as the app does: the assignee
-(unless they are the author) and every member @mentioned in the description. Each gets a ULID.
+(unless they are the author) and every member @mentioned in the description, by the handle they show now (`@robert`
+finds someone who changed theirs to robert). Each gets a ULID.
 
 ## 4. The app
 
