@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.11.0'
+export const APP_VERSION = '2.12.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,19 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.12.0',
+    date: '2026-10-21',
+    title: 'Projects on a board, with your own project statuses',
+    notes: [
+      'Show projects as a board: pick List or Board at the top of Projects, on its own and on each team, and Sprawniej remembers your choice',
+      'Drag a project to another column to change its status, or up and down to put it in order. Your teammates see it right away',
+      'Drag with the keyboard too: Space to pick a project up, the arrow keys to move it, Space to put it down, Esc to stop',
+      'Settings › Statuses now has project statuses: add, rename, recolour, reorder and hide them, like issue statuses',
+      'A hidden status keeps its projects. Its column shows at the end of the board until you move them out',
+      'Projects brought over from Linear take the status with the same name, or else its group\'s Default',
+    ],
+  },
   {
     version: '2.11.0',
     date: '2026-10-20',

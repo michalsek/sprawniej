@@ -4,6 +4,16 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.12.0: Projects on a board, with your own project statuses
+*2026-10-21*
+
+- Show projects as a board: pick List or Board at the top of Projects, on its own and on each team, and Sprawniej remembers your choice
+- Drag a project to another column to change its status, or up and down to put it in order. Your teammates see it right away
+- Drag with the keyboard too: Space to pick a project up, the arrow keys to move it, Space to put it down, Esc to stop
+- Settings › Statuses now has project statuses: add, rename, recolour, reorder and hide them, like issue statuses
+- A hidden status keeps its projects. Its column shows at the end of the board until you move them out
+- Projects brought over from Linear take the status with the same name, or else its group's Default
+
 ## 2.11.0: Checklists you can tick, and a / menu
 *2026-10-20*
 
