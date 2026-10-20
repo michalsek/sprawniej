@@ -137,7 +137,7 @@ export function Comments({ issue, archived }: { issue: Issue; archived?: Archive
     <section className="mt-10">
       <h2 className="mb-3 text-sm font-medium text-muted-foreground">Activity</h2>
       <ol className="flex flex-col gap-4">
-        <CreatedLine by={issue.createdBy} at={issue.createdAt} />
+        <CreatedLine by={issue.createdBy} at={issue.createdAt} via={history.createdVia} />
         {items.map((i) => i.node)}
       </ol>
       {history.failed && <p className="mt-3 px-1 text-xs text-muted-foreground">Changes to this issue show here when you’re online.</p>}

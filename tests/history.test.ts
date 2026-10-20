@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { AT_CREATION_MS, historySignature, issueEvents, mergeFetched, type EventRow, type HistoryContext } from '@/data/history'
+import { AT_CREATION_MS, createdVia, historySignature, issueEvents, mergeFetched, viaOf, type EventRow, type HistoryContext } from '@/data/history'
 import type { ArchivedIssue, Issue } from '@/model/schema'
 
 const START = Date.parse('2026-10-01T10:00:00.000Z')
@@ -39,6 +39,34 @@ describe('issue history', () => {
     ])
     // an old line (only the category) and a new one compare by category
     expect(lines([row(1, 1, 'pa', { status: ['todo', 'done'] }), row(2, 1.5, 'pa', { status: ['done', 'todo'], statusId: ['s-done', 's-todo'] })])).toEqual([])
+  })
+
+  test('an issue made from a Notion page says so, and writes no line of its own', () => {
+    const via = { notion: { url: 'https://www.notion.so/abc' } }
+    const rows = [row(1, 0, 'pa', { created: true, via }), row(2, 1, 'pb', { status: ['todo', 'done'] })]
+    expect(createdVia(rows)).toEqual(via)
+    expect(kinds(rows)).toEqual(['status'])
+    expect(createdVia([row(2, 1, 'pb', { status: ['todo', 'done'] })])).toBeUndefined()
+    // a change that came through a page shows it too
+    expect(issueEvents([row(3, 2, null, { priority: [0, 2], via })], ctx)[0]).toMatchObject({ by: null, via })
+  })
+
+  test('only links to Notion or GitHub count as where something came from', () => {
+    expect(viaOf({ via: { notion: { url: 'https://acme.notion.site/Page-1' } } })).toEqual({ notion: { url: 'https://acme.notion.site/Page-1' } })
+    expect(viaOf({ via: { notion: { url: 'https://notion.so/x' } } })).toEqual({ notion: { url: 'https://notion.so/x' } })
+    for (const url of ['https://evil.example/', 'http://www.notion.so/x', 'https://notion.so.evil.com/x', 'https://evilnotion.so/x', 'javascript:alert(1)', 3]) {
+      expect({ url, via: viaOf({ via: { notion: { url } } }) }).toEqual({ url, via: undefined })
+    }
+  })
+
+  test('labels on an issue nobody made (from Notion) are part of making it, for a moment', () => {
+    const nobody: HistoryContext = { login, createdBy: '', createdAt: at(0) }
+    const r = (ms: number, actor: string | null): EventRow => ({ id: 1, actorId: actor, at: new Date(START + ms).toISOString(), changes: { labels: { added: ['L1'] } } })
+    expect(kinds([r(2_000, null)], nobody)).toEqual([])
+    expect(kinds([r(AT_CREATION_MS + 1, null)], nobody)).toEqual(['labels'])
+    expect(kinds([r(2_000, 'pb')], nobody)).toEqual(['labels'])
+    // without knowing who made it, nothing is folded
+    expect(kinds([r(2_000, null)], { login, createdAt: at(0) })).toEqual(['labels'])
   })
 
   test('one line per field, in the order the page shows them, whatever order they were stored in', () => {

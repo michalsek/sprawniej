@@ -41,6 +41,16 @@ export interface PullRequestVia {
   url: string
 }
 
+/** the Notion page an issue was made from (docs/notion.md) */
+export interface NotionVia {
+  notion: { url: string }
+}
+
+/** what a change came through, when not the app */
+export type Via = PullRequestVia | NotionVia
+
+export const isNotionVia = (v: Via | undefined): v is NotionVia => !!v && 'notion' in v
+
 export interface HistoryEvent {
   /** the event the line started from: it stays the same while later ones fold into it */
   id: number
@@ -48,8 +58,8 @@ export interface HistoryEvent {
   /** a login; null when nobody was signed in (the nightly tidy-up, or a change made by hand) */
   by: string | null
   change: Change
-  /** it came through a pull request */
-  via?: PullRequestVia
+  /** it came through a pull request, or a Notion page */
+  via?: Via
 }
 
 /** one event as src/backend/history.ts reads it (times already in the app's form) */
@@ -63,7 +73,7 @@ export interface EventRow {
 export interface HistoryContext {
   /** profile id to login */
   login(profileId: string): string | undefined
-  /** who created the issue, and when: labels they put on while creating it aren't a change */
+  /** who created the issue ('': nobody, a Notion page), and when: labels they put on while creating it aren't a change */
   createdBy?: string
   createdAt?: string
 }
@@ -141,12 +151,31 @@ export function changesOf(changes: unknown, login: (id: string) => string | unde
   return out
 }
 
-/** the pull request an event came through, when it says so and the link goes to GitHub */
-export function viaOf(changes: unknown): PullRequestVia | undefined {
-  if (!isRecord(changes) || !isRecord(changes.via) || !isRecord(changes.via.pullRequest)) return undefined
-  const { repo, number, url } = changes.via.pullRequest
-  if (!isText(repo) || typeof number !== 'number' || !isText(url) || !url.startsWith('https://github.com/')) return undefined
-  return { repo, number, url }
+/** Notion's own addresses: notion.so (www. and the rest) and a team's *.notion.site */
+const NOTION_HOST = /^([a-z0-9-]+\.)*notion\.(so|site)$/
+
+/**
+ * The pull request or Notion page an event came through, when it says so and the link goes to GitHub or to Notion.
+ */
+export function viaOf(changes: unknown): Via | undefined {
+  if (!isRecord(changes) || !isRecord(changes.via)) return undefined
+  const { pullRequest, notion } = changes.via
+  if (isRecord(pullRequest)) {
+    const { repo, number, url } = pullRequest
+    if (!isText(repo) || typeof number !== 'number' || !isText(url) || !url.startsWith('https://github.com/')) return undefined
+    return { repo, number, url }
+  }
+  if (isRecord(notion) && isText(notion.url) && URL.canParse(notion.url)) {
+    const u = new URL(notion.url)
+    if (u.protocol === 'https:' && NOTION_HOST.test(u.hostname)) return { notion: { url: notion.url } }
+  }
+  return undefined
+}
+
+/** what the issue was made through: the event an integration writes when it makes one (`{"created": true, "via": …}`) */
+export function createdVia(rows: readonly EventRow[]): Via | undefined {
+  const made = [...rows].sort((a, b) => a.id - b.id).find((r) => isRecord(r.changes) && r.changes.created === true)
+  return made && viaOf(made.changes)
 }
 
 // ---------- events to lines ----------
@@ -187,9 +216,13 @@ function sameStatus(a: StatusRef, b: StatusRef): boolean {
   return !!a.category && a.category === b.category
 }
 
-/** labels the creator put on while creating the issue (they're saved a moment after it) */
+/**
+ * labels the creator put on while creating the issue (they're saved a moment after it). An issue nobody made (from
+ * Notion, without a member as its author: createdBy is '') got its labels from nobody too.
+ */
 function atCreation(by: string | null, at: string, ctx: HistoryContext): boolean {
-  if (!ctx.createdBy || !ctx.createdAt || by !== ctx.createdBy) return false
+  if (ctx.createdBy === undefined || !ctx.createdAt) return false
+  if (ctx.createdBy ? by !== ctx.createdBy : by !== null) return false
   const after = Date.parse(at) - Date.parse(ctx.createdAt)
   return after >= 0 && after <= AT_CREATION_MS
 }

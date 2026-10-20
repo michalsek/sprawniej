@@ -9,7 +9,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { backend, onForget, useBackend } from '@/backend'
 import { registry } from '@/backend/registry'
 import { useSaveStatus } from '@/backend/status'
-import { historySignature, issueEvents, mergeFetched, type Fetched, type HistoryEvent } from '@/data/history'
+import { createdVia, historySignature, issueEvents, mergeFetched, type Fetched, type HistoryEvent, type Via } from '@/data/history'
 import { useData } from '@/data/store'
 import type { ArchivedIssue, Issue } from '@/model/schema'
 
@@ -23,7 +23,7 @@ let asks = 0
 /** changes coming one after another (typing) are asked about once, this long after the last */
 const SETTLE = 1200
 
-export function useIssueHistory(issue: Issue | ArchivedIssue): { events: HistoryEvent[] | null; failed: boolean } {
+export function useIssueHistory(issue: Issue | ArchivedIssue): { events: HistoryEvent[] | null; createdVia?: Via; failed: boolean } {
   const ws = useBackend((s) => (s.phase === 'open' ? s.workspaceId : undefined))
   // nothing of yours is still on its way: the events for your changes are there to read
   const quiet = useSaveStatus((s) => s.pending === 0)
@@ -74,5 +74,7 @@ export function useIssueHistory(issue: Issue | ArchivedIssue): { events: History
     () => (rows ? issueEvents(rows, { login: (p) => registry.login(p), createdBy, createdAt }) : null),
     [rows, people, createdBy, createdAt], // oxlint-disable-line react-hooks/exhaustive-deps
   )
-  return { events, failed: !!key && failed?.key === key }
+  // made from a Notion page: the first line says so
+  const via = useMemo(() => (rows ? createdVia(rows) : undefined), [rows])
+  return { events, createdVia: via, failed: !!key && failed?.key === key }
 }

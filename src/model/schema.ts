@@ -285,6 +285,8 @@ export const inboxItemSchema = z
     statusId: z.string().optional(),
     /** when it was read one by one */
     readAt: iso.nullable().optional(),
+    /** it came from a Notion page (kept in the row's extra): shown as from Notion when nobody did it */
+    from: z.literal('notion').optional(),
   })
   .loose()
 export type InboxItem = z.infer<typeof inboxItemSchema>

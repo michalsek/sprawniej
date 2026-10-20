@@ -339,6 +339,11 @@ describe('teams, projects, views, inbox', () => {
     expect(inboxToRow(note, WS, registry(), 'ana')).toMatchObject({ recipient_id: 'p-ana', actor_id: 'p-bob', comment_id: null, read_at: note.readAt })
     expect('readAt' in rowToInbox({ ...row, read_at: null }, resolver())).toBe(false)
   })
+
+  test('a note about an issue made from Notion, by nobody, says so', () => {
+    const row: Row<'inbox'> = { id: 'n-2', workspace_id: WS, recipient_id: 'p-ana', actor_id: null, type: 'assigned', issue_id: 'i-1', comment_id: null, status: null, at: T(4), read_at: null, changed_at: T(5), extra: { from: 'notion' } }
+    expect(rowToInbox(row, resolver())).toMatchObject({ actor: '', from: 'notion' })
+  })
 })
 
 describe('statuses', () => {

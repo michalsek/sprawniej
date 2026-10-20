@@ -224,7 +224,8 @@ export function IssuePage() {
       )}
     </div>
     <p className={cn('px-2 text-xs text-muted-foreground', stacked ? 'mt-3' : 'mt-8')}>
-      Created {shortDate(issue.createdAt)} by {people[issue.createdBy]?.name ?? issue.createdBy}
+      Created {shortDate(issue.createdAt)}
+      {issue.createdBy && <> by {people[issue.createdBy]?.name ?? issue.createdBy}</>}
       <br />
       Last changed {shortDate(issue.updatedAt)}
     </p>

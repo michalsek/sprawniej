@@ -8,6 +8,7 @@ import { Check, CheckCheck, Inbox, MoreHorizontal, Trash2, X } from 'lucide-reac
 import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
 import { EmptyState } from '@/components/EmptyState'
+import { NotionMark } from '@/components/NotionMark'
 import { deleteInboxItems, markAllRead, markRead } from '@/data/actions'
 import { loadArchive } from '@/backend'
 import { isUnread } from '@/data/select'
@@ -50,6 +51,8 @@ function Note({ n, unread }: { n: InboxItem; unread: boolean }) {
   // a note can be about an issue archived since
   const issue = useData((s) => s.issues[n.issue] ?? s.archive[n.issue])
   const actor = useData((s) => s.people[n.actor])
+  // a Notion page whose author isn't a member: Notion did it
+  const notion = !n.actor && n.from === 'notion'
   const what = useWhat(n)
   const open = () => {
     markRead([n.id])
@@ -65,7 +68,7 @@ function Note({ n, unread }: { n: InboxItem; unread: boolean }) {
         className="flex w-full items-center gap-4 rounded-md px-4 py-3 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
       >
         <span className={cn('size-2 shrink-0 rounded-full', unread && 'bg-status-done')} aria-label={unread ? 'Unread' : undefined} />
-        <PersonAvatar person={actor} login={n.actor} className="size-8 text-xs" />
+        {notion ? <NotionMark className="size-8" /> : <PersonAvatar person={actor} login={n.actor} className="size-8 text-xs" />}
         <span className="min-w-0 flex-1">
           <span className={cn('flex items-center gap-2 truncate text-[15px]', !unread && 'text-foreground/80')}>
             {issue ? (
@@ -79,7 +82,7 @@ function Note({ n, unread }: { n: InboxItem; unread: boolean }) {
             )}
           </span>
           <span className="block truncate text-sm text-muted-foreground">
-            {actor?.name ?? n.actor} {what}
+            {actor?.name ?? (notion ? 'Notion' : n.actor)} {what}
           </span>
         </span>
         <span className="text-sm text-muted-foreground group-hover:invisible group-focus-within:invisible">{shortDate(n.at)}</span>

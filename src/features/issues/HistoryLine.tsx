@@ -2,7 +2,8 @@
 import type { ReactNode } from 'react'
 import { Archive, User } from 'lucide-react'
 import { PersonAvatar } from '@/components/Avatar'
-import type { Change, HistoryEvent, StatusRef } from '@/data/history'
+import { NotionMark } from '@/components/NotionMark'
+import { isNotionVia, type Change, type HistoryEvent, type StatusRef, type Via } from '@/data/history'
 import { issueRef, useData } from '@/data/store'
 import type { Person, Status } from '@/model/schema'
 import { PRIORITY_NAMES, categoryOf } from '@/model/status'
@@ -133,22 +134,40 @@ function Who({ person }: { person?: Person }) {
   )
 }
 
+/** a link to the Notion page something came from */
+const NotionLink = ({ url, children }: { url: string; children: ReactNode }) => (
+  <a className="underline-offset-2 hover:underline" href={url} target="_blank" rel="noreferrer">
+    {children}
+  </a>
+)
+
+/** what a change came through: a pull request, or a Notion page */
+function ViaLink({ via }: { via: Via }) {
+  return (
+    <>
+      {' · '}
+      {isNotionVia(via) ? (
+        <NotionLink url={via.notion.url}>Notion page</NotionLink>
+      ) : (
+        <a className="underline-offset-2 hover:underline" href={via.url} target="_blank" rel="noreferrer" title={via.repo}>
+          pull request #{via.number}
+        </a>
+      )}
+    </>
+  )
+}
+
 function PersonLine({ event }: { event: HistoryEvent }) {
   const person = useData((s) => (event.by === null ? undefined : s.people[event.by]))
   const text = useText(event.change, event.by)
+  // made from a Notion page without a member as its author: Notion did it
+  const notion = event.by === null && isNotionVia(event.via)
   return (
     <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground" data-kind={event.change.kind}>
-      <Who person={person} />
+      {notion ? <NotionMark className="mt-px" /> : <Who person={person} />}
       <span className="min-w-0">
-        <B>{person?.name ?? 'Someone'}</B> {text}
-        {event.via && (
-          <>
-            {' · '}
-            <a className="underline-offset-2 hover:underline" href={event.via.url} target="_blank" rel="noreferrer" title={event.via.repo}>
-              pull request #{event.via.number}
-            </a>
-          </>
-        )}
+        <B>{person?.name ?? (notion ? 'Notion' : 'Someone')}</B> {text}
+        {event.via && <ViaLink via={event.via} />}
         <When at={event.at} />
       </span>
     </li>
@@ -160,14 +179,40 @@ export function HistoryLine({ event }: { event: HistoryEvent }) {
   return event.by === null && event.change.kind === 'archived' ? <AutoLine event={event} /> : <PersonLine event={event} />
 }
 
-/** the first line: who created the issue, from its own fields */
-export function CreatedLine({ by, at }: { by: string; at: string }) {
-  const person = useData((s) => s.people[by])
+/**
+ * The first line: who created the issue, from its own fields, and the Notion page it was made from. `by` is empty when
+ * nobody did: a page whose author isn't a member, or someone whose account is gone.
+ */
+export function CreatedLine({ by, at, via }: { by: string; at: string; via?: Via }) {
+  const person = useData((s) => (by ? s.people[by] : undefined))
+  const notion = isNotionVia(via) ? via.notion.url : undefined
+  if (!by) {
+    return (
+      <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground">
+        {notion ? <NotionMark className="mt-px" /> : <Who />}
+        <span>
+          {notion ? (
+            <>
+              Created from <NotionLink url={notion}>Notion</NotionLink>
+            </>
+          ) : (
+            'Created the issue'
+          )}
+          <When at={at} />
+        </span>
+      </li>
+    )
+  }
   return (
     <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground">
       <Who person={person} />
       <span>
         <B>{person?.name ?? 'Someone'}</B> created the issue
+        {notion && (
+          <>
+            {' '}from <NotionLink url={notion}>Notion</NotionLink>
+          </>
+        )}
         <When at={at} />
       </span>
     </li>
