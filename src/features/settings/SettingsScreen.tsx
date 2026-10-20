@@ -15,8 +15,8 @@ import { PAGES, type SettingsPage } from './pages'
 /** where "Back to Settings" goes from a page you can't use (the import's error step goes there too) */
 const GENERAL = PAGES.find((p) => p.id === 'general')?.path ?? '/settings'
 
-function AdminsOnly({ page }: { page: SettingsPage }) {
-  const words = page.who === 'admins' ? page.forMembers : { title: 'open this page', text: '' }
+function AdminsOnly({ page }: { page: SettingsPage & { who: 'admins' } }) {
+  const words = page.forMembers
   return (
     <EmptyState
       icon={<page.icon />}
@@ -58,7 +58,8 @@ export function SettingsScreen() {
   if ('to' in found) return <Redirect to={found.to} replace />
   if ('missing' in found) return <Missing />
   const { page, allowed } = found
-  if (!allowed) return <AdminsOnly page={page} />
+  // only pages for admins are ever not allowed
+  if (!allowed && page.who === 'admins') return <AdminsOnly page={page} />
   if (page.ownLayout) return <page.component key={page.id} admin={admin} />
   return (
     <div className="flex-1 overflow-y-auto px-4 md:px-8">
