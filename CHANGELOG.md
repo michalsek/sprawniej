@@ -4,6 +4,15 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.10.0: Favourites in your sidebar
+*2026-10-20*
+
+- Star a project or a view to keep it in your sidebar, under Projects and Views
+- The star is at the top of a project’s or view’s page, next to its name in the lists, and in ⌘K
+- Drag your favourites into the order you like, or use Space and the arrow keys, or ⋯ › Move up and Move down
+- Your favourites are only yours, and they follow you to your other tabs and devices
+- When a project or view is deleted, it leaves your favourites by itself
+
 ## 2.9.0: Your own statuses
 *2026-10-20*
 

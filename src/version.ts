@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.9.0'
+export const APP_VERSION = '2.10.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,18 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.10.0',
+    date: '2026-10-20',
+    title: 'Favourites in your sidebar',
+    notes: [
+      'Star a project or a view to keep it in your sidebar, under Projects and Views',
+      'The star is at the top of a project’s or view’s page, next to its name in the lists, and in ⌘K',
+      'Drag your favourites into the order you like, or use Space and the arrow keys, or ⋯ › Move up and Move down',
+      'Your favourites are only yours, and they follow you to your other tabs and devices',
+      'When a project or view is deleted, it leaves your favourites by itself',
+    ],
+  },
   {
     version: '2.9.0',
     date: '2026-10-20',
