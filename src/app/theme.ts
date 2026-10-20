@@ -6,7 +6,8 @@ import { useAuth, type AuthUser } from '@/backend/auth'
 import { sendUnsentTheme } from '@/data/actions'
 import { clearUnsent, DARK_QUERY, DEVICE_KEY, parseTheme, readDevice, readUnsent, showTheme, themeAfterSignIn, useTheme, writeDevice } from '@/lib/theme'
 
-function signedIn(user: AuthUser) {
+/** a fresh copy of you came: the account's choice shows, unless one made here is still to be sent */
+function followAccount(user: AuthUser) {
   const next = themeAfterSignIn({ account: user.theme, device: readDevice(), unsentFor: readUnsent(), userId: user.id })
   if (next.choice !== useTheme.getState().choice) showTheme(next.choice)
   if (next.writeDevice) writeDevice(next.choice)
@@ -14,8 +15,12 @@ function signedIn(user: AuthUser) {
   else clearUnsent()
 }
 
+let started = false
+
 /** once at start, before the sign-in starts */
 export function startTheme() {
+  if (started) return
+  started = true
   showTheme(readDevice() ?? 'system')
   window.matchMedia?.(DARK_QUERY).addEventListener('change', () => {
     if (useTheme.getState().choice === 'system') showTheme('system')
@@ -25,7 +30,7 @@ export function startTheme() {
   })
   // a fresh copy of you (signing in, renewing the sign-in, a change saved): the account's choice may be new
   useAuth.subscribe((s, was) => {
-    if (s.user && s.user !== was.user) signedIn(s.user)
+    if (s.user && s.user !== was.user) followAccount(s.user)
   })
   window.addEventListener('online', sendUnsentTheme)
 }

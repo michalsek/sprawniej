@@ -4,8 +4,8 @@
 
 /*
  * Light and dark, each person's choice (src/lib/theme.ts; index.html sets .dark before the first paint). Colours
- * follow shadcn's zinc scale, the look of our internal tools (Punchcard). See docs/design.md. The page colours are
- * copied in src/lib/theme.ts (THEME_COLORS) and index.html's theme-color; tests/themeScript.test.ts compares them.
+ * follow shadcn's zinc scale, the look of our internal tools (Punchcard). See docs/design.md. Light's page colour is
+ * also the browser bar's colour in src/lib/theme.ts (THEME_COLORS) and index.html; tests/themeScript.test.ts checks.
  */
 @custom-variant dark (&:is(.dark *));
 
