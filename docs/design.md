@@ -49,7 +49,8 @@ button (the same popover as labels, `ColorPicker`), the name edited in place (a 
 blank or taken), **Default** on the first shown one when the group has more than one, how many issues have it,
 **Hide** / **Show** (`aria-disabled`, with the reason in a tooltip, for the last shown status of a group), and a ⋯
 menu with **Move up** / **Move down**. A hidden row is dimmed but for its buttons. **Add status** ends each group.
-What differs per kind (group names, counts, the Default tooltip) is in `KIND_TEXT`
+The page has two sections, Issue statuses and Project statuses; a project status's colour button shows its dot,
+not an icon. What differs per kind (group names, counts, the Default tooltip) is in `KIND_TEXT`
 (`src/features/settings/statusKinds.ts`). On screen it says "group", never
 "category".
 

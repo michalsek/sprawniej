@@ -261,6 +261,12 @@ group by group. Everything saves as you go:
   least one status that isn't hidden, so the last one can't be hidden.
 - Next to each status: how many issues have it now.
 
+Below the issue statuses, **Project statuses** work the same way for projects: the six groups are **Backlog**,
+**Planned** (new projects start here), **In progress**, **Paused**, **Completed** and **Canceled**, and the statuses
+are the columns of the project board. Grouping issues by project leaves out projects that are Completed or Canceled.
+Projects that come in from the Linear import, or from teammates on an older version, land on a group's **Default**.
+Next to each project status: how many projects have it.
+
 ### Priority
 
 **Urgent** (orange), **High**, **Medium**, **Low** (fewer bars = lower), or no priority (three dashes).
@@ -404,8 +410,8 @@ with the buttons next to New project. Sprawniej remembers your choice for each p
 
 - **List**: every project by name, with its status, lead, target date and progress. Click an emoji to change it, or
   use **⋯** to rename or delete a project.
-- **Board**: a column for each project status (Backlog, Planned, In progress, Paused, Completed, Canceled), with how
-  many projects are in it. Drag a card to another column to change its status, or up
+- **Board**: a column for each project status (Backlog, Planned, In progress, Paused, Completed, Canceled, and any
+  your workspace adds in Settings › Statuses), with how many projects are in it. Drag a card to another column to change its status, or up
   and down to put it in order; the order is the same for everyone. **+** at the top of a column starts a project in
   that status. On a phone, press and hold a card to pick it up. With the keyboard, move to a card, press Space to pick
   it up, the arrow keys to move it, Space to drop it and Esc to put it back.
