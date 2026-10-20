@@ -22,6 +22,7 @@ import {
   GitPullRequest,
   Group,
   KeyRound,
+  NotebookText,
   Settings,
   Tags,
   UserPlus,
@@ -32,6 +33,7 @@ import { ImportPage } from '@/features/import/ImportPage'
 import { GitHubSettings } from './GitHubSettings'
 import { LabelsSettings } from './LabelsSettings'
 import { Members } from './Members'
+import { NotionSettings } from './NotionSettings'
 import type { PageMeta } from './nav'
 import { ArchivePage } from './pages/ArchivePage'
 import { GeneralPage } from './pages/GeneralPage'
@@ -159,6 +161,17 @@ export const PAGES: SettingsPage[] = [
     who: 'everyone',
     component: GitHubSettings,
     words: 'pull request repository',
+  },
+  {
+    id: 'notion',
+    group: 'workspace',
+    path: '/settings/workspace/notion',
+    title: 'Notion',
+    description: 'A button or an automation in Notion sends a page here, and it becomes an issue in the team you pick.',
+    icon: NotebookText,
+    who: 'everyone',
+    component: NotionSettings,
+    words: 'pages send webhook database button automation',
   },
   {
     id: 'import',

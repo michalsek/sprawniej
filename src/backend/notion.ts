@@ -5,6 +5,7 @@
  */
 import { backendConfig, requireClient } from './client'
 import { friendlyDbError } from './problem'
+import { registry } from './registry'
 import { RULES } from './workspaces'
 
 /** what happened with the latest page (notion_apply writes it) */
@@ -25,6 +26,8 @@ export interface NotionConnection {
   id: string
   /** where pages become issues; null once that team was deleted */
   teamId: string | null
+  /** that team's key, when this workspace knows it */
+  teamKey: string | null
   addedBy: string | null
   createdAt: string
   /** when the address was made or last replaced */
@@ -73,6 +76,7 @@ export async function getNotion(ws: string): Promise<NotionConnection | null> {
   return {
     id: data.id,
     teamId: data.team_id,
+    teamKey: (data.team_id && registry.teamKey(data.team_id)) || null,
     addedBy: data.added_by,
     createdAt: data.created_at,
     secretSetAt: data.secret_set_at,

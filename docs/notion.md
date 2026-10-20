@@ -5,9 +5,9 @@ page, and its status, priority, assignee, due date, labels and description when 
 **Created by** person is a member, the issue is theirs; otherwise it was made by nobody, "from Notion". Sending the
 same page again keeps the issue it made.
 
-Status: **agreed; the database, the function, the history, the Inbox and the issue page are built**. Settings › Notion
-(section 4) comes once the settings split is on `main`. The user agreed the choices in section 7 on 2026-10-20. The
-steps for a project are in docs/supabase-setup.md (Notion: pages become issues).
+Status: **agreed and built** (the database, the function, history, Inbox, the issue page and Settings › Notion). The
+user agreed the choices in section 7 on 2026-10-20. The steps for a project are in docs/supabase-setup.md (Notion:
+pages become issues).
 
 ## The pieces
 
@@ -208,19 +208,21 @@ them with `-- @regex notion-…` markers, which `tests/statusLists.test.ts` comp
   (with the Notion mark, `src/components/NotionMark.tsx`); a change by nobody through a page shows "Notion" as who;
   the sidebar says "Created Oct 20" with no "by" when nobody made it.
 - Inbox: `from: 'notion'` (kept in the row's `extra`): a note with no actor shows "Notion" with the mark.
-- **Settings › Notion** (`NotionSettings.tsx`, built after the settings split lands, next to GitHub;
-  `src/features/settings/notionText.ts` already has its words):
+- **Settings › Notion** (`src/features/settings/NotionSettings.tsx`, the page after GitHub in `pages.tsx`; its
+  words for the last page are in `notionText.ts`):
   - admins, not connected: an empty state, "Notion isn't connected", "A button in Notion can send a page here, and it
     becomes an issue: its title and a link back, plus its description, status, priority, assignee and due date when
-    the page has them." and **Connect Notion**, which asks for the team ("Pages become issues in") and shows the
-    address once, with **Copy** and how to paste it into a **Send webhook** action;
+    the page has them." and **Connect Notion**, which asks for the team ("Pages become issues in", your first team
+    first) and, after **Make the address**, shows the address once in a read-only field with **Copy** and how to paste
+    it into a **Send webhook** action, then **Done**;
   - admins, connected: the team picker (saves at once: "Pages from Notion now go to Design."), the last page ("Waiting
     for the first page", "Last page: “Fix login” became ENG-12 · 5 min ago", "Last page was already ENG-12", "Last page
     wasn't added: pick a team", "Pages were coming too fast…"), "Address made 3 days ago", **Replace address** and
     **Disconnect**, each behind a confirmation; a missing team says "The team for Notion pages was deleted. Pick
     another.";
   - members: "Admins and owners can connect Notion so pages sent from it become issues."
-  - read when Settings opens and when the window gets focus, like the repositories.
+  - read when the page opens, after a change and when the window gets focus, like the repositories; when it can't
+    be read: "We couldn't load the Notion connection. Try again." with **Try again**.
 
 ## 5. Tests
 

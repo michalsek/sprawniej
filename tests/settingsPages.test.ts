@@ -92,6 +92,13 @@ describe('what the settings menu and ⌘K list', () => {
     expect(member).toContain('general')
   })
 
+  test('Notion sits next to GitHub, and members open it too (it tells them who connects it)', () => {
+    const order = ids(PAGES)
+    expect(order.indexOf('notion')).toBe(order.indexOf('github') + 1)
+    expect(ids(listedPages(PAGES, false, withPeople('ana')))).toContain('notion')
+    expect(resolveSettings('/settings/workspace/notion', PAGES, false)).toEqual({ page: page('notion'), allowed: true })
+  })
+
   test('People from Linear is listed only while someone from Linear hasn’t joined', () => {
     expect(ids(listedPages(PAGES, true, withPeople('ana')))).not.toContain('linear-people')
     expect(ids(listedPages(PAGES, true, withPeople('ana', '~linear-ola')))).toContain('linear-people')

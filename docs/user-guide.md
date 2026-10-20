@@ -35,8 +35,8 @@ Open **Settings** from the menu under your name (bottom left), or press `⌘K` a
 - **Your account:** **Profile** (your name and @handle, light or dark, switching workspace, signing out) and **Ways
   to sign in**.
 - **Workspace:** **General** (the workspace's name, leaving it), **Members**, **Invite links**, **People from Linear**
-  (while some haven't joined), **Teams**, **Labels**, **Archive**, **GitHub** and **Import from Linear**. Invite links
-  and Import from Linear are only for owners and admins.
+  (while some haven't joined), **Teams**, **Labels**, **Archive**, **GitHub**, **Notion** and **Import from Linear**.
+  Invite links and Import from Linear are only for owners and admins.
 
 **Back to Sprawniej** at the top of the menu takes you back to where you were.
 
@@ -398,10 +398,14 @@ requests moving issues; issues that already moved stay where they are.
 If your team keeps a database of tasks in Notion, a page there can become an issue here with one press. It needs a
 paid Notion plan (Plus, Business or Enterprise): the free plan has no "Send webhook".
 
-**Setting it up** (owners and admins): **Settings › Notion › Connect Notion**, pick the team new issues go to, and
-copy the address it shows. It's shown only once, so paste it straight into Notion: in your Notion database, add a
-**database button** (or an **automation**, for example "when Status is set to Ready") with the action **Send
-webhook**, and paste the address as its URL. In an automation, tick the properties to send.
+**Setting it up** (owners and admins): open **Settings**, then **Notion** under Workspace, and press **Connect
+Notion**. Pick the team new issues go to and press **Make the address**, then **Copy**. The address is shown only
+once, so paste it straight into Notion: in your Notion database, add a **database button** (or an **automation**, for
+example "when Status is set to Ready") with the action **Send webhook**, and paste the address as its URL. In an
+automation, tick the properties to send. Members see who can connect it instead.
+
+Once it's connected, **Settings › Notion** shows the team pages go to (pick another and it changes at once), what
+the last page did ("Last page: “Fix login” became ENG-12") and when the address was made.
 
 **What comes over.** Notion sends a page's properties, not its text. The issue gets the page's title (a page without
 one is "Untitled") and a link back to the page, plus whatever of these the page has:
@@ -427,15 +431,17 @@ from Notion when nobody here made the issue.
 **Sending a page again** keeps the one issue it made, and changes nothing in it, so pressing the button twice is fine.
 After its issue is deleted, the page makes a new one. Pages in Notion's trash are skipped.
 
-**When Notion shows "!"** next to the button or automation, Notion paused it because Sprawniej said no. Settings ›
-Notion shows what the last page did:
+**When Notion shows "!"** next to the button or automation, Notion paused it because Sprawniej said no.
+**Settings › Notion** shows what the last page did:
 
-- "Last page wasn't added: pick a team": the team was deleted. Pick another, then resume it in Notion.
+- "Last page wasn't added: pick a team", or "The team for Notion pages was deleted": pick another team, then resume
+  it in Notion.
 - "Pages were coming too fast": more than 100 pages in 10 minutes. Wait a few minutes, then resume it.
 - The address was replaced or Notion was disconnected: paste the new address into Notion, then resume it.
 
-**Replace address** makes a new address and stops the old one at once (if you think someone else has it). Paste the
-new one into Notion. **Disconnect** stops pages becoming issues; issues already made stay.
+**Replace address** makes a new address and stops the old one at once (if you think someone else has it). Copy it
+and paste it into Notion in place of the old one. **Disconnect** stops pages becoming issues; issues already made
+stay.
 
 ## Moving over from Linear
 
