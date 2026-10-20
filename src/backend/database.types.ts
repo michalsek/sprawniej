@@ -113,9 +113,9 @@ export type Database = {
           item_id: string
           kind: string
           profile_id: string
-          project_id?: never
+          project_id?: string | null
           sort_order: string
-          view_id?: never
+          view_id?: string | null
           workspace_id: string
         }
         Update: {
@@ -124,9 +124,9 @@ export type Database = {
           item_id?: string
           kind?: string
           profile_id?: string
-          project_id?: never
+          project_id?: string | null
           sort_order?: string
-          view_id?: never
+          view_id?: string | null
           workspace_id?: string
         }
         Relationships: [
