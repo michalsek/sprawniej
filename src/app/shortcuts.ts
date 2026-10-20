@@ -39,6 +39,8 @@ export function useShortcuts() {
       const key = e.key.toLowerCase()
       // during a keyboard drag the arrows move the issue (or the favourite, in the sidebar)
       const dragging = !!document.querySelector('[aria-pressed="true"][data-issue-id], [aria-pressed="true"][data-favourite-id]')
+      // Esc during a keyboard drag only puts the issue or favourite back (the drag may have ended just before this)
+      if (key === 'escape' && (dragging || e.defaultPrevented)) return
       if (key === 'c') {
         e.preventDefault()
         openComposer()

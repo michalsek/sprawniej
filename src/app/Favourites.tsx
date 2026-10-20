@@ -7,7 +7,6 @@
  * Only the moved favourite changes on a drop: it gets an order key between its new neighbours (moveFavourite), and
  * when keys tie, the ones after it that share the key get fresh ones too.
  */
-import { useRef } from 'react'
 import { Link, useLocation } from 'wouter'
 import { ArrowDown, ArrowUp, Box, Layers, MoreHorizontal, StarOff } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
@@ -87,8 +86,6 @@ function FavouriteRow({ id, first, last }: { id: string; first: boolean; last: b
 export function Favourites() {
   const ids = useData(useShallow(favouriteIds))
   const names = useData(useShallow((s) => visibleFavourites(s).map((f) => starred(s, f)?.name ?? '')))
-  // the click that ends a mouse drag doesn't open the favourite
-  const dropped = useRef(false)
   const sensors = useSensors(
     // the same thresholds as dragging issues (useIssueDrag.ts)
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -110,8 +107,11 @@ export function Favourites() {
   }
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
-    dropped.current = true
-    setTimeout(() => (dropped.current = false))
+    // the click that ends a mouse drag doesn't open the favourite: dnd-kit stops that click on the document, before
+    // React sees it, but not the link's own way of opening, so it's stopped here on the window first
+    const stop = (e: MouseEvent) => e.preventDefault()
+    window.addEventListener('click', stop, { capture: true, once: true })
+    setTimeout(() => window.removeEventListener('click', stop, { capture: true }))
     if (over && active.id !== over.id) moveFavourite(String(active.id), ids.indexOf(String(over.id)))
   }
 
@@ -124,7 +124,7 @@ export function Favourites() {
       accessibility={{ announcements: moveText(ids.map((id, n) => ({ id, name: names[n] }))) }}
     >
       <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-        <ul aria-label="Favourites" className="mt-2 flex flex-col gap-0.5" onClickCapture={(e) => dropped.current && e.preventDefault()}>
+        <ul aria-label="Favourites" className="mt-2 flex flex-col gap-0.5">
           {ids.map((id, n) => (
             <FavouriteRow key={id} id={id} first={n === 0} last={n === ids.length - 1} />
           ))}
