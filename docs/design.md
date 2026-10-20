@@ -10,7 +10,8 @@ everything common.
 All colours are CSS variables in `src/index.css`, on shadcn's zinc scale: Light in `:root`, Dark in `.dark`. Use the
 Tailwind names (`bg-background`, `text-muted-foreground`, `border`…), never raw hex values in components, and never
 assume the page is dark (a `#18181b` that reads on dark vanishes on light). A colour that has to differ between the
-two looks gets a token of its own.
+two looks gets a token of its own. Each look also sets `color-scheme`, so the browser's own controls (checkboxes,
+scrollbars, the date picker) are light in Light and dark in Dark.
 
 | Use | Token | Light | Dark |
 | --- | --- | --- | --- |
