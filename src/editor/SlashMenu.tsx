@@ -126,12 +126,12 @@ export const SlashMenu = Extension.create({
         char: '/',
         allowSpaces: true,
         findSuggestionMatch: ({ $position }) => {
-          const before = $position.nodeBefore
-          if (!before?.isText || !before.text) return null
-          const t = slashTrigger(before.text)
+          // the whole line before the cursor, bold words and all: a line break reads as one, anything else (a picture)
+          // as a character that isn't a space; each stands for one place in the text
+          const before = $position.parent.textBetween(0, $position.parentOffset, undefined, (leaf) => (leaf.type.name === 'hardBreak' ? '\n' : '\ufffc'))
+          const t = slashTrigger(before)
           if (!t || !found(t.query, $position)) return null
-          const from = $position.pos - before.text.length + t.at
-          return { range: { from, to: $position.pos }, query: t.query, text: `/${t.query}` }
+          return { range: { from: $position.start() + t.at, to: $position.pos }, query: t.query, text: `/${t.query}` }
         },
         allow: ({ state, range }) => {
           const $from = state.doc.resolve(range.from)
@@ -175,10 +175,11 @@ export const SlashMenu = Extension.create({
               if ((props.event.key === 'Enter' || props.event.key === 'Tab') && editor) {
                 // typed faster than the list was drawn: what runs is what the words typed find now, never the old list
                 const st = key.getState(props.view.state) as { active: boolean; query: string | null; range: Range } | undefined
-                const now = st?.active ? (found(st.query ?? '', props.view.state.selection.$from) ?? []) : []
+                if (!st?.active) return false
+                const now = found(st.query ?? '', props.view.state.selection.$from) ?? []
                 if (!now.length) return false
                 const current = renderer?.ref?.current()
-                pick(editor, sameItems(shown, now) && current && now.includes(current) ? current : now[0], st!.range)
+                pick(editor, sameItems(shown, now) && current && now.includes(current) ? current : now[0], st.range)
                 return true
               }
               return renderer?.ref?.onKeyDown(props.event) ?? false

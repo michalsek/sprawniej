@@ -26,14 +26,14 @@ function withBreaks(tokens: MarkdownToken[] | undefined): MarkdownToken[] | unde
   return tokens?.map((t) => (t.type === 'html' && /^<br\s*\/?>$/i.test(t.raw ?? '') ? { type: 'br', raw: t.raw } : t.tokens ? { ...t, tokens: withBreaks(t.tokens) } : t))
 }
 
-type Cell = { tokens: MarkdownToken[] }
+type CellToken = { tokens: MarkdownToken[] }
 
 /** a table is a block like any other: one blank line before and after it, not two */
 const MarkdownTable = Table.extend({
   parseMarkdown(token, h) {
-    const cells = (row: Cell[]) => row.map((c) => ({ ...c, tokens: withBreaks(c.tokens) ?? [] }))
-    const header = token.header as Cell[] | undefined
-    const rows = token.rows as Cell[][] | undefined
+    const cells = (row: CellToken[]) => row.map((c) => ({ ...c, tokens: withBreaks(c.tokens) ?? [] }))
+    const header = token.header as CellToken[] | undefined
+    const rows = token.rows as CellToken[][] | undefined
     return this.parent?.({ ...token, header: header && cells(header), rows: rows?.map(cells) }, h) ?? []
   },
   renderMarkdown: (node, h) => renderTableToMarkdown(node, h).replace(/^\n+|\n+$/g, ''),

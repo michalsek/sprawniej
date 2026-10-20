@@ -44,9 +44,9 @@ begin
       continue;
     end if;
     -- a ``` fence can't have a backtick after it ("```x``` text" is code inside a line), a ~~~ fence can
-    f := regexp_match(line, '^(?:[ \t]*>)*[ \t]*(`{3,}(?!.*`)|~{3,})');
+    f := regexp_match(line, '^(?:[ \t]*>)*[ \t]*(?:(`{3,})[^`]*$|(~{3,}))');
     if f is not null then
-      fence := f[1];
+      fence := coalesce(f[1], f[2]);
       continue;
     end if;
     m := regexp_match(line, '^((?:[ \t]*>)*[ \t]*[-+*][ \t]+\[)([ xX])\](?:[ \t]+([^\n]*))?\r?$');

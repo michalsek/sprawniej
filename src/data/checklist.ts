@@ -13,7 +13,7 @@ const ITEM = /^((?:[ \t]*>)*[ \t]*[-+*][ \t]+\[)([ xX])\](?:[ \t]+([^\n]*))?\r?$
 /** a box with nothing after it, at the end of a line */
 const BARE = /^(?:[ \t]*>)*[ \t]*[-+*][ \t]+\[[ xX]\]\r?$/
 /** a ``` fence can't have a backtick after it ("```x``` text" is code inside a line), a ~~~ fence can */
-const OPEN_FENCE = /^(?:[ \t]*>)*[ \t]*(`{3,}(?!.*`)|~{3,})/
+const OPEN_FENCE = /^(?:[ \t]*>)*[ \t]*(?:(`{3,})[^`]*$|(~{3,}))/
 const CLOSE_FENCE = /^(?:[ \t]*>)*[ \t]*(`{3,}|~{3,})[ \t\r]*$/
 
 interface ChecklistItem {
@@ -42,7 +42,7 @@ function* outsideCode(lines: readonly string[]): Generator<[string, number]> {
     }
     const open = OPEN_FENCE.exec(line)
     if (open) {
-      fence = open[1]
+      fence = open[1] ?? open[2]
       continue
     }
     yield [line, n]

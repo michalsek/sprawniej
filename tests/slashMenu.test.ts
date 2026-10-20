@@ -29,6 +29,10 @@ describe('what a command finds', () => {
     expect(finds('Then /todo')).toEqual(['Checklist'])
     expect(finds('/list')).toEqual(['Numbered list'])
     expect(finds('/zz')).toEqual([])
+    // the whole line counts: after bold words ("**bold**/" reads "bold/") or a picture it isn't a command, after a line break it is
+    expect(finds('bold/check')).toBeNull()
+    expect(finds('\ufffc/check')).toBeNull()
+    expect(finds('line\n/check')).toEqual(['Checklist'])
   })
   test('more words: the start of a title, any case', () => {
     expect(finds('/heading 2')).toEqual(['Heading 2'])
