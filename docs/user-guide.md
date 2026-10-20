@@ -31,7 +31,7 @@ The first time you open your team's issues, four short tips show you around. You
 Open **Settings** from the menu under your name (bottom left), or press `⌘K` and type what you're looking for
 ("password", "labels", "members"). In Settings, its own menu takes the sidebar's place:
 
-- **Your account:** **Profile** (your name, switching workspace, signing out) and **Ways to sign in**.
+- **Your account:** **Profile** (your name and @handle, switching workspace, signing out) and **Ways to sign in**.
 - **Workspace:** **General** (the workspace's name, leaving it), **Members**, **Invite links**, **People from Linear**
   (while some haven't joined), **Teams**, **Labels**, **Archive**, **GitHub** and **Import from Linear**. Invite links
   and Import from Linear are only for owners and admins.
@@ -47,20 +47,23 @@ another one later, open the menu under your name (bottom left) and choose **Swit
 ### Your name
 
 To go by another name, open **Settings** (in the menu under your name) and type it under **Your account ›
-Profile**; it saves by itself. Your handle (@you) stays the same.
+Profile**; it saves by itself. Changing your name doesn't change your handle.
 
 ### Your handle
 
-Teammates @mention you by your handle. To change it, open **Settings and people** and type a new one under **Your
-account**, next to the @. It saves when you press Enter or click somewhere else; `Esc` puts the old one back. A handle
-is letters, digits and dashes (up to 39), and it can't be one a teammate uses now. Capitals don't matter for that, and
-changing only the capitals of yours is fine.
+Teammates @mention you by your handle. To change it, open **Settings** and type a new one under **Your account ›
+Profile**, next to the @. It saves when you press Enter or click somewhere else; `Esc` puts the old one back. A handle
+is letters, digits and dashes (up to 39), and it can't be one someone else uses now. Capitals don't matter for that,
+and changing only the capitals of yours is fine.
 
-Changing it is the same everywhere you are, and your teammates see the new one at once. Your issues, comments,
-filters and history stay yours. What changes:
+It changes in every workspace you're in, and your teammates see the new one at once. Your issues, comments, filters
+and history stay yours. What changes:
 - **Old mentions turn into plain text.** Where someone wrote your old handle, it no longer mentions you: no
   highlight, and you don't hear about it. Nothing already written is changed.
-- **Someone else may take your old handle.** From then on, text that says it mentions them, not you.
+- **You stop hearing about issues you were only mentioned in** (by your old handle). Issues you made, are assigned
+  to, commented on or follow keep telling you what happens.
+- **Someone else may take your old handle.** Then old text that says it mentions them: it's highlighted as them, and
+  they hear about those issues (new comments and status changes), just as if they had been mentioned there.
 - Signing in doesn't change: your email, password and GitHub work as before.
 
 ### Ways to sign in

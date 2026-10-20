@@ -1,5 +1,5 @@
 /**
- * Your @handle (Settings › Your account): teammates see it and @mention you by it. It saves when you leave the field
+ * Your @handle (Settings › Profile): teammates see it and @mention you by it. It saves when you leave the field
  * or press Enter, not on every pause in typing, so a half-typed handle never goes out; Escape puts it back. Mentions
  * of your old handle become plain text, and someone else may take it.
  *
