@@ -967,7 +967,9 @@ export type Database = {
           lead_id: string | null
           linear_id: string | null
           name: string
+          sort_order: string | null
           status: string
+          status_id: string
           target_date: string | null
           workspace_id: string
         }
@@ -981,7 +983,9 @@ export type Database = {
           lead_id?: string | null
           linear_id?: string | null
           name: string
+          sort_order?: string | null
           status?: string
+          status_id: string
           target_date?: string | null
           workspace_id: string
         }
@@ -995,7 +999,9 @@ export type Database = {
           lead_id?: string | null
           linear_id?: string | null
           name?: string
+          sort_order?: string | null
           status?: string
+          status_id?: string
           target_date?: string | null
           workspace_id?: string
         }
@@ -1006,6 +1012,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "projects_status_id_fkey"
+            columns: ["workspace_id", "status_id"]
+            isOneToOne: false
+            referencedRelation: "statuses"
+            referencedColumns: ["workspace_id", "id"]
           },
           {
             foreignKeyName: "projects_workspace_id_fkey"

@@ -87,7 +87,8 @@ export const COLS = {
   teams: ['id', 'key', 'name', 'emoji', 'auto_archive', 'linear_id', 'created_at', 'extra'],
   team_members: ['team_id', 'profile_id'],
   labels: ['id', 'name', 'color', 'linear_id', 'extra'],
-  projects: ['id', 'name', 'emoji', 'description', 'status', 'lead_id', 'target_date', 'linear_id', 'created_at', 'extra'],
+  /** status_id may be empty (the category's default); sort_order counts only for a new project */
+  projects: ['id', 'name', 'emoji', 'description', 'status', 'status_id', 'sort_order', 'lead_id', 'target_date', 'linear_id', 'created_at', 'extra'],
   project_teams: ['project_id', 'team_id'],
   /** without parent_id and duplicate_of, so a row that is already here keeps them until the next pass */
   issues: [

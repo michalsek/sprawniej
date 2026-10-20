@@ -23,7 +23,7 @@ export interface PrepareOptions {
   plan: (r: ImportResult, existing: Existing) => ImportPlan
 }
 
-type Store = Pick<DataState, 'me' | 'members' | 'people' | 'teams' | 'issues' | 'labels' | 'projects' | 'views' | 'comments'>
+type Store = Pick<DataState, 'me' | 'members' | 'people' | 'teams' | 'issues' | 'labels' | 'projects' | 'views' | 'comments'> & Partial<Pick<DataState, 'statuses'>>
 
 /** throws an ImportProblem, worded to show, when it can't go on */
 export function prepareImport(store: Store, extras: ImportExtras, data: LinearData, choices: ImportChoices, o: PrepareOptions): Prepared {

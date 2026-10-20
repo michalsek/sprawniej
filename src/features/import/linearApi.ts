@@ -33,7 +33,7 @@ export interface LProject {
   description: string
   targetDate: string | null
   createdAt: string
-  status: { type: string } | null
+  status: { type: string; name?: string | null } | null
   state?: string | null
   lead: { id: string } | null
   teams: { nodes: { id: string }[] }
@@ -176,7 +176,7 @@ async function readProjects(key: string): Promise<LProject[]> {
   const q = (status: string) => `query($after: String) { projects(first: 50, after: $after) { nodes { ${PROJECT_FIELDS} ${status} } ${PAGE} } }`
   const pick = (x: { projects: Page<LProject> }) => x.projects
   try {
-    return await all<LProject>(key, q('status { type }'), {}, pick)
+    return await all<LProject>(key, q('status { type name }'), {}, pick)
   } catch (e) {
     // older workspaces describe a project's progress with `state`
     if (e instanceof LinearError && !e.badKey) return all<LProject>(key, q('state'), {}, pick)

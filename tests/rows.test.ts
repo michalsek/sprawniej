@@ -298,14 +298,21 @@ describe('teams, projects, views, inbox', () => {
   })
 
   test('a project: lead and team keys; a team not known yet is left out', () => {
-    const row: Row<'projects'> = { id: 'pr-1', workspace_id: WS, name: 'Charts', emoji: '📊', description: '', status: 'in_progress', lead_id: 'p-ana', target_date: '2026-12-01', linear_id: null, created_at: T(0), changed_at: T(0), extra: {} }
+    const row: Row<'projects'> = {
+      id: 'pr-1', workspace_id: WS, name: 'Charts', emoji: '📊', description: '', status: 'in_progress', status_id: 'st-building', sort_order: 'a3',
+      lead_id: 'p-ana', target_date: '2026-12-01', linear_id: null, created_at: T(0), changed_at: T(0), extra: { color: 'teal' },
+    }
     const r = resolver()
     const project = rowToProject(row, [{ team_id: 't-web', changed_at: T(1) }, { team_id: 't-eng', changed_at: T(2) }, { team_id: 't-x', changed_at: T(3) }], r)
-    expect(project).toMatchObject({ lead: 'ana', teams: ['WEB', 'ENG'], targetDate: '2026-12-01' })
+    expect(project).toMatchObject({ status: 'in_progress', statusId: 'st-building', sortOrder: 'a3', lead: 'ana', teams: ['WEB', 'ENG'], targetDate: '2026-12-01' })
     expect(r.missed).toEqual(['teams:t-x'])
     const out = projectToRows(project, WS, registry())
-    expect(out.projects.lead_id).toBe('p-ana')
+    expect(out.projects).toMatchObject({ status: 'in_progress', status_id: 'st-building', sort_order: 'a3', lead_id: 'p-ana', extra: { color: 'teal' } })
     expect(out.project_teams.map((t) => t.team_id)).toEqual(['t-web', 't-eng'])
+    // made by an older version: no place yet; and a status not known yet isn't sent (the database gives the default)
+    const older = rowToProject({ ...row, sort_order: null }, [], r)
+    expect(older.sortOrder).toBeNull()
+    expect(projectToRows({ ...older, statusId: '' }, WS, registry()).projects).toMatchObject({ status_id: null, sort_order: null })
   })
 
   test('a view: no team means the whole workspace', () => {

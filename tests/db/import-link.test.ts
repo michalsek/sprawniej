@@ -11,6 +11,7 @@ import {
   newTeam,
   newWorkspace,
   ok,
+  projectInsert,
   RUN,
   type Someone,
   ulid,
@@ -51,7 +52,7 @@ describe.skipIf(!enabled)('imports and people from Linear', () => {
     const label = ulid()
     await ok(w.ana.db.from('labels').insert({ id: label, workspace_id: w.ws, name: `Victim ${label}`, color: '#111' }))
     const project = ulid()
-    await ok(w.ana.db.from('projects').insert({ id: project, workspace_id: w.ws, name: 'Victim project' }))
+    await ok(w.ana.db.from('projects').insert(projectInsert({ id: project, workspace_id: w.ws, name: 'Victim project' })))
     const view = ulid()
     await ok(w.ana.db.from('views').insert({ id: view, workspace_id: w.ws, name: 'Victim view', display: DISPLAY }))
     await ok(w.ana.db.from('issue_followers').insert({ workspace_id: w.ws, issue_id: issue.id, profile_id: w.bob.profileId, following: true }))

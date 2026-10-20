@@ -207,7 +207,15 @@ export const projectSchema = z
     name: z.string(),
     emoji: z.string(),
     description: z.string(),
+    /** its category: decides what grouping issues by project leaves out (src/model/status.ts) */
     status: z.enum(PROJECT_STATUSES),
+    /** the workspace's status it has, one of `status`'s category ('' while it isn't known; see statusOfProject) */
+    statusId: z.string(),
+    /**
+     * fractional index: its place in its board column (a drag rewrites only the moved project); none for one made by
+     * an older version, which shows after the others, by name
+     */
+    sortOrder: z.string().nullable().optional(),
     lead: login.nullable(),
     teams: z.array(z.string()),
     targetDate: z.string().nullable(),

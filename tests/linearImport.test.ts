@@ -321,7 +321,7 @@ describe('people who haven’t joined', () => {
     // an issue, a view and a project made here, about Cat: the link moves them, not the import
     const mine = { ...native(50), assignee: '~cat-wong' }
     const view = { id: 'vh', name: 'Cat’s', emoji: '🐱', description: '', owner: '~cat-wong', team: null, filters: { assignees: ['~cat-wong'] }, display: Object.values(w.views!)[0].display, createdAt: NOW } as View
-    const lead = { id: 'pl', name: 'Made here', emoji: '📦', description: '', status: 'planned', lead: '~cat-wong', teams: [], targetDate: null, createdAt: NOW } as Project
+    const lead = { id: 'pl', name: 'Made here', emoji: '📦', description: '', status: 'planned', statusId: '', lead: '~cat-wong', teams: [], targetDate: null, createdAt: NOW } as Project
     const before = { ...w, issues: { ...w.issues, [mine.id]: mine }, views: { ...w.views, vh: view }, projects: { ...w.projects, pl: lead } }
     const joined = { ...guests, people: { ...guests.people, 'u-cat': 'cwong' } }
     const after = run(data, joined, before, '2026-03-02T00:00:00.000Z')

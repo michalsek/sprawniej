@@ -102,7 +102,7 @@ const KNOWN = {
   team: names<Team & Linked & { id: string }>('id', 'key', 'name', 'emoji', 'members', 'createdAt', 'lastNumber', 'autoArchive', 'linearId'),
   label: names<Label & Linked>('id', 'name', 'color', 'linearId'),
   status: names<Status>('id', 'kind', 'category', 'name', 'color', 'position', 'hidden'),
-  project: names<Project & Linked>('id', 'name', 'emoji', 'description', 'status', 'lead', 'teams', 'targetDate', 'createdAt', 'linearId'),
+  project: names<Project & Linked>('id', 'name', 'emoji', 'description', 'status', 'statusId', 'sortOrder', 'lead', 'teams', 'targetDate', 'createdAt', 'linearId'),
   issue: names<ArchivedIssue & Linked>(
     'id', 'team', 'number', 'title', 'description', 'status', 'statusId', 'priority', 'assignee', 'labels', 'project', 'parent',
     'dueDate', 'estimate', 'sortOrder', 'createdBy', 'createdAt', 'updatedAt', 'completedAt', 'duplicateOf',
@@ -237,6 +237,9 @@ export function rowToProject(row: Row<'projects'>, teams: readonly ProjectTeamIn
     emoji: row.emoji,
     description: row.description,
     status: row.status as Project['status'],
+    // a row from before statuses (there should be none once the database has them) waits for one
+    statusId: row.status_id ?? '',
+    sortOrder: row.sort_order ?? null,
     lead: login(row.lead_id, r),
     teams: inOrder(teams, (t) => teamKey(t.team_id, r)),
     targetDate: row.target_date,
@@ -444,12 +447,19 @@ export function labelToRow(l: Label, workspaceId: string): Insert<'labels'> {
   return { id: l.id, workspace_id: workspaceId, name: l.name, color: l.color, linear_id: linearId(l), extra: toExtra(l, KNOWN.label) }
 }
 
-/** project_teams in the project's order: the database stamps them as they arrive, and reading keeps that order */
+/** a project as the import writes it: without a status, the database gives it its category's default */
+export type ImportedProject = Omit<Insert<'projects'>, 'status_id'> & { status_id: string | null }
+
+/**
+ * project_teams in the project's order: the database stamps them as they arrive, and reading keeps that order. The
+ * status goes as both its category and its id ('' or a status the database doesn't have would be refused, so none is
+ * sent then); sort_order is kept only for a new project.
+ */
 export function projectToRows(
   p: Project,
   workspaceId: string,
   reg: Registry,
-): { projects: Insert<'projects'>; project_teams: Insert<'project_teams'>[] } {
+): { projects: ImportedProject; project_teams: Insert<'project_teams'>[] } {
   return {
     projects: {
       id: p.id,
@@ -458,6 +468,8 @@ export function projectToRows(
       emoji: p.emoji,
       description: p.description,
       status: p.status,
+      status_id: p.statusId || null,
+      sort_order: p.sortOrder ?? null,
       lead_id: profileId(p.lead, reg),
       target_date: p.targetDate,
       linear_id: linearId(p),

@@ -1,7 +1,7 @@
 /** A made-up workspace for tests: four people, two teams, a few issues, projects and views. */
 import { generateNKeysBetween } from 'fractional-indexing'
 import type { Issue, Label, Person, Project, Status, Team, View } from '@/model/schema'
-import { CATEGORIES, type IssueCategory, type Priority } from '@/model/status'
+import { CATEGORIES, PROJECT_CATEGORY_INFO, type IssueCategory, type Priority } from '@/model/status'
 import type { DataState } from '@/data/store'
 
 const at = (daysAgo: number) => new Date(Date.UTC(2026, 9, 6) - daysAgo * 86_400_000).toISOString()
@@ -13,11 +13,17 @@ const people: Person[] = [
   { login: 'zosia', githubId: 4, name: 'Zosia Wiśniewska', avatarUrl: '' },
 ]
 
-/** the seven statuses every workspace starts with, one per category (ids as tests/support/fakeDb.ts makes them) */
+/** the statuses every workspace starts with, one per category (ids as tests/support/fakeDb.ts makes them) */
 export const statusIdOf = (category: string) => `status-${category}`
+/** the same for projects (issue and project categories share some names, so the ids differ) */
+export const projectStatusIdOf = (category: string) => `pstatus-${category}`
 export const sampleStatuses = (): Record<string, Status> =>
   Object.fromEntries(
     CATEGORIES.map((c) => [statusIdOf(c.id), { id: statusIdOf(c.id), kind: 'issue', category: c.id, name: c.name, color: c.seed, position: 'a0', hidden: false }]),
+  )
+export const sampleProjectStatuses = (): Record<string, Status> =>
+  Object.fromEntries(
+    PROJECT_CATEGORY_INFO.map((c) => [projectStatusIdOf(c.id), { id: projectStatusIdOf(c.id), kind: 'project', category: c.id, name: c.name, color: c.seed, position: 'a0', hidden: false }]),
   )
 
 const labels: Label[] = [
@@ -39,6 +45,8 @@ const projects: Project[] = [
     emoji: '📊',
     description: 'Charts that explain where the money goes.',
     status: 'in_progress',
+    statusId: projectStatusIdOf('in_progress'),
+    sortOrder: 'a0',
     lead: 'ania-k',
     teams: ['ENG', 'DES'],
     targetDate: '2026-11-15',
@@ -50,6 +58,8 @@ const projects: Project[] = [
     emoji: '🏎️',
     description: 'Open the app in under a second.',
     status: 'planned',
+    statusId: projectStatusIdOf('planned'),
+    sortOrder: 'a1',
     lead: 'bartek',
     teams: ['ENG'],
     targetDate: null,
@@ -163,7 +173,7 @@ export function sampleData(): DataState {
     people: byKey(people, (p) => p.login),
     members: {},
     labels: byKey(labels, (l) => l.id),
-    statuses: sampleStatuses(),
+    statuses: { ...sampleStatuses(), ...sampleProjectStatuses() },
     teams: byKey(teams, (t) => t.key),
     archive: {},
     archiveLoaded: false,

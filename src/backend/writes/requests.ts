@@ -11,6 +11,7 @@ type Loose = Readonly<Record<string, unknown>>
 /** the columns that point at another row a person may make in the same moment: [column, its table] */
 export const PARENTS: Partial<Record<LiveTable, readonly (readonly [string, LiveTable])[]>> = {
   team_members: [['team_id', 'teams']],
+  projects: [['status_id', 'statuses']],
   project_teams: [
     ['project_id', 'projects'],
     ['team_id', 'teams'],

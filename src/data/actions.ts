@@ -59,8 +59,8 @@ import { cleanHandle, HANDLE_WORDS, handleProblem } from './handles'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { tickItem } from './checklist'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
-import { isAdmin, isUnread, ownerCount } from './select'
-import { canHide, pickStatus, statusesOf, statusNamed } from './statuses'
+import { isAdmin, isUnread, ownerCount, projectOrder } from './select'
+import { canHide, pickProjectStatus, pickStatus, statusesOf, statusNamed, statusOfProject } from './statuses'
 import { issueRef, useData } from './store'
 
 const now = () => new Date().toISOString()
@@ -831,7 +831,8 @@ export interface NewProject {
   name: string
   emoji: string
   description?: string
-  status?: Project['status']
+  /** one of the workspace's project statuses (or a category: its default status); Planned's default when left out */
+  statusId?: string
   lead?: string | null
   teams?: string[]
   targetDate?: string | null
@@ -849,14 +850,34 @@ function projectTeamChanges(projectId: string, before: readonly string[], after:
   return out
 }
 
+/** the projects in a status's board column, in the order they show, without `but` */
+function columnOf(projects: Record<string, Project>, statuses: Record<string, Status>, statusId: string, but?: string): Project[] {
+  return Object.values(projects)
+    .filter((p) => p.id !== but && statusOfProject(p, statuses).id === statusId)
+    .sort(projectOrder)
+}
+
+/** the last key in a column (projects without one come after it) */
+const lastKey = (column: readonly Project[]): string | null => column.reduce<string | null>((max, p) => (p.sortOrder && (max === null || p.sortOrder > max) ? p.sortOrder : max), null)
+
+/**
+ * Creates a project at the bottom of its status's column and returns it. It sends the status (status_id), and the
+ * database fills in the category (status), which the screen guesses meanwhile; while the workspace's statuses aren't
+ * known, only the category goes, and the database gives it that category's default status.
+ */
 export function createProject(input: NewProject): Project {
   const c = context()
+  const s = useData.getState()
+  const picked = (input.statusId && pickProjectStatus(input.statusId, s.statuses)) || pickProjectStatus('planned', s.statuses) || { status: 'planned' as const }
+  const statusId = picked.statusId ?? ''
   const project: Project = {
     id: ulid(),
     name: input.name.trim(),
     emoji: input.emoji,
     description: input.description?.trim() ?? '',
-    status: input.status ?? 'planned',
+    status: picked.status,
+    statusId,
+    sortOrder: keyBetween(statusId ? lastKey(columnOf(s.projects, s.statuses, statusId)) : null, null),
     lead: input.lead ?? null,
     teams: [...new Set(input.teams ?? [])],
     targetDate: input.targetDate ?? null,
@@ -869,8 +890,18 @@ export function createProject(input: NewProject): Project {
       ins(
         'projects',
         { id: p.id },
-        { id: p.id, workspace_id: c.workspaceId, name: p.name, emoji: p.emoji, description: p.description, status: p.status, lead_id: pid(c, p.lead) ?? null, target_date: p.targetDate },
-        { created_at: p.createdAt, linear_id: null, extra: {} },
+        {
+          id: p.id,
+          workspace_id: c.workspaceId,
+          name: p.name,
+          emoji: p.emoji,
+          description: p.description,
+          ...(statusId ? { status_id: statusId } : { status: p.status }),
+          sort_order: p.sortOrder,
+          lead_id: pid(c, p.lead) ?? null,
+          target_date: p.targetDate,
+        },
+        { status: p.status, created_at: p.createdAt, linear_id: null, extra: {} },
       ),
       ...projectTeamChanges(p.id, [], p.teams, c),
     ],
@@ -878,23 +909,75 @@ export function createProject(input: NewProject): Project {
   return useData.getState().projects[p.id] ?? project
 }
 
-export type ProjectPatch = Partial<Pick<Project, 'name' | 'emoji' | 'description' | 'status' | 'lead' | 'teams' | 'targetDate'>>
+/** fields a person can change; `statusId` picks a status (a category alone means its default status) */
+export type ProjectPatch = Partial<Pick<Project, 'name' | 'emoji' | 'description' | 'statusId' | 'lead' | 'teams' | 'targetDate'>>
+
+/**
+ * A status picked for a project, as columns: status_id only, with the category guessed so it shows at once (the
+ * database sets it). Nothing when it is the status the project has; only the category while statuses aren't known.
+ */
+function projectStatusFields(project: Project, pick: string, statuses: Record<string, Status>): { fields: Writable<'projects', 'update'>; guess: Partial<Row<'projects'>> } {
+  const picked = pickProjectStatus(pick, statuses)
+  if (!picked) return { fields: {}, guess: {} }
+  if (picked.statusId) return picked.statusId === project.statusId ? { fields: {}, guess: {} } : { fields: { status_id: picked.statusId }, guess: { status: picked.status } }
+  return picked.status === project.status ? { fields: {}, guess: {} } : { fields: { status: picked.status }, guess: {} }
+}
 
 export function updateProject(id: string, patch: ProjectPatch) {
   const c = context()
-  const project = useData.getState().projects[id]
+  const s = useData.getState()
+  const project = s.projects[id]
   if (!c || !project) return
   const fields: Writable<'projects', 'update'> = {}
+  let guess: Partial<Row<'projects'>> = {}
   if (patch.name !== undefined && patch.name !== project.name) fields.name = patch.name
   if (patch.emoji !== undefined && patch.emoji !== project.emoji) fields.emoji = patch.emoji
   if (patch.description !== undefined && patch.description !== project.description) fields.description = patch.description
-  if (patch.status !== undefined && patch.status !== project.status) fields.status = patch.status
+  if (patch.statusId !== undefined) {
+    const status = projectStatusFields(project, patch.statusId, s.statuses)
+    Object.assign(fields, status.fields)
+    guess = status.guess
+  }
   if (patch.lead !== undefined && patch.lead !== project.lead) {
     const lead = pid(c, patch.lead)
     if (lead !== undefined) fields.lead_id = lead
   }
   if (patch.targetDate !== undefined && patch.targetDate !== project.targetDate) fields.target_date = patch.targetDate
-  const changes = [...updated('projects', { id }, fields), ...(patch.teams ? projectTeamChanges(id, project.teams, patch.teams, c) : [])]
+  const changes = [
+    ...(Object.keys(fields).length ? [upd('projects', { id }, fields, Object.keys(guess).length ? guess : undefined)] : []),
+    ...(patch.teams ? projectTeamChanges(id, project.teams, patch.teams, c) : []),
+  ]
+  if (changes.length) write({ changes })
+}
+
+/**
+ * A project dropped on the board: into the column of `statusId` (its own when left out), between `prev` and `next`
+ * (project ids; null = top or bottom). One change: its status, if it moved to another column, and its place. Projects
+ * made by an older version have no place yet; when one of them is a neighbour, every such project in that column
+ * first gets one, in the order they show, so the drop lands where it was let go.
+ */
+export function moveProject(id: string, to: { statusId?: string; place: { prev: string | null; next: string | null } }) {
+  const c = context()
+  const s = useData.getState()
+  const project = s.projects[id]
+  if (!c || !project) return
+  const target = to.statusId ?? statusOfProject(project, s.statuses).id
+  const status = projectStatusFields(project, target, s.statuses)
+  const column = columnOf(s.projects, s.statuses, target, id)
+  const keys = new Map(column.map((p) => [p.id, p.sortOrder ?? null]))
+  const changes: AnyChange[] = []
+  const keyless = column.filter((p) => !p.sortOrder)
+  const near = [to.place.prev, to.place.next]
+  if (keyless.some((p) => near.includes(p.id))) {
+    keysBetween(lastKey(column), null, keyless.length).forEach((key, n) => {
+      keys.set(keyless[n].id, key)
+      changes.push(upd('projects', { id: keyless[n].id }, { sort_order: key }))
+    })
+  }
+  const at = (x: string | null) => (x ? (keys.get(x) ?? null) : null)
+  const sortOrder = keyBetween(at(to.place.prev), at(to.place.next))
+  const fields: Writable<'projects', 'update'> = { ...status.fields, ...(sortOrder !== project.sortOrder && { sort_order: sortOrder }) }
+  if (Object.keys(fields).length) changes.push(upd('projects', { id }, fields, Object.keys(status.guess).length ? status.guess : undefined))
   if (changes.length) write({ changes })
 }
 

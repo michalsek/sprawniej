@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { useLocation } from 'wouter'
 import { EmojiPicker } from '@/components/EmojiPicker'
 import { createProject, type NewProject } from '@/data/actions'
+import { pickProjectStatus } from '@/data/statuses'
+import { useData } from '@/data/store'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
 import { Input } from '@/ui/input'
@@ -11,10 +13,15 @@ import { ProjectProperties } from './ProjectProperties'
 
 type Draft = Required<NewProject>
 
-export function NewProjectDialog({ onOpenChange, team }: { onOpenChange: (open: boolean) => void; team?: string }) {
+/** `statusId`: the status it starts in (a board column's "+"); Planned's first status otherwise */
+export function NewProjectDialog({ onOpenChange, team, statusId }: { onOpenChange: (open: boolean) => void; team?: string; statusId?: string }) {
   const [, navigate] = useLocation()
-  const [draft, setDraft] = useState<Draft>({ name: '', emoji: '📦', description: '', status: 'planned', lead: null, teams: team ? [team] : [], targetDate: null })
+  const statuses = useData((s) => s.statuses)
+  const [draft, setDraft] = useState<Draft>({ name: '', emoji: '📦', description: '', statusId: statusId ?? 'planned', lead: null, teams: team ? [team] : [], targetDate: null })
   const set = (patch: Partial<Draft>) => setDraft((d) => ({ ...d, ...patch }))
+  // the chips show a project: its status's category, and the status (a category picks its default)
+  const picked = pickProjectStatus(draft.statusId, statuses) ?? { status: 'planned' as const }
+  const shown = { ...draft, status: picked.status, statusId: picked.statusId ?? '' }
   const ok = draft.name.trim().length > 0
 
   return (
@@ -43,7 +50,7 @@ export function NewProjectDialog({ onOpenChange, team }: { onOpenChange: (open: 
             <Label htmlFor="project-description">Description (optional)</Label>
             <Input id="project-description" value={draft.description} onChange={(e) => set({ description: e.target.value })} placeholder="What it’s about" />
           </div>
-          <ProjectProperties value={draft} onChange={(patch) => set(patch as Partial<Draft>)} />
+          <ProjectProperties value={shown} onChange={(patch) => set(patch as Partial<Draft>)} />
           <DialogFooter>
             <Button type="submit" disabled={!ok}>
               Create project

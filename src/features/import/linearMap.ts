@@ -6,15 +6,15 @@
  * instead of making copies, and gives back only what is new or changed. Issues that go straight to the archive are
  * rows with `archivedAt`. People who have joined since an earlier import come back as `links` (guest → account).
  */
-import { generateNKeysBetween } from 'fractional-indexing'
+import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing'
 import { plainName as plain } from '@/lib/plain'
 import { dueForArchive } from '@/data/select'
 import type { DataState } from '@/data/store'
 import type { Priority } from '@/model/status'
-import { AUTO_ARCHIVE_MONTHS, handleOf, isGuest, linearIdsOf, type Comment, type Issue, type Known, type Label, type Person, type Project, type Team, type View } from '@/model/schema'
+import { AUTO_ARCHIVE_MONTHS, handleOf, isGuest, linearIdsOf, type Comment, type Issue, type Known, type Label, type Person, type Project, type Status, type Team, type View } from '@/model/schema'
 import { SUBSCRIBERS_READ, type LIssue, type LinearData, type LLabel, type LTeam, type LUser } from './linearApi'
 import { mapViewFilter, type FilterContext } from './linearFilters'
-import { mapStatus } from './linearStatus'
+import { mapProjectStatus, mapStatus } from './linearStatus'
 
 // ---------- people ----------
 
@@ -87,16 +87,7 @@ export function guestLogins(users: LUser[], people: Record<string, Person>): Map
 
 // ---------- statuses, teams, emoji ----------
 
-export { mapStatus }
-
-const PROJECT_STATES: Record<string, Project['status']> = {
-  backlog: 'backlog',
-  planned: 'planned',
-  started: 'in_progress',
-  paused: 'paused',
-  completed: 'completed',
-  canceled: 'canceled',
-}
+export { mapProjectStatus, mapStatus }
 
 /** Linear icons are names ("Rocket") or emoji; names we know become their emoji */
 const ICONS: Record<string, string> = {
@@ -154,6 +145,8 @@ export interface Existing {
   /** issues that aren't archived */
   issues: Record<string, Issue>
   labels: Record<string, Label>
+  /** the workspace's statuses (projects are matched onto its project statuses) */
+  statuses?: Record<string, Status>
   projects: Record<string, Project>
   /** by issue id, the comments of issues that aren't archived */
   comments: Record<string, Comment[]>
@@ -187,7 +180,7 @@ export interface ImportExtras {
 
 /** the workspace as the import needs it: what the app holds, and what was read for the import */
 export function existingFrom(
-  ws: Pick<DataState, 'people' | 'teams' | 'issues' | 'labels' | 'projects' | 'views' | 'comments'>,
+  ws: Pick<DataState, 'people' | 'teams' | 'issues' | 'labels' | 'projects' | 'views' | 'comments'> & Partial<Pick<DataState, 'statuses'>>,
   more: ImportExtras,
   me: string,
 ): Existing {
@@ -203,6 +196,7 @@ export function existingFrom(
     teams: ws.teams,
     issues: ws.issues,
     labels: ws.labels,
+    statuses: ws.statuses,
     projects: ws.projects,
     views: ws.views,
     comments: ws.comments,
@@ -473,10 +467,12 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   const usedProjects = new Set(issues.flatMap((i) => (i.project ? [i.project.id] : [])))
   const projectsByLinear = byLinearId(Object.values(ws.projects))
   const projectId = new Map<string, string>()
+  // new projects go to the bottom of their columns, in Linear's order
+  let lastOrder = Object.values(ws.projects).reduce<string | null>((max, p) => (p.sortOrder && (max === null || p.sortOrder > max) ? p.sortOrder : max), null)
   for (const p of linear.projects) {
     if (!usedProjects.has(p.id) && !p.teams.nodes.some((t) => teamIds.has(t.id))) continue
     const old = projectsByLinear.get(p.id)
-    const state = p.status?.type ?? p.state ?? 'planned'
+    const state = p.status ?? { type: p.state ?? 'planned' }
     // teams not picked this time stay on it; picked ones follow Linear (taken off there, taken off here)
     const theirs = [...new Set(p.teams.nodes.filter((t) => teamIds.has(t.id)).map(keyOf))]
     const projectTeams = keptOrder(old?.teams ?? [], [...(old?.teams ?? []).filter((k) => !covered.has(k)), ...theirs])
@@ -487,7 +483,8 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       name: p.name,
       emoji: emojiFor(p.icon, old?.emoji ?? '📦'),
       description: p.description ?? '',
-      status: PROJECT_STATES[state] ?? 'planned',
+      ...mapProjectStatus(state, ws.statuses ?? {}, old),
+      sortOrder: old ? old.sortOrder : (lastOrder = generateKeyBetween(lastOrder, null)),
       lead: login(p.lead),
       teams: projectTeams,
       targetDate: p.targetDate,

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { Db } from '@/backend/client'
 import { COLS, ImportProblem, NOT_NULL, planImport, runImport, stepSize, type ImportPlan, type ImportStep, type ImportTable } from '@/backend/importRows'
@@ -231,7 +231,14 @@ describe('the columns match the database', () => {
   const dir = join(import.meta.dir, '..', 'supabase', 'migrations')
   const tablesSql = readFileSync(join(dir, '20261019000001_tables.sql'), 'utf8')
   const functionsSql = readFileSync(join(dir, '20261019000006_functions.sql'), 'utf8')
-  /** column → { notNull, hasDefault } for one table */
+  const laterSql = readdirSync(dir)
+    .filter((f) => f.endsWith('.sql') && f > '20261019000006')
+    .sort()
+    .map((f) => readFileSync(join(dir, f), 'utf8'))
+    .join('\n')
+  /** columns a trigger fills in when a row comes without them (status_id: follow_status), so they may go empty */
+  const FILLED = new Set(['status_id'])
+  /** column → { notNull, hasDefault } for one table, with the columns later migrations add */
   const columns = (table: string) => {
     const body = new RegExp(`create table public\\.${table} \\(([\\s\\S]*?)\\n\\);`).exec(tablesSql)?.[1] ?? ''
     const out = new Map<string, { notNull: boolean; hasDefault: boolean }>()
@@ -241,9 +248,16 @@ describe('the columns match the database', () => {
       const rest = `${m[2]} ${m[3]}`.replace(/--.*$/, '')
       out.set(m[1], { notNull: /not null|primary key/.test(rest), hasDefault: /\bdefault\b|generated/.test(rest) })
     }
+    for (const m of laterSql.matchAll(new RegExp(`alter table public\\.${table} add column ([a-z_]+) ([^;\\n]+)`, 'g'))) {
+      out.set(m[1], FILLED.has(m[1]) ? { notNull: false, hasDefault: true } : { notNull: /not null/.test(m[2]), hasDefault: /\bdefault\b/.test(m[2]) })
+    }
     return out
   }
-  const insertCols = (table: string) => new RegExp(`\\('${table}',\\s*'\\{([\\w,]+)\\}'`).exec(functionsSql)?.[1].split(',') ?? []
+  /** what import_rows may insert: the first list, and what later migrations add to it */
+  const insertCols = (table: string) => [
+    ...(new RegExp(`\\('${table}',\\s*'\\{([\\w,]+)\\}'`).exec(functionsSql)?.[1].split(',') ?? []),
+    ...[...laterSql.matchAll(new RegExp(`set insert_cols = insert_cols \\|\\| '\\{([\\w,]+)\\}'[^;]*?where table_name = '${table}'`, 'g'))].flatMap((m) => m[1].split(',')),
+  ]
   const SENT: Record<ImportTable, readonly string[]> = {
     profiles: COLS.profiles,
     teams: [...new Set([...COLS.teams, ...COLS.teamLink])],

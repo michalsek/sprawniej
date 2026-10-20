@@ -20,9 +20,10 @@ interface Grants {
     insert: 'id' | 'workspace_id' | 'kind' | 'category' | 'name' | 'color' | 'position' | 'hidden' | 'extra'
     update: 'name' | 'color' | 'position' | 'hidden' | 'extra'
   }
+  /** the app sends status_id, and status (the category) follows; older versions send only status */
   projects: {
-    insert: 'id' | 'workspace_id' | 'name' | 'emoji' | 'description' | 'status' | 'lead_id' | 'target_date' | 'extra'
-    update: 'name' | 'emoji' | 'description' | 'status' | 'lead_id' | 'target_date' | 'extra'
+    insert: 'id' | 'workspace_id' | 'name' | 'emoji' | 'description' | 'status' | 'status_id' | 'sort_order' | 'lead_id' | 'target_date' | 'extra'
+    update: 'name' | 'emoji' | 'description' | 'status' | 'status_id' | 'sort_order' | 'lead_id' | 'target_date' | 'extra'
   }
   project_teams: { insert: 'workspace_id' | 'project_id' | 'team_id'; update: never }
   issues: {

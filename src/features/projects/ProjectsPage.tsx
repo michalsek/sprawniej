@@ -12,6 +12,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { InlineText } from '@/components/InlineText'
 import { deleteProject, updateProject } from '@/data/actions'
 import { projectProgress } from '@/data/select'
+import { statusOfProject } from '@/data/statuses'
 import { useData } from '@/data/store'
 import { shortDate } from '@/features/issues/format'
 import type { Person, Project } from '@/model/schema'
@@ -20,10 +21,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { NewProjectDialog } from './NewProjectDialog'
 import { StatusDot } from './ProjectProperties'
 import { useProgressIssues } from './useProjectIssues'
-import { PROJECT_STATUS_NAMES } from './status'
 
 /** one project in the list: its emoji changes in place, the star keeps it in your sidebar, and ⋯ renames or deletes it */
 function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; lead?: Person }) {
+  const status = useData((s) => statusOfProject(p, s.statuses))
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState(false)
   return (
@@ -37,7 +38,7 @@ function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; 
         <Link href={`/project/${p.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-1.5">
           <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
           <span className="flex w-32 items-center gap-2 text-muted-foreground">
-            <StatusDot status={p.status} /> {PROJECT_STATUS_NAMES[p.status]}
+            <StatusDot status={status} /> <span className="truncate">{status.name}</span>
           </span>
           <span className="flex w-44 items-center gap-2 truncate">
             {p.lead ? (

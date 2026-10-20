@@ -3,7 +3,7 @@ import { fetchIssueEvents } from '@/backend/history'
 import { Registry } from '@/backend/registry'
 import { iso } from '@/backend/rows'
 import { issueEvents } from '@/data/history'
-import { closeChannels, defaultStatuses, DISPLAY, enabled, getWorld, newIssue, newTeam, ok, ulid, type World } from './support'
+import { closeChannels, defaultStatuses, DISPLAY, enabled, getWorld, newIssue, newTeam, ok, projectInsert, ulid, type World } from './support'
 
 describe.skipIf(!enabled)('history and deletions', () => {
   let w: World
@@ -111,7 +111,7 @@ describe.skipIf(!enabled)('history and deletions', () => {
     await ok(w.ana.db.from('views').insert({ id: view, workspace_id: w.ws, team_id: team, name: 'Team view', display: DISPLAY }))
     await ok(w.ana.db.from('team_members').insert({ workspace_id: w.ws, team_id: team, profile_id: w.bob.profileId }))
     const project = ulid()
-    await ok(w.ana.db.from('projects').insert({ id: project, workspace_id: w.ws, name: 'Bye' }))
+    await ok(w.ana.db.from('projects').insert(projectInsert({ id: project, workspace_id: w.ws, name: 'Bye' })))
     await ok(w.ana.db.from('project_teams').insert({ workspace_id: w.ws, project_id: project, team_id: team }))
     expect(await ok(w.ana.db.from('teams').delete().eq('id', team).select('id'))).toHaveLength(1)
     expect(await deleted('teams')).toContainEqual({ id: team })

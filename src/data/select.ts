@@ -4,7 +4,7 @@
  */
 import type { Comment, Display, Filters, InboxItem, Issue, Member, Ordering, Person, Project, ReadState, Status, Team } from '@/model/schema'
 import { followers } from './notify'
-import { issueStatuses, matchesStatus, statusOfIssue } from './statuses'
+import { issueStatuses, matchesStatus, projectStatuses, statusOfIssue, statusOfProject } from './statuses'
 import { PRIORITY_NAMES, PRIORITY_ORDER, TAB_GROUPS, categoryOf, type IssueTab, type Priority } from '@/model/status'
 
 /**
@@ -229,6 +229,38 @@ export function childIndex(issues: Record<string, Issue>): Map<string, ChildCoun
 export function projectProgress(projectId: string, issues: Issue[]): { done: number; total: number } {
   const mine = issues.filter((i) => i.project === projectId && categoryOf(i.status).group !== 'canceled')
   return { done: mine.filter((i) => categoryOf(i.status).group === 'completed').length, total: mine.length }
+}
+
+/**
+ * The order of projects in a board column: by `sortOrder` (byte by byte, as fractional-indexing writes it), then the
+ * ones without one (made by an older version), by name.
+ */
+export function projectOrder(a: Pick<Project, 'id' | 'name' | 'sortOrder'>, b: Pick<Project, 'id' | 'name' | 'sortOrder'>): number {
+  const x = a.sortOrder ?? null
+  const y = b.sortOrder ?? null
+  if (x !== null && y !== null && x !== y) return x < y ? -1 : 1
+  if ((x === null) !== (y === null)) return x === null ? 1 : -1
+  return a.name.localeCompare(b.name) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+}
+
+export interface ProjectColumn {
+  status: Status
+  projects: Project[]
+}
+
+/**
+ * The project board: a column per shown project status, in their order (empty ones too, to drop into), then each
+ * hidden status that still holds projects. A project sits in the column of the status it shows (statusOfProject).
+ */
+export function projectColumns(projects: readonly Project[], statuses: Record<string, Status>): ProjectColumn[] {
+  const by = new Map<string, Project[]>()
+  for (const p of projects) {
+    const id = statusOfProject(p, statuses).id
+    by.set(id, [...(by.get(id) ?? []), p])
+  }
+  const all = projectStatuses(statuses)
+  const columns = [...all.filter((s) => !s.hidden), ...all.filter((s) => s.hidden && by.has(s.id))]
+  return columns.map((status) => ({ status, projects: (by.get(status.id) ?? []).sort(projectOrder) }))
 }
 
 /** not marked as read yet: not read on its own (`readAt`) and newer than everything marked read at once */

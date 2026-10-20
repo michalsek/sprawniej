@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { anyTable, client, closeChannels, enabled, expectDenied, getWorld, issueInsert, newIssue, ok, RUN, TABLES, ulid, wsColumn, type World } from './support'
+import { anyTable, client, closeChannels, enabled, expectDenied, getWorld, issueInsert, newIssue, ok, projectInsert, RUN, TABLES, ulid, wsColumn, type World } from './support'
 
 describe.skipIf(!enabled)('who sees and changes what', () => {
   let w: World
@@ -70,8 +70,8 @@ describe.skipIf(!enabled)('who sees and changes what', () => {
       w.ana.db.from('issue_followers').insert({ workspace_id: w.ws, issue_id: issue.id, profile_id: w.cy.profileId, following: true }),
     )
     const project = ulid()
-    await expectDenied(w.ana.db.from('projects').insert({ id: project, workspace_id: w.ws, name: 'Theirs', lead_id: w.cy.profileId }))
-    await ok(w.ana.db.from('projects').insert({ id: project, workspace_id: w.ws, name: 'Ours', lead_id: w.guest }))
+    await expectDenied(w.ana.db.from('projects').insert(projectInsert({ id: project, workspace_id: w.ws, name: 'Theirs', lead_id: w.cy.profileId })))
+    await ok(w.ana.db.from('projects').insert(projectInsert({ id: project, workspace_id: w.ws, name: 'Ours', lead_id: w.guest })))
     await expectDenied(w.ana.db.from('projects').update({ lead_id: w.cy.profileId }).eq('id', project))
     // people from the workspace, its people from Linear, and nobody, are all fine
     expect(await ok(w.ana.db.from('issues').update({ assignee_id: w.guest }).eq('id', issue.id).select('id'))).toHaveLength(1)

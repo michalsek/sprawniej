@@ -209,6 +209,10 @@ type IssueWithout = Omit<IssueInsert, 'status_id'> & Partial<Pick<IssueInsert, '
 /** the generated types say status_id is needed (it is never null); the database fills it in when it's left out */
 export const issueInsert = (row: IssueWithout): IssueInsert => row as IssueInsert
 
+type ProjectInsert = Database['public']['Tables']['projects']['Insert']
+/** a project as an older version sends it: without status_id, which the database fills in (as issueInsert) */
+export const projectInsert = (row: Omit<ProjectInsert, 'status_id'> & Partial<Pick<ProjectInsert, 'status_id'>>): ProjectInsert => row as ProjectInsert
+
 let order = 0
 /** a new issue in a team; returns the row */
 export async function newIssue(who: Someone, ws: string, team: string, more: Partial<IssueInsert> = {}) {
@@ -221,9 +225,9 @@ export async function newIssue(who: Someone, ws: string, team: string, more: Par
   )
 }
 
-/** a workspace's issue statuses by category: the default (first shown) one of each, as every workspace starts */
-export async function defaultStatuses(who: Someone, ws: string): Promise<Record<string, string>> {
-  const rows = await ok(who.db.from('statuses').select('id, category, position, hidden').eq('workspace_id', ws).eq('kind', 'issue').eq('hidden', false).order('position').order('id'))
+/** a workspace's issue (or project) statuses by category: the default (first shown) one of each, as every workspace starts */
+export async function defaultStatuses(who: Someone, ws: string, kind: 'issue' | 'project' = 'issue'): Promise<Record<string, string>> {
+  const rows = await ok(who.db.from('statuses').select('id, category, position, hidden').eq('workspace_id', ws).eq('kind', kind).eq('hidden', false).order('position').order('id'))
   const out: Record<string, string> = {}
   for (const r of rows) out[r.category] ??= r.id
   return out

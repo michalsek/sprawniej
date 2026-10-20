@@ -7,21 +7,27 @@ import type { ProjectPatch } from '@/data/actions'
 import { useData } from '@/data/store'
 import { shortDate } from '@/features/issues/format'
 import { usePeopleItems } from '@/features/issues/pickers'
-import { PROJECT_STATUSES, type Project } from '@/model/schema'
-import { PROJECT_STATUS_COLORS, PROJECT_STATUS_NAMES } from './status'
+import { projectStatuses, statusOfProject } from '@/data/statuses'
+import type { Project, Status } from '@/model/schema'
+import { paintColor } from '@/model/status'
 
 export const chip =
   'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm text-foreground/90 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60 [&_svg]:size-3.5'
 
-export function StatusDot({ status }: { status: Project['status'] }) {
-  return <span className="size-2.5 shrink-0 rounded-full" style={{ background: PROJECT_STATUS_COLORS[status] }} />
+/** a project status's dot, in the status's own colour */
+export function StatusDot({ status }: { status: Pick<Status, 'kind' | 'category' | 'color'> }) {
+  return <span className="size-2.5 shrink-0 rounded-full" style={{ background: paintColor(status) }} />
 }
 
-const statusItems = PROJECT_STATUSES.map((s) => ({ value: s, label: PROJECT_STATUS_NAMES[s], icon: <StatusDot status={s} /> }))
-
-type Value = Pick<Project, 'status' | 'lead' | 'targetDate' | 'teams'>
+type Value = Pick<Project, 'status' | 'statusId' | 'lead' | 'targetDate' | 'teams'>
 
 export function ProjectProperties({ value, onChange }: { value: Value; onChange: (patch: ProjectPatch) => void }) {
+  const statuses = useData((s) => s.statuses)
+  const status = statusOfProject(value, statuses)
+  // hidden statuses aren't offered; a project that has one still shows it on its chip
+  const statusItems = projectStatuses(statuses)
+    .filter((s) => !s.hidden)
+    .map((s) => ({ value: s.id, label: s.name, icon: <StatusDot status={s} /> }))
   const people = useData((s) => s.people)
   const teams = useData(useShallow((s) => Object.values(s.teams)))
   const peopleItems = usePeopleItems()
@@ -29,9 +35,9 @@ export function ProjectProperties({ value, onChange }: { value: Value; onChange:
   const chosenTeams = teams.filter((t) => value.teams.includes(t.key))
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <Picker placeholder="Project status…" items={statusItems} value={value.status} onSelect={(status) => onChange({ status })}>
+      <Picker placeholder="Project status…" items={statusItems} value={status.id} onSelect={(statusId) => onChange({ statusId })}>
         <button type="button" className={chip}>
-          <StatusDot status={value.status} /> {PROJECT_STATUS_NAMES[value.status]}
+          <StatusDot status={status} /> {status.name}
         </button>
       </Picker>
       <Picker placeholder="Who leads it…" items={peopleItems} value={value.lead} onSelect={(lead) => onChange({ lead })}>

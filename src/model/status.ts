@@ -16,8 +16,10 @@ export const isIssueCategory = (x: unknown): x is IssueCategory => ISSUE_CATEGOR
 
 /** a project's fixed categories (projects.status) */
 export const PROJECT_CATEGORIES = ['backlog', 'planned', 'in_progress', 'paused', 'completed', 'canceled'] as const
+export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number]
+export const isProjectCategory = (x: unknown): x is ProjectCategory => PROJECT_CATEGORIES.some((c) => c === x)
 
-/** what a status can be for: issues, or (later) projects */
+/** what a status can be for: issues or projects */
 export const STATUS_KINDS = ['issue', 'project'] as const
 export type StatusKind = (typeof STATUS_KINDS)[number]
 
@@ -51,8 +53,37 @@ const byId = new Map(CATEGORIES.map((s) => [s.id, s]))
 /** a category this app doesn't know (written by a newer one, or by hand) reads as Backlog instead of breaking the screen */
 export const categoryOf = (id: IssueCategory): Category => byId.get(id) ?? CATEGORIES[0]
 
-/** the category a status of this kind belongs to, when it is one of the kind's (issue categories only, for now) */
-const categoryFor = (kind: StatusKind, category: string): Category | undefined => (kind === 'issue' && isIssueCategory(category) ? categoryOf(category) : undefined)
+/** A project's category, as `Category` is an issue's. */
+export interface ProjectCategoryInfo {
+  id: ProjectCategory
+  /** the name its first status starts with, and what a project shows while its status isn't known */
+  name: string
+  /** CSS colour (a theme variable): what a project shows while its status isn't known */
+  color: string
+  /** the colour its first status starts with (the database seeds it: @seed project-statuses) */
+  seed: string
+  /** what it decides, in a line (Settings) */
+  description: string
+}
+
+export const PROJECT_CATEGORY_INFO: ProjectCategoryInfo[] = [
+  { id: 'backlog', name: 'Backlog', color: 'var(--status-backlog)', seed: '#8a8f98', description: 'Ideas nobody planned yet.' },
+  { id: 'planned', name: 'Planned', color: 'var(--status-todo)', seed: '#c4c6cc', description: 'Planned, not started. New projects start here.' },
+  { id: 'in_progress', name: 'In progress', color: 'var(--status-progress)', seed: '#f2c94c', description: 'Someone is working on it.' },
+  { id: 'paused', name: 'Paused', color: 'var(--status-canceled)', seed: '#8a8f98', description: 'Started, then put on hold.' },
+  { id: 'completed', name: 'Completed', color: 'var(--status-done)', seed: '#5e6ad2', description: 'Finished. Grouping issues by project leaves it out.' },
+  { id: 'canceled', name: 'Canceled', color: 'var(--status-canceled)', seed: '#8a8f98', description: "Won't be done. Grouping issues by project leaves it out." },
+]
+
+const projectById = new Map(PROJECT_CATEGORY_INFO.map((c) => [c.id, c]))
+/** a project category this app doesn't know reads as Planned instead of breaking the screen */
+export const projectCategoryOf = (id: string): ProjectCategoryInfo => projectById.get(id as ProjectCategory) ?? PROJECT_CATEGORY_INFO[1]
+
+/** the category a status of this kind belongs to, when it is one of the kind's */
+const categoryFor = (kind: StatusKind, category: string): Pick<Category, 'color' | 'seed'> | undefined => {
+  if (kind === 'issue') return isIssueCategory(category) ? categoryOf(category) : undefined
+  return isProjectCategory(category) ? projectCategoryOf(category) : undefined
+}
 
 /** the colour a category's new statuses start with: the colour its first status started with */
 export const seedColor = (kind: StatusKind, category: string): string => categoryFor(kind, category)?.seed ?? STATUS_COLORS[0]

@@ -10,10 +10,10 @@ import type { Request } from '@/backend/writes/send'
 import { whatOf } from '@/backend/writes/send'
 import { EMPTY, useData, type DataState } from '@/data/store'
 import type { Person, Team } from '@/model/schema'
-import { CATEGORIES } from '@/model/status'
-import { drain, FakeClock, FakeDb, profileIdOf, statusIdOf, teamIdOf, WS } from './fakeDb'
+import { CATEGORIES, PROJECT_CATEGORY_INFO } from '@/model/status'
+import { drain, FakeClock, FakeDb, profileIdOf, projectStatusIdOf, statusIdOf, teamIdOf, WS } from './fakeDb'
 
-export { drain, FakeClock, FakeDb, profileIdOf, statusIdOf, teamIdOf, WS } from './fakeDb'
+export { drain, FakeClock, FakeDb, profileIdOf, projectStatusIdOf, statusIdOf, teamIdOf, WS } from './fakeDb'
 
 export const person = (login: string): Person => ({ login, githubId: login.length, name: login.toUpperCase(), avatarUrl: '' })
 
@@ -105,8 +105,9 @@ export function seed(o: Seed): World {
 
   const at = '2026-01-01T00:00:00.000Z'
   db.put('workspaces', { id: WS, name: 'Acme', created_by: profileIdOf(o.me), created_at: at, extra: {} })
-  // the seven statuses every workspace starts with (seed_statuses)
+  // the statuses every workspace starts with (seed_statuses): seven for issues, six for projects
   for (const c of CATEGORIES) db.put('statuses', { id: statusIdOf(c.id), workspace_id: WS, kind: 'issue', category: c.id, name: c.name, color: c.seed, position: 'a0', hidden: false, extra: {} })
+  for (const c of PROJECT_CATEGORY_INFO) db.put('statuses', { id: projectStatusIdOf(c.id), workspace_id: WS, kind: 'project', category: c.id, name: c.name, color: c.seed, position: 'a0', hidden: false, extra: {} })
   for (const l of logins) {
     db.put('profiles', { ...personToProfile({ ...person(l), id: profileIdOf(l) } as Person, WS, registry), user_id: `u-${l}`, created_at: at })
     db.put('workspace_members', { workspace_id: WS, profile_id: profileIdOf(l), role: l === o.me ? 'owner' : 'member', joined_at: at, removed_at: null })

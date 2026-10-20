@@ -7,10 +7,22 @@
  * - The default status of a category is its first shown one. That is where an issue lands when only its category is
  *   known: an older version of the app, GitHub, the import, a new issue made "in Todo".
  * - Each category keeps at least one shown status; statuses are never deleted, only hidden.
- * - Whatever decides something looks at the category (`issue.status`), never at a status.
+ * - Whatever decides something looks at the category (`issue.status`, `project.status`), never at a status.
  */
-import type { Filters, Issue, Status } from '@/model/schema'
-import { CATEGORIES, categoryOf, ISSUE_CATEGORIES, isIssueCategory, KIND_CATEGORIES, type IssueCategory, type StatusKind } from '@/model/status'
+import type { Filters, Issue, Project, Status } from '@/model/schema'
+import {
+  CATEGORIES,
+  categoryOf,
+  ISSUE_CATEGORIES,
+  isIssueCategory,
+  isProjectCategory,
+  KIND_CATEGORIES,
+  PROJECT_CATEGORY_INFO,
+  projectCategoryOf,
+  type IssueCategory,
+  type ProjectCategory,
+  type StatusKind,
+} from '@/model/status'
 
 type Statuses = Readonly<Record<string, Status>>
 
@@ -67,6 +79,35 @@ export function pickStatus(pick: string, statuses: Statuses): { statusId?: strin
   if (own && own.kind === 'issue' && isIssueCategory(own.category)) return { statusId: own.id, status: own.category }
   if (!isIssueCategory(pick)) return undefined
   const d = defaultStatus(statuses, 'issue', pick)
+  return d ? { statusId: d.id, status: pick } : { status: pick }
+}
+
+// ---------- projects ----------
+// The same rules for a project's status (`project.statusId`) and its category (`project.status`).
+
+/** made up from the project categories, as CATEGORY_STATUSES: the id is the category */
+export const PROJECT_CATEGORY_STATUSES: readonly Status[] = PROJECT_CATEGORY_INFO.map((c) => ({ id: c.id, kind: 'project', category: c.id, name: c.name, color: c.color, position: 'a0', hidden: false }))
+
+/** the project statuses to show and pick from: the workspace's, or the made-up ones while there are none */
+export function projectStatuses(statuses: Statuses): Status[] {
+  const own = statusesOf(statuses, 'project')
+  return own.length ? own : [...PROJECT_CATEGORY_STATUSES]
+}
+
+/** the status a project shows: its own; or its category's default (or a made-up one) while that isn't known */
+export function statusOfProject(project: Pick<Project, 'status' | 'statusId'>, statuses: Statuses): Status {
+  const own = statuses[project.statusId]
+  if (own && own.kind === 'project' && own.category === project.status) return own
+  const category = projectCategoryOf(project.status).id
+  return defaultStatus(statuses, 'project', category) ?? PROJECT_CATEGORY_STATUSES.find((s) => s.category === category)!
+}
+
+/** what picking `pick` means for a project (as pickStatus): a project status, or a category's default */
+export function pickProjectStatus(pick: string, statuses: Statuses): { statusId?: string; status: ProjectCategory } | undefined {
+  const own = statuses[pick]
+  if (own && own.kind === 'project' && isProjectCategory(own.category)) return { statusId: own.id, status: own.category }
+  if (!isProjectCategory(pick)) return undefined
+  const d = defaultStatus(statuses, 'project', pick)
   return d ? { statusId: d.id, status: pick } : { status: pick }
 }
 

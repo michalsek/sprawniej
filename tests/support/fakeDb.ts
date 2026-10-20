@@ -7,8 +7,9 @@
  * - foreign keys (the hand-written list below, as in tables.sql), unique label names and team keys;
  * - what the triggers fill in: numbers, authors, times, archived_at, edited_at, and check_note (no notes to yourself,
  *   to people outside the workspace, or the same note again within ten minutes) and check_people;
- * - statuses: an issue's category follows its status, and a status follows a category set alone (follow_status); a
- *   note's status (note_status); each category keeps a shown status (keep_a_status); names unique per kind;
+ * - statuses: an issue's or a project's category follows its status, and a status follows a category set alone
+ *   (follow_status); a note's status (note_status); each category keeps a shown status (keep_a_status); names unique
+ *   per kind;
  * - the rules: only the author edits a comment, only admins delete a team or rename the workspace, your inbox,
  *   read marks and favourites are yours (an insert that asks other people's notes back fails, E54), and refusals of
  *   updates and deletes come back empty;
@@ -30,7 +31,7 @@ export const WS = 'ws-1'
 export const TICK_REFUSED = "That checklist item changed meanwhile, so your tick wasn't saved. Have a look and tick it again."
 export const profileIdOf = (login: string) => `p-${login}`
 export const teamIdOf = (key: string) => `t-${key.toLowerCase()}`
-export { statusIdOf } from '../fixtures/sample'
+export { projectStatusIdOf, statusIdOf } from '../fixtures/sample'
 
 // ---------- time ----------
 
@@ -83,8 +84,8 @@ const GRANTS: Partial<Record<LiveTable, { insert: string[]; update: string[] }>>
   labels: { insert: ['id', 'workspace_id', 'name', 'color', 'extra'], update: ['name', 'color', 'extra'] },
   statuses: { insert: ['id', 'workspace_id', 'kind', 'category', 'name', 'color', 'position', 'hidden', 'extra'], update: ['name', 'color', 'position', 'hidden', 'extra'] },
   projects: {
-    insert: ['id', 'workspace_id', 'name', 'emoji', 'description', 'status', 'lead_id', 'target_date', 'extra'],
-    update: ['name', 'emoji', 'description', 'status', 'lead_id', 'target_date', 'extra'],
+    insert: ['id', 'workspace_id', 'name', 'emoji', 'description', 'status', 'status_id', 'sort_order', 'lead_id', 'target_date', 'extra'],
+    update: ['name', 'emoji', 'description', 'status', 'status_id', 'sort_order', 'lead_id', 'target_date', 'extra'],
   },
   project_teams: { insert: ['workspace_id', 'project_id', 'team_id'], update: [] },
   issues: {
@@ -115,6 +116,9 @@ const FKS: Partial<Record<LiveTable, [string, LiveTable][]>> = {
   views: [['team_id', 'teams']],
   inbox: [['issue_id', 'issues'], ['comment_id', 'comments'], ['recipient_id', 'profiles']],
 }
+
+/** the tables with a category and a status kept in step (follow_status): the kind, and the column default of status */
+const FOLLOWS: Partial<Record<LiveTable, { kind: string; category: string }>> = { issues: { kind: 'issue', category: 'todo' }, projects: { kind: 'project', category: 'planned' } }
 
 /** check_people: the person a row names must be in the workspace */
 const PEOPLE: Partial<Record<LiveTable, string>> = { issues: 'assignee_id', team_members: 'profile_id', issue_followers: 'profile_id', projects: 'lead_id' }
@@ -388,8 +392,8 @@ export class FakeDb {
       }
       const bad = this.refs(t, row, Object.keys(row), adding)
       if (bad) return bad
-      if (t === 'issues' && !there) {
-        const follows = this.followStatus(row, undefined, adding)
+      if (FOLLOWS[t] && !there) {
+        const follows = this.followStatus(t, row, undefined, adding)
         if ('error' in follows) return follows
       }
       if (row.id !== undefined) adding.set(t, new Set([...(adding.get(t) ?? []), String(row.id)]))
@@ -435,17 +439,18 @@ export class FakeDb {
    * follow_status: the category follows status_id; a category set alone takes its default status. The status and
    * category the row ends up with, or the error the database raises.
    */
-  private followStatus(row: Loose, was: Loose | undefined, adding?: Map<LiveTable, Set<string>>): { status: unknown; status_id: unknown } | Result {
+  private followStatus(t: LiveTable, row: Loose, was: Loose | undefined, adding?: Map<LiveTable, Set<string>>): { status: unknown; status_id: unknown } | Result {
+    const { kind, category: start } = FOLLOWS[t]!
     const idChanged = 'status_id' in row && row.status_id != null && row.status_id !== was?.status_id
     if (!idChanged) {
-      const category = row.status ?? was?.status ?? 'todo'
+      const category = row.status ?? was?.status ?? start
       if (was && category === was.status) return { status: category, status_id: was.status_id }
-      const d = this.defaultStatus('issue', category)
+      const d = this.defaultStatus(kind, category)
       if (!d) return failed('22023', 'This workspace has no status for that.', 400)
       return { status: category, status_id: d }
     }
     const s = this.get('statuses', { id: row.status_id })
-    if (!s || s.kind !== 'issue') {
+    if (!s || s.kind !== kind) {
       if (adding?.get('statuses')?.has(String(row.status_id))) return { status: row.status, status_id: row.status_id }
       return failed('22023', "That status isn't in this workspace.", 400)
     }
@@ -485,7 +490,7 @@ export class FakeDb {
     const me = this.actor()
     switch (table) {
       case 'issues': {
-        const follows = this.followStatus(row, undefined) as { status: unknown; status_id: unknown }
+        const follows = this.followStatus(table, row, undefined) as { status: unknown; status_id: unknown }
         return {
           description: '', priority: 0, assignee_id: null, project_id: null, parent_id: null, due_date: null, estimate: null,
           duplicate_of: null, former_refs: [], linear_id: null, extra: {}, ...row, ...follows,
@@ -503,8 +508,10 @@ export class FakeDb {
         return { linear_id: null, extra: {}, ...row }
       case 'statuses':
         return { hidden: false, extra: {}, ...row }
-      case 'projects':
-        return { emoji: '', description: '', status: 'planned', lead_id: null, target_date: null, linear_id: null, extra: {}, ...row, created_at: at }
+      case 'projects': {
+        const follows = this.followStatus(table, row, undefined) as { status: unknown; status_id: unknown }
+        return { emoji: '', description: '', sort_order: null, lead_id: null, target_date: null, linear_id: null, extra: {}, ...row, ...follows, created_at: at }
+      }
       case 'inbox':
         return { comment_id: null, status: null, status_id: null, extra: {}, ...row, actor_id: me, at, read_at: null }
       case 'read_state':
@@ -520,7 +527,7 @@ export class FakeDb {
   private change(table: LiveTable, row: Loose, fields: Loose): Loose {
     const at = this.now()
     const next: Loose = { ...row, ...fields }
-    if (table === 'issues' && ('status' in fields || 'status_id' in fields)) Object.assign(next, this.followStatus(fields, row))
+    if (FOLLOWS[table] && ('status' in fields || 'status_id' in fields)) Object.assign(next, this.followStatus(table, fields, row))
     if (table === 'issues') {
       const seen = ['title', 'description', 'status', 'status_id', 'priority', 'assignee_id', 'project_id', 'parent_id', 'due_date', 'estimate', 'sort_order', 'duplicate_of', 'team_id']
       if (seen.some((k) => k in fields && next[k] !== row[k]) || (row.archived_at && 'archived_at' in fields && fields.archived_at === null)) next.updated_at = at
@@ -548,8 +555,8 @@ export class FakeDb {
     for (const r of rows) {
       const bad = this.refs(t, { ...r, ...q.fields }, cols.filter((c) => q.fields[c] !== r[c]), new Map())
       if (bad) return bad
-      if (t === 'issues' && ('status' in q.fields || 'status_id' in q.fields)) {
-        const follows = this.followStatus(q.fields, r)
+      if (FOLLOWS[t] && ('status' in q.fields || 'status_id' in q.fields)) {
+        const follows = this.followStatus(t, q.fields, r)
         if ('error' in follows) return follows
       }
       if (t === 'statuses' && q.fields.hidden === true && !r.hidden && !this.rows(t).some((x) => x.id !== r.id && x.kind === r.kind && x.category === r.category && !x.hidden)) {

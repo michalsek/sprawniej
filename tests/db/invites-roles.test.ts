@@ -13,6 +13,7 @@ import {
   newTeam,
   newWorkspace,
   ok,
+  projectInsert,
   RUN,
   signUp,
   signUpBare,
@@ -131,7 +132,7 @@ describe.skipIf(!enabled)('invites, members and roles', () => {
     const theirView = ulid()
     await ok(importRows(ws, 'views', [{ id: theirView, owner_id: g, name: 'Guest view', display: DISPLAY }]))
     const project = ulid()
-    await ok(w.ana.db.from('projects').insert({ id: project, workspace_id: ws, name: 'Led by them', lead_id: g }))
+    await ok(w.ana.db.from('projects').insert(projectInsert({ id: project, workspace_id: ws, name: 'Led by them', lead_id: g })))
     const anasView = ulid()
     const filters = { assignees: [gLogin, w.ana.login, null], subscribers: [gLogin] }
     await ok(w.ana.db.from('views').insert({ id: anasView, workspace_id: ws, name: 'Ana’s', filters, display: DISPLAY }))
