@@ -196,8 +196,32 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
         <GoHome title={`This link was made before you left ${ws}`}>{`You left or were removed after it was made. To come back, ask ${by} for a new link.`}</GoHome>
       )
     case 'no-places':
+      // joining counts only who joined, so an account that exists already can still get in
       return (
-        <GoHome title="This invite link has no places left">{`People who are still creating their accounts hold its places. Ask ${by} for a new one.`}</GoHome>
+        <Step
+          title="This invite link has no places left"
+          footer={
+            <>
+              {!user && (
+                <Button
+                  size="lg"
+                  onClick={() => {
+                    setNoPlacesFor(undefined)
+                    setMode('sign-in')
+                  }}
+                >
+                  Sign in instead
+                </Button>
+              )}
+              <Button variant={user ? 'default' : 'ghost'} size="lg" onClick={goHome}>
+                Go to Sprawniej
+              </Button>
+            </>
+          }
+        >
+          <p>{`People who are still creating their accounts hold its places. Ask ${by} for a new one.`}</p>
+          {!user && <p className="mt-3">If you already have an account, sign in instead.</p>}
+        </Step>
       )
     case 'member':
       return (
