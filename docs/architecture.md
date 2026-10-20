@@ -47,8 +47,9 @@ up). Without a copy, it reads everything except the archive.
   turns a sign-in that didn't finish into a message.
 - After sign-in, `ensure_profile()` finds your profile. For a GitHub sign-in with no profile yet, it first claims a
   profile with the same GitHub id that has no account (one brought from an older workspace), and otherwise makes one
-  from the GitHub login when that handle is free. Otherwise you pick a name and an @handle once (`PickLogin.tsx`, `create_profile()`). Handles follow
-  GitHub's rule (letters, digits and dashes, up to 39, not starting with a dash) and never change.
+  from the GitHub login when that handle is free. Otherwise you pick a name and an @handle (`PickLogin.tsx`, `create_profile()`). Handles follow
+  GitHub's rule (letters, digits and dashes, up to 39, not starting with a dash).
+- **The login never changes; the @handle can** (Handles, below).
 - **A new account needs a sign-up code or an invite link** (docs/data-format.md, "Who may make an account"). The
   Create account form sends the code (or, in the invite flow, the link's token) with the sign-up, and the database
   refuses an email account without one before it exists. A GitHub sign-up can't carry a code: its account gets no
@@ -254,6 +255,20 @@ lines ("moved it from Todo to In Progress") and folds a few changes of the same 
 together into one (15 minutes for the title and description, 2 for the rest); labels put on while creating an issue
 aren't a change. The nightly archive acts for nobody, so its line says "Archived automatically".
 
+## Handles
+
+What you pick at the start is your login (`profiles.login`): the hidden key that filters, history, assignees,
+followers and the app's `people` use, and it never changes. People see and mention your @handle, `handle ?? login`
+(`handleOf` in `src/model/schema.ts`). You change it in Settings › Your account (`MyHandle.tsx`, `changeHandle` in
+`src/data/actions.ts`, `set_handle()`), on Enter or when you leave the field, so a half-typed handle never goes out.
+The change reaches teammates like any profile change (the `ws:` broadcast and catching up).
+
+Nothing is kept for anyone: once you move off a handle, anyone may take it, and old text that says the old one is
+plain text from then on. Stored descriptions and comments are never rewritten. A mention counts (for notes, followers,
+links and highlights) only by someone's handle now, case aside (`resolveHandle` in `src/data/mentions.ts`), so the
+same text may mention whoever has that handle next. The editor highlights mentions the same way and draws them again
+when someone's handle changes; typing @ suggests people by name and handle now and inserts their handle now.
+
 ## Inbox notes
 
 Who hears about what is worked out in the browser by pure functions (`src/data/notify.ts`): the new assignee, anyone
@@ -276,7 +291,7 @@ to the Edge Function `github-webhook` in the same Supabase project. The function
 (bundled by `bun run deploy:github`): it checks the signature, works out what the event means (opened or ready: In
 Review; merged: Done) and which refs it mentions, and calls two SQL functions only the service role may run.
 `github_lookup` finds the workspaces that connected the repository (`github_repos`, Settings › GitHub), the author's
-profile there (by `github_id`, members only) and the issues. The function works out the Inbox notes with
+profile there (by `github_id`, members only), the members' handles (for mentions) and the issues. The function works out the Inbox notes with
 `src/data/notify.ts`, the same rules the app uses, and `github_apply` moves the issues in one transaction with
 `sprawniej.actor` set to the author and `sprawniej.via` to the pull request, so the triggers write history in their
 name with a link, the broadcast reaches open browsers and `c_check_note` checks the notes. Nothing moves backwards,

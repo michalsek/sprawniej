@@ -12,7 +12,7 @@ Press **Join workspace**, then:
    GitHub** if you see it and have a GitHub account. The invite link lets you in, so you don't need a sign-up code.
    Already have an account? Choose **Sign in** instead.
 2. **Pick your name and handle** ("What should we call you?"). Teammates see your name on issues and comments, and
-   @mention you by your handle. The handle can't be changed later.
+   @mention you by your handle. You can change the handle later.
 
 That's it: the workspace opens. Each invite link works once, for 14 days. If yours was already used or has
 expired, ask whoever invited you for a new one.
@@ -48,6 +48,20 @@ another one later, open the menu under your name (bottom left) and choose **Swit
 
 To go by another name, open **Settings** (in the menu under your name) and type it under **Your account ›
 Profile**; it saves by itself. Your handle (@you) stays the same.
+
+### Your handle
+
+Teammates @mention you by your handle. To change it, open **Settings and people** and type a new one under **Your
+account**, next to the @. It saves when you press Enter or click somewhere else; `Esc` puts the old one back. A handle
+is letters, digits and dashes (up to 39), and it can't be one a teammate uses now. Capitals don't matter for that, and
+changing only the capitals of yours is fine.
+
+Changing it is the same everywhere you are, and your teammates see the new one at once. Your issues, comments,
+filters and history stay yours. What changes:
+- **Old mentions turn into plain text.** Where someone wrote your old handle, it no longer mentions you: no
+  highlight, and you don't hear about it. Nothing already written is changed.
+- **Someone else may take your old handle.** From then on, text that says it mentions them, not you.
+- Signing in doesn't change: your email, password and GitHub work as before.
 
 ### Ways to sign in
 
@@ -143,7 +157,8 @@ An **issue** is one piece of work: a task, a bug, an idea. Each has a short ID l
 - **Delete:** the `⋯` button next to the title, then **Delete issue**.
 - **Links and formatting:** paste a link and it becomes clickable. Select some words and paste a link to turn
   them into a link. Type `**bold**`, `- ` for a list, or `[] ` for a checklist, and it formats as you type.
-- **Mention someone:** type `@` and their name. They'll get a note in their Inbox.
+- **Mention someone:** type `@` and their name or handle. They'll get a note in their Inbox. A mention counts by the
+  handle someone has now (see Your handle).
 - **Point to another issue:** type its ID, like `ENG-7`. Hold `⌘` (or `Ctrl`) and click it to open it.
 
 ### Working at the same time as others

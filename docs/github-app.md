@@ -79,7 +79,8 @@ Supabase gives every function.
 `service_role`, not to `authenticated` or `anon`). For every workspace that connected the repository it returns: the
 connection, **the author's profile if they are a current member of that workspace**, and the issues the refs name
 (by team key and number, or by an old number in `former_refs`; archived issues are left alone) with what the notes
-need (status, creator, assignee, description, followers, comments' authors and text, the members' logins).
+need (status, creator, assignee, description, followers, comments' authors and text, the members' logins and handles,
+so a mention of someone's handle makes them a follower).
 
 **`github_apply(connection, actor, via, moves, notes, summary)`**, for the function only. In one transaction:
 checks the actor is a current member, sets `sprawniej.actor` (and the new `sprawniej.via`) for the transaction,
