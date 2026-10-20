@@ -7,6 +7,7 @@ import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmojiPicker } from '@/components/EmojiPicker'
+import { FavouriteButton } from '@/components/FavouriteButton'
 import { EmptyState } from '@/components/EmptyState'
 import { InlineText } from '@/components/InlineText'
 import { deleteProject, updateProject } from '@/data/actions'
@@ -21,7 +22,10 @@ import { StatusDot } from './ProjectProperties'
 import { useProgressIssues } from './useProjectIssues'
 import { PROJECT_STATUS_NAMES } from './status'
 
-/** one project in the list: its emoji changes in place, and ⋯ renames or deletes it */
+/** one project in the list: its emoji changes in place, the star keeps it in your sidebar, and ⋯ renames or deletes it */
+/** shown on hover or keyboard focus where there is a mouse, always on touch screens, and always when on */
+const STAR = '[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 aria-pressed:opacity-100'
+
 function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; lead?: Person }) {
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -57,23 +61,26 @@ function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; 
           </span>
         </Link>
       )}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${p.name}`} className="[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        {/* focus goes to the name field (or the dialog) next, not back to this button */}
-        <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-          <DropdownMenuItem onSelect={() => setTimeout(() => setRenaming(true))}>
-            <Pencil /> Rename
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => setConfirm(true)}>
-            <Trash2 /> Delete project
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <span className="flex items-center">
+        <FavouriteButton kind="project" id={p.id} name={p.name} className={STAR} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${p.name}`} className="[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          {/* focus goes to the name field (or the dialog) next, not back to this button */}
+          <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenuItem onSelect={() => setTimeout(() => setRenaming(true))}>
+              <Pencil /> Rename
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => setConfirm(true)}>
+              <Trash2 /> Delete project
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </span>
       <ConfirmDialog open={confirm} onOpenChange={setConfirm} title={`Delete “${p.name}”?`} confirm="Delete project" onConfirm={() => deleteProject(p.id)}>
         The project goes away for everyone. Its issues stay, just without a project.
       </ConfirmDialog>
@@ -115,7 +122,7 @@ export function ProjectsPage() {
         <span className="w-44">Lead</span>
         <span className="w-28">Target date</span>
         <span className="w-40">Progress</span>
-        <span className="w-8" />
+        <span className="w-16" />
       </div>
       {sorted.map((p) => {
         const { done, total } = projectProgress(p.id, issues)

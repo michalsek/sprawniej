@@ -7,6 +7,7 @@ import { useCrumbs } from '@/app/chrome'
 import { NotFound } from '@/app/NotFound'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
+import { FavouriteButton } from '@/components/FavouriteButton'
 import { PageHeader } from '@/components/PageHeader'
 import { deleteProject, updateProject } from '@/data/actions'
 import { projectProgress } from '@/data/select'
@@ -61,6 +62,7 @@ export function ProjectPage() {
             onName={(name) => updateProject(project.id, { name })}
             description={project.description}
             onDescription={(description) => updateProject(project.id, { description })}
+            aside={<FavouriteButton kind="project" id={project.id} />}
             menu={
               <>
                 <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(location.href).then(() => toast('Link copied'))}>

@@ -1,6 +1,7 @@
 /**
  * The list of saved views: emoji, name, description, owner. "New view" makes one. Each row's emoji can be changed
- * in place, and its ⋯ menu renames or deletes the view (the view's own page edits everything too).
+ * in place, its star keeps it in your sidebar, and its ⋯ menu renames or deletes the view (the view's own page edits
+ * everything too).
  */
 import { useState } from 'react'
 import { Link, useParams } from 'wouter'
@@ -10,6 +11,7 @@ import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmojiPicker } from '@/components/EmojiPicker'
+import { FavouriteButton } from '@/components/FavouriteButton'
 import { EmptyState } from '@/components/EmptyState'
 import { InlineText } from '@/components/InlineText'
 import { deleteView, updateView } from '@/data/actions'
@@ -18,6 +20,9 @@ import type { Person, View } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { NewViewDialog } from './NewViewDialog'
+
+/** shown on hover or keyboard focus where there is a mouse, always on touch screens, and always when on */
+const STAR = '[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 aria-pressed:opacity-100'
 
 function ViewRow({ view, owner }: { view: View; owner?: Person }) {
   const [renaming, setRenaming] = useState(false)
@@ -39,23 +44,26 @@ function ViewRow({ view, owner }: { view: View; owner?: Person }) {
         <PersonAvatar person={owner} login={view.owner} />
         <span className="truncate">{owner?.name ?? view.owner}</span>
       </span>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${view.name}`} className="[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
-            <MoreHorizontal />
-          </Button>
-        </DropdownMenuTrigger>
-        {/* focus goes to the name field (or the dialog) next, not back to this button */}
-        <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
-          <DropdownMenuItem onSelect={() => setTimeout(() => setRenaming(true))}>
-            <Pencil /> Rename
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem variant="destructive" onSelect={() => setConfirm(true)}>
-            <Trash2 /> Delete view
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <span className="flex items-center">
+        <FavouriteButton kind="view" id={view.id} name={view.name} className={STAR} />
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${view.name}`} className="[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
+              <MoreHorizontal />
+            </Button>
+          </DropdownMenuTrigger>
+          {/* focus goes to the name field (or the dialog) next, not back to this button */}
+          <DropdownMenuContent align="end" onCloseAutoFocus={(e) => e.preventDefault()}>
+            <DropdownMenuItem onSelect={() => setTimeout(() => setRenaming(true))}>
+              <Pencil /> Rename
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem variant="destructive" onSelect={() => setConfirm(true)}>
+              <Trash2 /> Delete view
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </span>
       <ConfirmDialog open={confirm} onOpenChange={setConfirm} title={`Delete “${view.name}”?`} confirm="Delete view" onConfirm={() => deleteView(view.id)}>
         The view goes away for everyone. Its issues stay as they are.
       </ConfirmDialog>
@@ -93,7 +101,7 @@ export function ViewsPage() {
       <div className="flex h-10 items-center border-b px-4 text-sm text-muted-foreground">
         <span>Name</span>
         <span className="ml-auto hidden w-56 sm:block">Owner</span>
-        <span className="w-8" />
+        <span className="w-16" />
       </div>
       {sorted.map((v) => (
         <ViewRow key={v.id} view={v} owner={people[v.owner]} />

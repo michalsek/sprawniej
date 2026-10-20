@@ -1,13 +1,15 @@
 /**
- * ⌘K (Ctrl K): search issues by ID or title, jump to any page, team, view or project, or run an action.
+ * ⌘K (Ctrl K): search issues by ID or title, jump to any page, team, view or project, or run an action (on a project
+ * or view page, also starring it).
  * We filter ourselves (not cmdk) so a workspace with thousands of issues stays quick: only the best matches show.
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation } from 'wouter'
-import { Box, Check, CircleHelp, Inbox, Layers, Monitor, Moon, PanelLeft, Settings, Sparkles, SquarePen, SquareStack, Sun, User } from 'lucide-react'
+import { Box, Check, CircleHelp, Inbox, Layers, Monitor, Moon, PanelLeft, Settings, Sparkles, SquarePen, SquareStack, Star, Sun, User } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { loadArchive } from '@/backend'
-import { setTheme } from '@/data/actions'
+import { setTheme, toggleFavourite } from '@/data/actions'
+import { isFavourite } from '@/data/favourites'
 import { searchIssues } from '@/data/search'
 import { isAdmin } from '@/data/select'
 import { findByRef, issueRef, useData } from '@/data/store'
@@ -37,10 +39,13 @@ interface Entry {
 /** words all three light or dark entries answer to; each has its own on top, so "dark" finds only Dark */
 const THEME_WORDS = 'theme appearance mode colours colors'
 
+/** the project or view whose page this is ("/project/01J…", "/view/01J…") */
+const PAGE = /^\/(project|view)\/([^/?#]+)/
+
 const matches = (e: Entry, q: string) => plain(q).split(/\s+/).every((w) => plain(`${e.label} ${e.words ?? ''}`).includes(w))
 
 function Palette() {
-  const [, navigate] = useLocation()
+  const [location, navigate] = useLocation()
   const [query, setQuery] = useState('')
   const close = () => usePalette.setState({ open: false })
   const issues = useData((s) => s.issues)
@@ -51,6 +56,9 @@ function Palette() {
   const settingsPages = useData(useShallow((s) => listedPages(PAGES, isAdmin(s), s)))
   const theme = useTheme((s) => s.choice)
   const go = (href: string) => () => navigate(href)
+  const [, kind, here] = PAGE.exec(location) ?? []
+  const page = useData((s) => (kind === 'project' ? s.projects[here] : kind === 'view' ? s.views[here] : undefined))
+  const starred = useData((s) => !!here && isFavourite(s, here))
 
   const pages: Entry[] = useMemo(
     () => [
@@ -82,6 +90,9 @@ function Palette() {
   )
   const actions: Entry[] = [
     { id: 'new', label: 'New issue', icon: <SquarePen />, run: () => openComposer(), shortcut: 'C' },
+    ...(page && (kind === 'project' || kind === 'view')
+      ? [{ id: 'favourite', label: starred ? 'Remove from favourites' : 'Add to favourites', words: `${page.name} star`, icon: <Star />, run: () => toggleFavourite(kind, here) }]
+      : []),
     { id: 'sidebar', label: 'Show or hide the sidebar', icon: <PanelLeft />, run: () => useChrome.getState().toggleSidebar() },
   ]
   // only when searched for ("dark", "light", "appearance"), so the list you open with stays short

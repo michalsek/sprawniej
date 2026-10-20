@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { useCrumbs } from '@/app/chrome'
 import { NotFound } from '@/app/NotFound'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
+import { FavouriteButton } from '@/components/FavouriteButton'
 import { PageHeader } from '@/components/PageHeader'
 import { deleteView, updateView } from '@/data/actions'
 import { useData } from '@/data/store'
@@ -52,6 +53,7 @@ export function ViewPage() {
             onName={(name) => updateView(view.id, { name })}
             description={view.description}
             onDescription={(description) => updateView(view.id, { description })}
+            aside={<FavouriteButton kind="view" id={view.id} />}
             menu={
               <>
                 <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(location.href).then(() => toast('Link copied'))}>
