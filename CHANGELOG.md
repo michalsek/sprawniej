@@ -4,6 +4,14 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.4.0: Settings has its own pages
+*2026-10-20*
+
+- Settings has its own menu in place of the sidebar: Your account (Profile, Ways to sign in) and Workspace (General, Members, Invite links, Teams, Labels, Archive, GitHub and more)
+- Each page has its own address, so you can bookmark it or send a link to it. Old links to Settings still work
+- A new Teams page lists every team: join one, make one, or edit, leave or delete one
+- Back to Sprawniej at the top of the menu takes you back to where you were
+
 ## 2.3.0: Pull requests on the issue
 *2026-10-20*
 

@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.3.0'
+export const APP_VERSION = '2.4.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,17 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.4.0',
+    date: '2026-10-20',
+    title: 'Settings has its own pages',
+    notes: [
+      'Settings has its own menu in place of the sidebar: Your account (Profile, Ways to sign in) and Workspace (General, Members, Invite links, Teams, Labels, Archive, GitHub and more)',
+      'Each page has its own address, so you can bookmark it or send a link to it. Old links to Settings still work',
+      'A new Teams page lists every team: join one, make one, or edit, leave or delete one',
+      'Back to Sprawniej at the top of the menu takes you back to where you were',
+    ],
+  },
   {
     version: '2.3.0',
     date: '2026-10-20',
