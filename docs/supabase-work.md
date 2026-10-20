@@ -32,6 +32,11 @@ with a reason.
   "before user created" Auth hook (`private.before_user_created`, switched on with a `config push` of a config.toml
   that declares only the hook, so the remote GitHub keys and other settings stay); GitHub can't carry a code, so its
   accounts get no profile (trigger `a_let_in`) until `use_signup_code()`, and are deleted after 7 days without one.
+- 2026-10-20: GitHub pull requests move issues (2.2.0, the "Later" item of plan section 11; design in
+  docs/github-app.md). The App is "Gitniej (Sprawniej)", private to the account; the Edge Function `github-webhook`
+  never calls GitHub (no private key), reaches the database only through `github_lookup`/`github_apply` (service role),
+  and moves issues only for authors who are members with GitHub linked. Other events the App is subscribed to get 204
+  unread. Pull request links on the issue page are left for later.
   The hook's refusal reaches supabase-js as status 403, code `unknown`, with our sentence as the message, so the app
   recognises the sentences themselves (`SIGNUP_REFUSALS`). Accepted advisor warning, as above, for the two new
   signed-in functions `signup_code_needed` and `use_signup_code`.

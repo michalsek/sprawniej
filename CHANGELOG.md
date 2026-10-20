@@ -4,6 +4,14 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.2.0: Pull requests move issues
+*2026-10-20*
+
+- Mention an issue like ENG-12 in a pull request’s branch name, title or description: it moves to In Review when the pull request opens or is ready for review, and to Done when it’s merged
+- The issue’s history says who moved it and links to the pull request, and everyone following the issue gets a note
+- Admins and owners connect repositories in Settings › GitHub, and see what the latest pull request did
+- It works for your pull requests once GitHub is one of your ways to sign in (Settings › Your account)
+
 ## 2.1.0: Sign-up codes
 *2026-10-20*
 

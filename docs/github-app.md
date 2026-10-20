@@ -4,7 +4,7 @@ When a pull request that mentions an issue (`ENG-12`) opens or becomes ready for
 In Review. When it is merged, the issue moves to Done. The change is written as the person who opened the pull
 request, so the issue's history and their teammates' Inbox show them, with a link to the pull request.
 
-Status: **agreed and built** (2.1.0). The user agreed section 6 on 2026-10-20: the author rule, GitHub sign-in is
+Status: **agreed and built** (2.2.0). The user agreed section 6 on 2026-10-20: the author rule, GitHub sign-in is
 on, the wording, pull request links on the issue page later. The steps for a project are in docs/supabase-setup.md
 (GitHub: pull requests move issues). The team's App is **Gitniej (Sprawniej)**, https://github.com/apps/gitniej-sprawniej
 (`VITE_GITHUB_APP_URL`).
@@ -186,4 +186,4 @@ with `fetch` and the REST API, so `@supabase/supabase-js` stays inside `src/back
 4. **Links on the issue page** (an `issue_pull_requests` table: the pull requests that mention an issue, shown under
    its title, live) are left for later. They need a new shared table with realtime, the read cache and a new piece of
    the issue page, about as much work again as the rest; the history link already says why an issue moved.
-5. **Release:** 2.1.0 (MINOR). The migration only adds a table and replaces two functions; older apps keep working.
+5. **Release:** 2.2.0 (MINOR, after sign-up codes took 2.1.0). The migration only adds a table and replaces two functions; older apps keep working.
