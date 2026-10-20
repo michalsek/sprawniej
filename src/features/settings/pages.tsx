@@ -16,6 +16,7 @@ import type { ComponentType } from 'react'
 // one icon a line, so pages added side by side don't change the same line
 import {
   Archive,
+  CircleDot,
   CircleUser,
   Contact,
   Download,
@@ -40,6 +41,7 @@ import { GeneralPage } from './pages/GeneralPage'
 import { InvitesPage } from './pages/InvitesPage'
 import { LinearPeoplePage } from './pages/LinearPeoplePage'
 import { ProfilePage } from './pages/ProfilePage'
+import { StatusesPage } from './pages/StatusesPage'
 import { TeamsPage } from './pages/TeamsPage'
 import { SignInWays } from './SignInWays'
 import { hasUnlinked } from './unlinked'
@@ -137,6 +139,17 @@ export const PAGES: SettingsPage[] = [
     icon: Tags,
     who: 'everyone',
     component: LabelsSettings,
+  },
+  {
+    id: 'statuses',
+    group: 'workspace',
+    path: '/settings/workspace/statuses',
+    title: 'Statuses',
+    description: 'Every issue has a status. Each status belongs to a group, and the group decides where the issue shows and when it counts as finished.',
+    icon: CircleDot,
+    who: 'everyone',
+    component: StatusesPage,
+    words: 'status statuses columns workflow groups hide rename colour color',
   },
   {
     id: 'archive',

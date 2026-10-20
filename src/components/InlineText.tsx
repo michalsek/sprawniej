@@ -24,9 +24,12 @@ interface Props {
   autoFocus?: boolean
   /** after you leave the field (renaming in a list goes back to showing the name) */
   onDone?: () => void
+  /** hears what you type while it isn't saved yet, and null once it is saved or put back (to say why it waits) */
+  onTyping?: (text: string | null) => void
+  maxLength?: number
 }
 
-export function InlineText({ value, onSave, placeholder, label, className, lines = 'one', required, allowed, autoFocus, onDone }: Props) {
+export function InlineText({ value, onSave, placeholder, label, className, lines = 'one', required, allowed, autoFocus, onDone, onTyping, maxLength }: Props) {
   const multiline = lines === 'many'
   const [text, setText] = useState(value)
   /** you typed something that isn't saved yet: a teammate's change waits until it is */
@@ -48,6 +51,7 @@ export function InlineText({ value, onSave, placeholder, label, className, lines
     if (allowed && !allowed(next)) return
     typed.current = null
     setTyping(false)
+    onTyping?.(null)
     if (next !== value) onSave(next)
   }
   const saveRef = useRef(save)
@@ -62,6 +66,7 @@ export function InlineText({ value, onSave, placeholder, label, className, lines
     clearTimeout(timer.current)
     typed.current = null
     setTyping(false)
+    onTyping?.(null)
     setText(value)
   }
 
@@ -70,6 +75,7 @@ export function InlineText({ value, onSave, placeholder, label, className, lines
     setText(next)
     setTyping(true)
     typed.current = next
+    onTyping?.(next)
     clearTimeout(timer.current)
     timer.current = setTimeout(() => saveRef.current(), SAVE_AFTER)
   }
@@ -91,7 +97,18 @@ export function InlineText({ value, onSave, placeholder, label, className, lines
   }
   const look = cn('w-full resize-none bg-transparent outline-none placeholder:text-muted-foreground/70', className)
   return lines === 'one' ? (
-    <input value={text} placeholder={placeholder} aria-label={label} onChange={change} onFocus={(e) => autoFocus && e.target.select()} onBlur={blur} onKeyDown={key} className={look} autoFocus={autoFocus} />
+    <input
+      value={text}
+      placeholder={placeholder}
+      aria-label={label}
+      onChange={change}
+      onFocus={(e) => autoFocus && e.target.select()}
+      onBlur={blur}
+      onKeyDown={key}
+      className={look}
+      autoFocus={autoFocus}
+      maxLength={maxLength}
+    />
   ) : (
     <textarea
       value={text}

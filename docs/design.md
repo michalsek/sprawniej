@@ -38,8 +38,17 @@ button (Delete) use `text-destructive-text`.
 A status icon's **shape says its group** (its category, below), and its **colour is the status's own**: the workspace
 picks it from the same calm set as labels (`STATUS_COLORS`: two greys and the label colours). The statuses a workspace
 starts with have the colours below, and while a status keeps its group's starting colour it is painted with the
-theme's `--status-*` for that group (pull request icons use them too), so a theme can shade them. Two statuses of
-one group look alike but for their colour and name; never invent a new shape for a status.
+theme's `--status-*` for that group (pull request icons use them too), so a theme can shade them. Any other colour
+is painted a little darker in Light (`--status-shade`, `paintColor` in `src/model/status.ts`), so pale ones (yellow,
+pink, the light grey) still read on a light page; `tests/contrast.test.ts` checks every one at 3:1 in both looks. Two
+statuses of one group look alike but for their colour and name; never invent a new shape for a status.
+
+**Settings › Statuses** (`StatusesSettings`, one component for every kind of status) lists the groups in order, each
+with a small grey heading and one line about what it decides, then its statuses as rows: a drag handle, the colour
+button (the same popover as labels, `ColorPicker`), the name edited in place (a plain message under it while it is
+blank or taken), **Default** on the first shown one, how many issues have it, and **Hide** / **Show** (off, with the
+reason, for the last shown status of a group). **Add status** ends each group. On screen it says "group", never
+"category".
 
 | Group | Icon |
 | --- | --- |

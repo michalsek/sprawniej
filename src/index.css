@@ -41,6 +41,8 @@
   --status-review: #26975f;
   --status-done: #5e6ad2;
   --status-canceled: #80858e;
+  /* how much darker a colour people picked for a status is painted (paintColor), so pale ones read on a light page */
+  --status-shade: black 30%;
   --urgent: #d9661a;
   /* due dates: overdue, and due in the next few days */
   --due-overdue: #b91c1c;
@@ -92,6 +94,7 @@
   --status-review: #4cb782;
   --status-done: #5e6ad2;
   --status-canceled: #8a8f98;
+  --status-shade: black 0%;
   --urgent: #f2994a;
   /* Tailwind's red-400, amber-300 and red-300, as these were before Light came */
   --due-overdue: oklch(70.4% 0.191 22.216);

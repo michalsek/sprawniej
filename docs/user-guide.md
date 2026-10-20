@@ -35,8 +35,8 @@ Open **Settings** from the menu under your name (bottom left), or press `⌘K` a
 - **Your account:** **Profile** (your name and @handle, light or dark, switching workspace, signing out) and **Ways
   to sign in**.
 - **Workspace:** **General** (the workspace's name, leaving it), **Members**, **Invite links**, **People from Linear**
-  (while some haven't joined), **Teams**, **Labels**, **Archive**, **GitHub**, **Notion** and **Import from Linear**.
-  Invite links and Import from Linear are only for owners and admins.
+  (while some haven't joined), **Teams**, **Labels**, **Statuses**, **Archive**, **GitHub**, **Notion** and **Import from
+  Linear**. Invite links and Import from Linear are only for owners and admins.
 
 **Back to Sprawniej** at the top of the menu takes you back to where you were.
 
@@ -199,6 +199,9 @@ stays. Two people adding issues at once always get different numbers.
 
 ### Statuses
 
+Every issue has a status, and every status belongs to one of seven **groups**. A workspace starts with one status in
+each, named like its group:
+
 - **Backlog**: we might do it some day.
 - **Todo**: we plan to do it soon.
 - **In Progress**: someone is working on it.
@@ -206,6 +209,25 @@ stays. Two people adding issues at once always get different numbers.
 - **Done**: finished.
 - **Canceled**: we decided not to do it.
 - **Duplicate**: someone already reported the same thing.
+
+The group decides what a status means: which tab shows the issue (Backlog, or Active for Todo, In Progress and In
+Review), and whether it counts as finished (Done, Canceled and Duplicate are archived after a while). Within a group,
+your workspace can have as many statuses as it likes, say **Testing** and **Design review** in In Progress, or
+**Released** in Done. Pick one in the status menu (or press `S`), drag a card into its column, or filter by it.
+
+**Settings › Statuses** is where anyone in the workspace adds, renames, recolours, reorders and hides statuses,
+group by group. Everything saves as you go:
+
+- **Add status** at the end of a group makes a new one, ready to name. Two statuses can't have the same name.
+- The dot opens the colours; the name changes in place.
+- Drag the handle (⠿) to change the order, or focus it and press `Space`, the arrow keys, then `Space` again. The order
+  is the order of menus, filters and board columns. The first status of a group (marked **Default**) is where an
+  issue lands when only its group is known: GitHub, the Linear import, and teammates on an older version of
+  Sprawniej put issues there.
+- **Hide** takes a status out of the menus. Issues that have it keep it and still show it, and so do their history
+  and the filters; **Show** brings it back. Statuses are never deleted. Each group keeps at least one status that
+  isn't hidden, so the last one can't be hidden.
+- Next to each status: how many issues have it now.
 
 ### Priority
 
@@ -256,8 +278,8 @@ follows it, and you can add or remove teammates there too.
 
 Every list of issues can be shown two ways. Switch with **List / Board** at the top right.
 
-- **List:** issues grouped by status. Sub-issues sit just under their parent.
-- **Board:** a column per status, with cards. Empty columns wait under **Hidden columns** on the right, together
+- **List:** issues grouped by status, in the order of Settings › Statuses. Sub-issues sit just under their parent.
+- **Board:** a column per status, with cards. A hidden status gets a column only while an issue in view has it. Empty columns wait under **Hidden columns** on the right, together
   with statuses the tab leaves out (like **Done** on the Active tab). Drop a card on one to move the issue there; the
   column then shows up with that card in it.
 
@@ -323,6 +345,8 @@ Assignee filter on My issues and no Project filter on a project's page.
 **Subscribers** finds the issues someone follows: ones they made, are assigned to, commented on, were mentioned in or
 subscribed to. Each filter shows as a chip. Click a chip to change it, or its **×** to remove it. Inside one filter,
 any of the chosen values counts ("Todo or In Progress"); several filters must all match ("Todo, and assigned to Ana").
+In the Status filter, ticking every status of a group keeps the whole group, so a status added to it later is in too;
+ticking only some keeps just those.
 
 Filters you set on a team's page or on My issues are just for you, and go away when you leave the page. To keep
 them, press **Save as view**.
@@ -371,6 +395,9 @@ When your team connects a GitHub repository, its pull requests move the issues t
 
 - a pull request opens, or a draft becomes ready for review: the issue moves to **In Review**;
 - it's merged: the issue moves to **Done**.
+
+If your workspace has more than one status in a group, the issue moves to the group's first one (marked **Default**
+in Settings › Statuses). An issue already in any In Review status isn't moved to review again.
 
 Mention an issue by its number, like `ENG-12`, in the branch name (`eng-12-fix-login` works too), the pull request's
 title or its description. One pull request can move several issues. An issue that moved to another team is found by

@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { Plus, Search, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
+import { ColorPicker } from '@/components/ColorPicker'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { InlineText } from '@/components/InlineText'
 import { LabelDot } from '@/components/LabelChip'
@@ -12,31 +13,17 @@ import { useData } from '@/data/store'
 import type { Label } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
-import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
 import { fuzzy } from '@/lib/fuzzy'
-import { cn } from '@/lib/utils'
 
 function ColorButton({ label }: { label: Label }) {
   return (
-    <Popover>
-      <PopoverTrigger className="flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-accent/60" aria-label={`Colour of ${label.name}`}>
-        <LabelDot color={label.color} className="size-3" />
-      </PopoverTrigger>
-      <PopoverContent align="start" className="grid w-auto grid-cols-5 gap-1 p-2">
-        {LABEL_COLORS.map((c) => (
-          <button
-            key={c}
-            type="button"
-            onClick={() => updateLabel(label.id, { color: c })}
-            className={cn('flex size-8 items-center justify-center rounded-md hover:bg-accent', c === label.color && 'bg-accent')}
-            aria-label={`Use ${c}`}
-            aria-pressed={c === label.color}
-          >
-            <LabelDot color={c} className="size-3.5" />
-          </button>
-        ))}
-      </PopoverContent>
-    </Popover>
+    <ColorPicker
+      value={label.color}
+      colors={LABEL_COLORS}
+      onPick={(color) => updateLabel(label.id, { color })}
+      label={`Colour of ${label.name}`}
+      swatch={(c, where) => <LabelDot color={c} className={where === 'button' ? 'size-3' : 'size-3.5'} />}
+    />
   )
 }
 

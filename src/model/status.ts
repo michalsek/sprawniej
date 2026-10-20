@@ -58,12 +58,15 @@ const categoryFor = (kind: StatusKind, category: string): Category | undefined =
 export const seedColor = (kind: StatusKind, category: string): string => categoryFor(kind, category)?.seed ?? STATUS_COLORS[0]
 
 /**
- * The colour to paint a status in: a status that still has its category's starting colour follows the theme (the
- * category's `--status-*`), so a light theme can give it a lighter or darker shade; any other colour is the status's own.
+ * The colour to paint a status in. One that still has its category's starting colour follows the theme (the
+ * category's `--status-*`, deeper in Light); any other picked colour is the status's own, shaded by the theme
+ * (`--status-shade`: a little darker in Light, so pale ones like yellow and pink still read on a light page; as it is
+ * in Dark). A colour that is already a theme colour (`var(…)`) is used as it is.
  */
 export function paintColor(status: { kind?: StatusKind; category: string; color: string }): string {
   const c = categoryFor(status.kind ?? 'issue', status.category)
-  return c && status.color === c.seed ? c.color : status.color
+  if (c && status.color === c.seed) return c.color
+  return /^#[0-9a-f]{6}$/i.test(status.color) ? `color-mix(in oklab, ${status.color}, var(--status-shade))` : status.color
 }
 
 /** The tabs on a team's Issues page. */

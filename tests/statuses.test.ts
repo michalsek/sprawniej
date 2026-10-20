@@ -83,10 +83,13 @@ describe('hiding and naming', () => {
 
 test('a status that keeps its category’s starting colour is painted in the theme’s colour; any other in its own', () => {
   expect(paintColor(statuses[statusIdOf('todo')])).toBe('var(--status-todo)')
-  expect(paintColor({ ...statuses[statusIdOf('todo')], color: '#eb5757' })).toBe('#eb5757')
+  const shaded = (hex: string) => `color-mix(in oklab, ${hex}, var(--status-shade))`
+  expect(paintColor({ ...statuses[statusIdOf('todo')], color: '#eb5757' })).toBe(shaded('#eb5757'))
   // another category's starting colour is just a colour
-  expect(paintColor({ ...statuses[statusIdOf('todo')], color: '#5e6ad2' })).toBe('#5e6ad2')
-  expect(paintColor(statuses.testing)).toBe('#bb87fc')
+  expect(paintColor({ ...statuses[statusIdOf('todo')], color: '#5e6ad2' })).toBe(shaded('#5e6ad2'))
+  expect(paintColor(statuses.testing)).toBe(shaded('#bb87fc'))
+  // a theme colour stays as it is
+  expect(paintColor({ category: 'todo', color: 'var(--status-todo)' })).toBe('var(--status-todo)')
 })
 
 describe('the Status filter', () => {
