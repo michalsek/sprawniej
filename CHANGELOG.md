@@ -4,6 +4,12 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.7.1: Getting ready for your own statuses
+*2026-10-20*
+
+- Behind the scenes, each workspace now keeps its own list of statuses. Everything looks and works as before
+- Soon you can add, rename, recolour, reorder and hide statuses in Settings
+
 ## 2.7.0: Light and dark
 *2026-10-20*
 
