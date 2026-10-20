@@ -194,10 +194,13 @@ function Connected({ conn, reload }: { conn: NotionConnection; reload: () => voi
   const [busy, setBusy] = useState<'team' | 'replace' | 'disconnect'>()
   const [confirm, setConfirm] = useState<'replace' | 'disconnect'>()
   const [address, setAddress] = useState<string>()
-  /** the team just picked, for the connection as it was read then: shown until the connection is read again */
+  /**
+   * the team just picked, for the connection as it was read then: shown while it saves (a read meanwhile, on focus,
+   * may still have the old one) and until the connection is read again
+   */
   const [picked, setPicked] = useState<{ key: string; of: NotionConnection }>()
   const saved = conn.teamKey && teams[conn.teamKey] ? conn.teamKey : undefined
-  const team = picked?.of === conn ? picked.key : saved
+  const team = picked && (picked.of === conn || busy === 'team') ? picked.key : saved
 
   async function run(what: NonNullable<typeof busy>, work: () => Promise<void>, fallback: string) {
     setBusy(what)
