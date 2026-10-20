@@ -203,9 +203,14 @@ read -rs ADDR                                       # paste the address, then En
 curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @tests/fixtures/notion-page.json
 # the same page again: {"issue": "ENG-1", "new": false}
 curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @tests/fixtures/notion-page.json
-# a new page, in the trash, another team, the test accounts' emails
+# a new page (another id)
 jq --arg id "$(uuidgen | tr A-Z a-z)" '.data.id = $id' tests/fixtures/notion-page.json | curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @-
+# a page in the trash: {"skipped": …}
 jq '.data.in_trash = true' tests/fixtures/notion-page.json | curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @-
+# another team, and a test account as the author (a new id each time, or it's the same page)
+jq --arg id "$(uuidgen | tr A-Z a-z)" --arg who "dbtest-<run>-notion@<domain>" \
+  '.data.id = $id | .data.properties.Team.select.name = "DES" | .data.properties["Created by"].created_by.person.email = $who' \
+  tests/fixtures/notion-page.json | curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @-
 # the key in a header instead of the address
 curl -s -X POST "${ADDR%%&k=*}" -H "X-Sprawniej-Secret: ${ADDR##*&k=}" -H 'Content-Type: application/json' --data @tests/fixtures/notion-page.json
 unset ADDR

@@ -199,14 +199,15 @@ them with `-- @regex notion-…` markers, which `tests/statusLists.test.ts` comp
 - `src/backend/notion.ts`: `getNotion(ws)` (never the hash), `connectNotion(ws, team)`, `newNotionAddress(id)`,
   `setNotionTeam(id, team)`, `disconnectNotion(id)`, and the pure `notionAddress(base, id, secret)` and `readLast`.
   Errors in plain words (`RULES.notNotion`, "Notion is already connected.", "That team is gone. Pick another.").
-- `src/data/actions.ts`: `connectNotion(teamKey)` (gives the address), `newNotionAddress()`, `setNotionTeam(teamKey)`,
-  `disconnectNotion()`, each for admins only. `window.sprawniej.actions` has them, for scripted checks.
+- `src/data/actions.ts`: `connectNotion(teamKey)` (gives the address), `newNotionAddress(id)`, `setNotionTeam(id,
+  teamKey)`, `disconnectNotion(id)` (`id`: the connection's, from `getNotion`), each for admins only.
+  `window.sprawniej.actions` has them, for scripted checks.
 - History (`src/data/history.ts`): `via` is a pull request or `{"notion": {"url"}}` (links on notion.so or notion.site
   only); `createdVia()` reads the `created` event; labels put on by nobody right after nobody made the issue are part
   of making it.
 - The issue page: the first activity line says "**Ana** created the issue from [Notion]" or "Created from [Notion]"
-  (with the Notion mark, `src/components/NotionMark.tsx`); a change by nobody through a page shows "Notion" as who;
-  the sidebar says "Created Oct 20" with no "by" when nobody made it.
+  (with the Notion mark, `src/components/NotionMark.tsx`); the sidebar says "Created Oct 20" with no "by" when nobody
+  made it.
 - Inbox: `from: 'notion'` (kept in the row's `extra`): a note with no actor shows "Notion" with the mark.
 - **Settings › Notion** (`src/features/settings/NotionSettings.tsx`, the page after GitHub in `pages.tsx`; its
   words for the last page are in `notionText.ts`):

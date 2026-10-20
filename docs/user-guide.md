@@ -437,7 +437,9 @@ After its issue is deleted, the page makes a new one. Pages in Notion's trash ar
 - "Last page wasn't added: pick a team", or "The team for Notion pages was deleted": pick another team, then resume
   it in Notion.
 - "Pages were coming too fast": more than 100 pages in 10 minutes. Wait a few minutes, then resume it.
-- The address was replaced or Notion was disconnected: paste the new address into Notion, then resume it.
+- Neither of those? Then Notion has an old address: it was replaced, or Notion was disconnected. Settings › Notion
+  doesn't hear about pages sent to an old address, so it stays as it was. Paste the current address into Notion
+  (connect again first if it was disconnected), then resume it.
 
 **Replace address** makes a new address and stops the old one at once (if you think someone else has it). Copy it
 and paste it into Notion in place of the old one. **Disconnect** stops pages becoming issues; issues already made
