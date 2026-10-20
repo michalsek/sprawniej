@@ -200,7 +200,8 @@ begin
   select * into c from public.notion_connections where id = p_connection for update;
   if not found then raise exception 'There is no such connection.' using errcode = 'P0002'; end if;
   if c.secret_hash is distinct from p_secret_hash then
-    raise exception 'This address was replaced.' using errcode = '42501';
+    -- its own code, so the webhook answers as for a wrong key (src/notion/handler.ts)
+    raise exception 'This address was replaced.' using errcode = 'SP020';
   end if;
   if page !~ page_re then raise exception 'That isn''t a Notion page.' using errcode = '22023'; end if;
   -- not Notion's, or too long (the webhook does the same): one made from the page's id

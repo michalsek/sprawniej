@@ -173,7 +173,7 @@ describe.skipIf(!enabled)('Notion', () => {
     const secret = await ok(ana.db.rpc('notion_new_secret', { p_connection: conn }))
     expect(secret).toMatch(/^[0-9a-f]{64}$/)
     expect(await lookup(conn, hash)).toEqual({ state: 'wrong_key' })
-    await expect(apply({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: eng } })).rejects.toThrow(/This address was replaced/)
+    await expect(apply({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: eng } })).rejects.toThrow(/SP020: This address was replaced/)
     await found(conn, await sha256Hex(secret))
     const after = await ok(ana.db.from('notion_connections').select('secret_set_at').eq('id', conn).single())
     expect(after.secret_set_at > before.secret_set_at).toBe(true)

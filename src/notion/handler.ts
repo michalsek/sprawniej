@@ -58,6 +58,9 @@ class DbError extends Error {
 
 const WRONG_KEY = 'This address was replaced. Paste the new one from Settings › Notion.'
 
+/** what notion_apply raises when the key's hash no longer matches */
+const ADDRESS_REPLACED = 'SP020'
+
 /** a place before every issue in the team, as a new issue made in the app gets */
 function topOf(first: string | null): string {
   try {
@@ -166,7 +169,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   } catch (e) {
     // the address was replaced between the two calls: as for a wrong key. Anything else (the author left meanwhile)
     // fails, and resuming the automation sends the page again.
-    if (e instanceof DbError && e.code === '42501' && /replaced/.test(e.message)) return json(401, { error: WRONG_KEY })
+    if (e instanceof DbError && e.code === ADDRESS_REPLACED) return json(401, { error: WRONG_KEY })
     throw e
   }
   if ('problem' in r) {

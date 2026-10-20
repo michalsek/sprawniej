@@ -113,7 +113,8 @@ browsers.
   members, the members whose confirmed sign-in email is one of `emails` (at most 20; the emails never leave the
   database except as that match) and the labels.
 - `notion_apply(connection, secret_hash, page, actor, issue, notes)`, in one transaction:
-  1. locks the connection and checks the hash (`42501` "This address was replaced.");
+  1. locks the connection and checks the hash (`SP020` "This address was replaced.", which the webhook answers with
+     401 like a wrong key);
   2. checks the page id (32 hex digits) and the address (on notion.so or notion.site, otherwise one made from the id);
   3. **the same page**: answers `{"issue", "new": false, "archived"}` and makes nothing;
   4. **too many**: 100 or more pages made through this connection in 10 minutes: `{"problem": "busy"}`;
