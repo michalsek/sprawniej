@@ -125,12 +125,13 @@ export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Per
               <span className={label}>Who can use it</span>
               <Segmented<Who>
                 label="Who can use it"
+                fill
                 value={who}
                 onChange={setWho}
                 options={[
                   { value: 'one', label: 'One person' },
-                  { value: 'several', label: 'Several people' },
-                  { value: 'anyone', label: 'Anyone' },
+                  { value: 'several', label: 'Several', name: 'Several people' },
+                  { value: 'anyone', label: 'Anyone', name: 'Anyone with the link' },
                 ]}
               />
               {who === 'several' && (
@@ -154,6 +155,7 @@ export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Per
             <span className={label}>How long</span>
             <Segmented<Length>
               label="How long"
+              fill
               value={length}
               onChange={setLength}
               options={[

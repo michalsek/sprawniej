@@ -15,6 +15,7 @@ import { ROLE_NAMES } from '@/data/roles'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { personById } from '@/data/people'
 import { useNow } from '@/lib/useNow'
 import { copy } from './copy'
@@ -112,12 +113,29 @@ export function InviteLinks({ invites: { invites, state, reload }, onCreate }: {
               <li key={i.id} className="flex items-center gap-3 py-1.5">
                 <span className={cn('min-w-0 flex-1', !working && 'opacity-60')}>
                   <span className="block truncate font-medium">{title}</span>
-                  <span className="block truncate text-sm text-muted-foreground">
-                    {ROLE_NAMES[i.role]}
-                    {by && ` · made by ${by.name}`} ·{' '}
-                    {working ? <span title={`Works until ${untilText(i.expiresAt)}`}>{expiresText(i.expiresAt, now)}</span> : STOPPED[st]}
-                    {i.uses.length > 0 && ' · '}
-                    <Joined uses={i.uses} />
+                  {/* on a phone two lines, so when it ends and who joined always show; wider, one line where only the first part shortens */}
+                  <span className="block text-sm text-muted-foreground sm:flex sm:gap-1">
+                    <span className="block min-w-0 truncate">
+                      {ROLE_NAMES[i.role]}
+                      {by && ` · made by ${by.name}`}
+                    </span>
+                    <span className="block shrink-0 sm:whitespace-nowrap">
+                      <span className="hidden sm:inline">· </span>
+                      {working ? (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span tabIndex={0} className="rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+                              {expiresText(i.expiresAt, now)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Works until {untilText(i.expiresAt)}</TooltipContent>
+                        </Tooltip>
+                      ) : (
+                        STOPPED[st]
+                      )}
+                      {i.uses.length > 0 && ' · '}
+                      <Joined uses={i.uses} />
+                    </span>
                   </span>
                 </span>
                 {!working ? (
