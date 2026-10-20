@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { columnBeside, nearestCard } from '@/features/board/columnsDrag'
+import { arrowTarget, columnBeside, nearestCard } from '@/features/board/columnsDrag'
 import { dropMove, type Drop } from '@/features/projects/drop'
 
 const drop = (more: Partial<Drop>): Drop => ({ id: 'p', from: 'planned', to: 'planned', ids: ['a', 'p', 'b'], was: 1, over: 'planned', closed: new Set(['on-hold']), ...more })
@@ -37,5 +37,16 @@ describe('arrow keys between columns', () => {
     expect(columnBeside([...columns, { key: 'later', left: 700, top: 500 }], { left: 350 }, 1, 480)).toBe('later')
     expect(nearestCard([{ id: 'top', top: 50 }, { id: 'lower', top: 200 }], 180)).toBe('lower')
     expect(nearestCard([], 180)).toBeUndefined()
+  })
+
+  test('the arrow keys start from a hidden column the card is over; Left in the first column stays; Right past the last is dnd-kit’s', () => {
+    const board = [...columns, { key: 'hidden', left: 1050, top: 0 }]
+    const keys = (side: -1 | 1, live: string, over?: string) => arrowTarget({ side, live, over, closed: new Set(['hidden']), columns: board, top: 100 })
+    expect(keys(-1, 'paused', 'hidden')).toBe('paused')
+    expect(keys(-1, 'paused', 'paused')).toBe('planned')
+    expect(keys(-1, 'backlog')).toBe('stay')
+    expect(keys(1, 'paused')).toBeUndefined()
+    // a list: groups stacked, no sides
+    expect(arrowTarget({ side: -1, live: 'todo', over: 'todo', closed: new Set(), columns: [{ key: 'todo', left: 0, top: 0 }, { key: 'done', left: 0, top: 400 }], top: 100 })).toBeUndefined()
   })
 })

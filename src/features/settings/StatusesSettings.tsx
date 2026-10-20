@@ -6,7 +6,7 @@
  * On screen this says "group", never "category" (CLAUDE.md, writing). One component for every kind of status; what
  * differs per kind (issues, projects) is in KIND_TEXT.
  */
-import { useMemo, useState, type ReactElement } from 'react'
+import { useMemo, useRef, useState, type ReactElement } from 'react'
 import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, useSensor, useSensors, type Announcements, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -159,9 +159,19 @@ function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, belo
 /** why a button can't be used, in a tooltip that opens on keyboard focus as surely as on hover */
 function Reason({ text, children }: { text: string; children: ReactElement }) {
   const [open, setOpen] = useState(false)
+  // a click focuses the button too; that focus doesn't open it (hovering already did, and the click closes it)
+  const pressed = useRef(false)
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
-      <TooltipTrigger asChild onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}>
+      <TooltipTrigger
+        asChild
+        onPointerDown={() => (pressed.current = true)}
+        onFocus={() => {
+          if (!pressed.current) setOpen(true)
+          pressed.current = false
+        }}
+        onBlur={() => setOpen(false)}
+      >
         {children}
       </TooltipTrigger>
       <TooltipContent>{text}</TooltipContent>

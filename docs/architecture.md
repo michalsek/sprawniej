@@ -450,7 +450,10 @@ column or group also changes that field (status, assignee, priority or project),
 Dragging is done with dnd-kit. What every board and list shares is in `src/features/board/columnsDrag.ts`: the
 sensors (mouse, touch press-and-hold, keyboard Space), the collision recipe for several columns, and the live order
 while a card moves between columns. `src/features/issues/useIssueDrag.ts` (issues) and
-`src/features/projects/useProjectDrag.ts` (the project board) decide what a drop changes. While you drag, the order on
+`src/features/projects/useProjectDrag.ts` (the project board) decide what a drop changes. With the keyboard, Left
+and Right go to the column beside, next to the card nearest in height (`arrowTarget`); from a hidden column, Left
+comes back to the last open one, and in the first column Left does nothing. A project let go over a hidden status's
+column goes back where it came from and nothing is saved (`dropMove`). While you drag, the order on
 screen is local state; nothing is saved until you drop. In a list, sub-issues sit under their parent, so a dropped issue gets its key
 from the nearest issues at its own level (top-level issues among top-level ones, sub-issues among their siblings).
 Reordering only means something in Manual order; under another ordering a drop can still change the group, and

@@ -45,13 +45,41 @@ export function columnBeside(columns: readonly { key: string; left: number; top:
   return there.sort((a, b) => Math.abs(a.left - from.left) - Math.abs(b.left - from.left) || Math.abs(a.top - top) - Math.abs(b.top - top))[0]?.key
 }
 
+/**
+ * Where Left or Right takes a dragged card. It starts from the column the card is in, or, while it is over a column
+ * that takes nothing (a hidden status, the issue board's Hidden columns), from that one, so Left from there comes
+ * back to the last open column. A column key: go there; 'stay': nothing to that side (Left in the first column);
+ * undefined: leave it to dnd-kit (Right past the last open column, which reaches the hidden ones; a list, whose
+ * groups are stacked).
+ */
+export function arrowTarget(o: {
+  side: -1 | 1
+  /** the column the card is in now */
+  live: string
+  /** the column it is over */
+  over: string | undefined
+  closed: ReadonlySet<string>
+  /** every column on screen, closed ones too */
+  columns: readonly { key: string; left: number; top: number }[]
+  /** the card's top */
+  top: number
+}): string | 'stay' | undefined {
+  const fromKey = o.over !== undefined && o.closed.has(o.over) ? o.over : o.live
+  const from = o.columns.find((c) => c.key === fromKey)
+  if (!from) return undefined
+  const to = columnBeside(o.columns.filter((c) => !o.closed.has(c.key)), from, o.side, o.top)
+  if (to !== undefined) return to
+  if (o.side < 0 && o.columns.some((c) => c.left > from.left + 1)) return 'stay'
+  return undefined
+}
+
 /** the card nearest in height to `top` (a card moved sideways lands next to it), undefined in an empty column */
 export function nearestCard(cards: readonly { id: string; top: number }[], top: number): string | undefined {
   return [...cards].sort((a, b) => Math.abs(a.top - top) - Math.abs(b.top - top))[0]?.id
 }
 
 /** mouse, touch (press and hold; a quick swipe still scrolls) and keyboard (Space; Enter still opens the card) */
-export function useBoardSensors(coordinateGetter: KeyboardCoordinateGetter = sortableKeyboardCoordinates) {
+function useBoardSensors(coordinateGetter: KeyboardCoordinateGetter) {
   return useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
@@ -99,15 +127,18 @@ export function useColumnsDrag(base: ColumnOrder, closed: ReadonlySet<string>) {
   const coordinateGetter: KeyboardCoordinateGetter = useCallback(
     (event, args) => {
       const side = event.code === 'ArrowLeft' ? -1 : event.code === 'ArrowRight' ? 1 : 0
-      const { active, collisionRect, droppableRects } = args.context
-      const here = active ? columnOf(active.id) : undefined
-      const from = here !== undefined ? droppableRects.get(columnDropId(here)) : undefined
-      if (side && collisionRect && from) {
+      const { active, over, collisionRect, droppableRects } = args.context
+      const live = active ? columnOf(active.id) : undefined
+      if (side && collisionRect && live !== undefined) {
         const columns = Object.keys(orderRef.current).flatMap((key) => {
-          const rect = closedRef.current.has(key) ? undefined : droppableRects.get(columnDropId(key))
+          const rect = droppableRects.get(columnDropId(key))
           return rect ? [{ key, left: rect.left, top: rect.top }] : []
         })
-        const to = columnBeside(columns, from, side, collisionRect.top)
+        const to = arrowTarget({ side, live, over: over ? columnOf(over.id) : undefined, closed: closedRef.current, columns, top: collisionRect.top })
+        if (to === 'stay') {
+          event.preventDefault()
+          return undefined
+        }
         if (to !== undefined) {
           event.preventDefault()
           const cards = orderRef.current[to].flatMap((id) => {
