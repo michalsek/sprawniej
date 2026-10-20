@@ -66,23 +66,22 @@ export interface ProjectCategoryInfo {
   description: string
 }
 
-export const PROJECT_CATEGORY_INFO: ProjectCategoryInfo[] = [
-  { id: 'backlog', name: 'Backlog', color: 'var(--status-backlog)', seed: '#8a8f98', description: 'Ideas nobody planned yet.' },
-  { id: 'planned', name: 'Planned', color: 'var(--status-todo)', seed: '#c4c6cc', description: 'Planned, not started. New projects start here.' },
-  { id: 'in_progress', name: 'In progress', color: 'var(--status-progress)', seed: '#f2c94c', description: 'Someone is working on it.' },
-  { id: 'paused', name: 'Paused', color: 'var(--status-canceled)', seed: '#8a8f98', description: 'Started, then put on hold.' },
-  { id: 'completed', name: 'Completed', color: 'var(--status-done)', seed: '#5e6ad2', description: 'Finished. Grouping issues by project leaves it out.' },
-  { id: 'canceled', name: 'Canceled', color: 'var(--status-canceled)', seed: '#8a8f98', description: "Won't be done. Grouping issues by project leaves it out." },
-]
+const PROJECT_LOOKS: Record<ProjectCategory, Omit<ProjectCategoryInfo, 'id'>> = {
+  backlog: { name: 'Backlog', color: 'var(--status-backlog)', seed: '#8a8f98', description: 'Ideas nobody planned yet.' },
+  planned: { name: 'Planned', color: 'var(--status-todo)', seed: '#c4c6cc', description: 'Planned, not started. New projects start here.' },
+  in_progress: { name: 'In progress', color: 'var(--status-progress)', seed: '#f2c94c', description: 'Someone is working on it.' },
+  paused: { name: 'Paused', color: 'var(--status-canceled)', seed: '#8a8f98', description: 'Started, then put on hold.' },
+  completed: { name: 'Completed', color: 'var(--status-done)', seed: '#5e6ad2', description: 'Finished. Grouping issues by project leaves it out.' },
+  canceled: { name: 'Canceled', color: 'var(--status-canceled)', seed: '#8a8f98', description: "Won't be done. Grouping issues by project leaves it out." },
+}
 
-const projectById = new Map(PROJECT_CATEGORY_INFO.map((c) => [c.id, c]))
-/** a project category this app doesn't know reads as Planned instead of breaking the screen */
-export const projectCategoryOf = (id: string): ProjectCategoryInfo => projectById.get(id as ProjectCategory) ?? PROJECT_CATEGORY_INFO[1]
+/** in category order */
+export const PROJECT_CATEGORY_INFO: ProjectCategoryInfo[] = PROJECT_CATEGORIES.map((id) => ({ id, ...PROJECT_LOOKS[id] }))
 
 /** the category a status of this kind belongs to, when it is one of the kind's */
 const categoryFor = (kind: StatusKind, category: string): Pick<Category, 'color' | 'seed'> | undefined => {
   if (kind === 'issue') return isIssueCategory(category) ? categoryOf(category) : undefined
-  return isProjectCategory(category) ? projectCategoryOf(category) : undefined
+  return isProjectCategory(category) ? PROJECT_LOOKS[category] : undefined
 }
 
 /** the colour a category's new statuses start with: the colour its first status started with */

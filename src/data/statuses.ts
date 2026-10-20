@@ -12,13 +12,11 @@
 import type { Filters, Issue, Project, Status } from '@/model/schema'
 import {
   CATEGORIES,
-  categoryOf,
   ISSUE_CATEGORIES,
   isIssueCategory,
   isProjectCategory,
   KIND_CATEGORIES,
   PROJECT_CATEGORY_INFO,
-  projectCategoryOf,
   type IssueCategory,
   type ProjectCategory,
   type StatusKind,
@@ -51,65 +49,55 @@ export function defaultStatus(statuses: Statuses, kind: StatusKind, category: st
  * so only for a moment, if ever): the id is the category, and picking one means "this category".
  */
 export const CATEGORY_STATUSES: readonly Status[] = CATEGORIES.map((c) => ({ id: c.id, kind: 'issue', category: c.id, name: c.name, color: c.color, position: 'a0', hidden: false }))
-
-/** the issue statuses to show and pick from: the workspace's, or the made-up ones while there are none */
-export function issueStatuses(statuses: Statuses): Status[] {
-  const own = statusesOf(statuses, 'issue')
-  return own.length ? own : [...CATEGORY_STATUSES]
-}
-
-/**
- * The status an issue shows: its own; or, while that isn't known (or doesn't fit its category), the category's
- * default; or one made up from the category.
- */
-export function statusOfIssue(issue: Pick<Issue, 'status' | 'statusId'>, statuses: Statuses): Status {
-  const own = statuses[issue.statusId]
-  if (own && own.kind === 'issue' && own.category === issue.status) return own
-  const category = categoryOf(issue.status).id
-  return defaultStatus(statuses, 'issue', category) ?? CATEGORY_STATUSES.find((s) => s.category === category)!
-}
-
-/**
- * What picking `pick` means for an issue: a status of the workspace (its id and its category), or a category (one of
- * the made-up statuses, or a category asked for by name), which means that category's default status. Undefined for
- * something that is neither.
- */
-export function pickStatus(pick: string, statuses: Statuses): { statusId?: string; status: IssueCategory } | undefined {
-  const own = statuses[pick]
-  if (own && own.kind === 'issue' && isIssueCategory(own.category)) return { statusId: own.id, status: own.category }
-  if (!isIssueCategory(pick)) return undefined
-  const d = defaultStatus(statuses, 'issue', pick)
-  return d ? { statusId: d.id, status: pick } : { status: pick }
-}
-
-// ---------- projects ----------
-// The same rules for a project's status (`project.statusId`) and its category (`project.status`).
-
-/** made up from the project categories, as CATEGORY_STATUSES: the id is the category */
+/** the same for projects */
 export const PROJECT_CATEGORY_STATUSES: readonly Status[] = PROJECT_CATEGORY_INFO.map((c) => ({ id: c.id, kind: 'project', category: c.id, name: c.name, color: c.color, position: 'a0', hidden: false }))
 
-/** the project statuses to show and pick from: the workspace's, or the made-up ones while there are none */
-export function projectStatuses(statuses: Statuses): Status[] {
-  const own = statusesOf(statuses, 'project')
-  return own.length ? own : [...PROJECT_CATEGORY_STATUSES]
+/** what the rules below need to know about a kind */
+interface Kind<C extends string> {
+  kind: StatusKind
+  /** the made-up statuses */
+  madeUp: readonly Status[]
+  is: (x: unknown) => x is C
+  /** a category this app doesn't know (written by a newer one) reads as one it does */
+  known: (category: string) => C
+}
+const ISSUE: Kind<IssueCategory> = { kind: 'issue', madeUp: CATEGORY_STATUSES, is: isIssueCategory, known: (c) => (isIssueCategory(c) ? c : 'backlog') }
+const PROJECT: Kind<ProjectCategory> = { kind: 'project', madeUp: PROJECT_CATEGORY_STATUSES, is: isProjectCategory, known: (c) => (isProjectCategory(c) ? c : 'planned') }
+
+/** a kind's statuses to show and pick from: the workspace's, or the made-up ones while there are none */
+function toShow(k: Kind<string>, statuses: Statuses): Status[] {
+  const own = statusesOf(statuses, k.kind)
+  return own.length ? own : [...k.madeUp]
 }
 
-/** the status a project shows: its own; or its category's default (or a made-up one) while that isn't known */
-export function statusOfProject(project: Pick<Project, 'status' | 'statusId'>, statuses: Statuses): Status {
-  const own = statuses[project.statusId]
-  if (own && own.kind === 'project' && own.category === project.status) return own
-  const category = projectCategoryOf(project.status).id
-  return defaultStatus(statuses, 'project', category) ?? PROJECT_CATEGORY_STATUSES.find((s) => s.category === category)!
+/** the status a thing shows: its own; or, while that isn't known (or doesn't fit its category), the category's default; or a made-up one */
+function statusOfThing(k: Kind<string>, thing: { status: string; statusId: string }, statuses: Statuses): Status {
+  const own = statuses[thing.statusId]
+  if (own && own.kind === k.kind && own.category === thing.status) return own
+  const category = k.known(thing.status)
+  return defaultStatus(statuses, k.kind, category) ?? k.madeUp.find((s) => s.category === category)!
 }
 
-/** what picking `pick` means for a project (as pickStatus): a project status, or a category's default */
-export function pickProjectStatus(pick: string, statuses: Statuses): { statusId?: string; status: ProjectCategory } | undefined {
+/** what picking `pick` means: a status of the kind (its id and category), or a category, which means its default status */
+function pickOf<C extends string>(k: Kind<C>, pick: string, statuses: Statuses): { statusId?: string; status: C } | undefined {
   const own = statuses[pick]
-  if (own && own.kind === 'project' && isProjectCategory(own.category)) return { statusId: own.id, status: own.category }
-  if (!isProjectCategory(pick)) return undefined
-  const d = defaultStatus(statuses, 'project', pick)
+  if (own && own.kind === k.kind && k.is(own.category)) return { statusId: own.id, status: own.category }
+  if (!k.is(pick)) return undefined
+  const d = defaultStatus(statuses, k.kind, pick)
   return d ? { statusId: d.id, status: pick } : { status: pick }
 }
+
+/** the issue statuses to show and pick from */
+export const issueStatuses = (statuses: Statuses): Status[] => toShow(ISSUE, statuses)
+/** the status an issue shows */
+export const statusOfIssue = (issue: Pick<Issue, 'status' | 'statusId'>, statuses: Statuses): Status => statusOfThing(ISSUE, issue, statuses)
+/** what picking `pick` means for an issue (undefined for something that is neither a status nor a category) */
+export const pickStatus = (pick: string, statuses: Statuses) => pickOf(ISSUE, pick, statuses)
+
+// The same rules for a project's status (`project.statusId`) and its category (`project.status`).
+export const projectStatuses = (statuses: Statuses): Status[] => toShow(PROJECT, statuses)
+export const statusOfProject = (project: Pick<Project, 'status' | 'statusId'>, statuses: Statuses): Status => statusOfThing(PROJECT, project, statuses)
+export const pickProjectStatus = (pick: string, statuses: Statuses) => pickOf(PROJECT, pick, statuses)
 
 /** hiding it leaves its category a shown status (the database refuses otherwise) */
 export function canHide(status: Pick<Status, 'id' | 'kind' | 'category'>, statuses: Statuses): boolean {

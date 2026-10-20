@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { INBOX_KEEP } from '@/data/actions'
 import { STATUS_COLORS } from '@/model/colors'
-import { AUTO_ARCHIVE_MONTHS, FAVOURITE_KINDS, inboxItemSchema, PROJECT_STATUSES, TEAM_KEY_PATTERN } from '@/model/schema'
+import { AUTO_ARCHIVE_MONTHS, FAVOURITE_KINDS, inboxItemSchema, TEAM_KEY_PATTERN } from '@/model/schema'
 import { NOTION_URL_PATTERN, PAGE_ID_PATTERN, UUID_PATTERN } from '@/model/notion'
 import { PRIORITY_IDS, ISSUE_CATEGORIES, CATEGORIES, PROJECT_CATEGORIES, PROJECT_CATEGORY_INFO } from '@/model/status'
 
@@ -55,8 +55,7 @@ describe('database lists match src/model', () => {
   test('project categories (projects and the statuses table)', () => {
     const found = lists('project-statuses')
     expect(found.length).toBe(2)
-    for (const list of found) expect(list).toEqual([...PROJECT_STATUSES])
-    expect(PROJECT_CATEGORY_INFO.map((c) => c.id)).toEqual([...PROJECT_CATEGORIES])
+    for (const list of found) expect(list).toEqual([...PROJECT_CATEGORIES])
   })
 
   test('the project statuses every workspace starts with: one per category, named and coloured as the app shows them', () => {

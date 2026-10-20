@@ -778,9 +778,7 @@ describe('project statuses and places', () => {
       ['Started', projectStatusIdOf('in_progress'), false],
     ])
     expect(project(second.id).sortOrder! > project(first.id).sortOrder!).toBe(true)
-    // the database fills in the category
     expect(project(started.id)).toMatchObject({ status: 'in_progress', statusId: projectStatusIdOf('in_progress') })
-    expect(w.db.get('projects', { id: started.id })).toMatchObject({ status: 'in_progress' })
   })
 
   test('picking a status sends only status_id; the category shows at once', async () => {
@@ -792,7 +790,6 @@ describe('project statuses and places', () => {
     updateProject(p.id, { statusId: building.id })
     await w.settle()
     expect(sent('projects').map(fieldsOf)).toEqual([{ status_id: building.id }])
-    expect(w.db.get('projects', { id: p.id })).toMatchObject({ status: 'in_progress', status_id: building.id })
   })
 
   test('a drop within a column sends only the place; into another column, the status too', async () => {
@@ -807,22 +804,61 @@ describe('project statuses and places', () => {
     moveProject(a.id, { statusId: projectStatusIdOf('paused'), place: { prev: waiting.id, next: null } })
     await w.settle()
     expect(Object.keys(sent('projects').map(fieldsOf)[1] as object).sort()).toEqual(['sort_order', 'status_id'])
-    expect(w.db.get('projects', { id: a.id })).toMatchObject({ status: 'paused', status_id: projectStatusIdOf('paused') })
+    expect(project(a.id)).toMatchObject({ status: 'paused', statusId: projectStatusIdOf('paused') })
   })
 
-  test('a drop next to projects an older version made gives them places first, so it lands where it was let go', async () => {
-    const mine = await made('Mine')
-    // made by an older version: a category, no place (the database gave it Planned's default status)
-    for (const name of ['Old one', 'Old two']) {
+  /** projects an older version made: a category, no place (the database gave them Planned's default status) */
+  const older = (...names: string[]) => {
+    for (const name of names) {
       const row = { id: name, workspace_id: WS, name, emoji: '', description: '', status: 'planned', status_id: projectStatusIdOf('planned'), sort_order: null, lead_id: null, target_date: null, linear_id: null, created_at: '2026-01-01T00:00:00.000Z', extra: {} }
       w.db.put('projects', row)
       w.target.apply([{ from: 'message', message: { table: 'projects', op: 'INSERT', row: w.db.get('projects', { id: name })! } }])
     }
+  }
+
+  test('a drop next to projects an older version made gives them places first, so it lands where it was let go', async () => {
+    const mine = await made('Mine')
+    older('Old one', 'Old two')
     const sent = w.since()
     moveProject(mine.id, { place: { prev: 'Old one', next: 'Old two' } })
     await w.settle()
     expect(sent('projects').map(fieldsOf).flat().map((f) => Object.keys(f as object))).toEqual([['sort_order'], ['sort_order'], ['sort_order']])
     const order = ['Old one', mine.id, 'Old two'].map((id) => project(id).sortOrder!)
     expect([...order].sort()).toEqual(order)
+  })
+
+  test('a new project goes below the ones an older version made, which get places in the same save', async () => {
+    older('Old one')
+    const sent = w.since()
+    const p = await made('New')
+    expect(sent('projects').length).toBe(2)
+    expect(project('Old one').sortOrder! < project(p.id).sortOrder!).toBe(true)
+  })
+
+  test('nothing moves into a hidden status; within the hidden status a project has, it may', async () => {
+    const hold = createStatus('project', 'paused', 'On hold')!
+    const there = await made('There', hold.id)
+    const other = await made('Other', hold.id)
+    updateStatus(hold.id, { hidden: true })
+    const p = await made('Elsewhere')
+    const sent = w.since()
+    moveProject(p.id, { statusId: hold.id, place: { prev: null, next: null } })
+    updateProject(p.id, { statusId: hold.id })
+    await w.settle()
+    expect(sent('projects')).toEqual([])
+    moveProject(other.id, { place: { prev: null, next: there.id } })
+    await w.settle()
+    expect(sent('projects').map(fieldsOf)).toEqual([{ sort_order: project(other.id).sortOrder }])
+    expect(project(other.id).statusId).toBe(hold.id)
+  })
+
+  test('while the workspace’s statuses aren’t known, only the category goes', async () => {
+    useData.setState({ statuses: {} })
+    const sent = w.since()
+    const p = await made('Early')
+    updateProject(p.id, { statusId: 'paused' })
+    await w.settle()
+    expect(sent('projects').map(fieldsOf)).toEqual([[expect.objectContaining({ name: 'Early', status: 'planned' })], { status: 'paused' }])
+    expect(sent('projects').map(fieldsOf).flat().some((r) => 'status_id' in (r as object))).toBe(false)
   })
 })

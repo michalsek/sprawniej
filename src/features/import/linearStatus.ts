@@ -5,7 +5,7 @@
 import { defaultStatus, statusesOf } from '@/data/statuses'
 import { plainName as plain } from '@/lib/plain'
 import type { Project, Status } from '@/model/schema'
-import { CATEGORIES, type IssueCategory, type ProjectCategory } from '@/model/status'
+import { CATEGORIES, isProjectCategory, type IssueCategory, type ProjectCategory } from '@/model/status'
 
 const STATE_TYPES: Record<string, IssueCategory> = {
   triage: 'backlog',
@@ -45,7 +45,7 @@ export function mapProjectStatus(
 ): Pick<Project, 'status' | 'statusId'> {
   const name = state.name ? plain(state.name.replace(/cancelled/i, 'canceled')) : ''
   const named = name ? statusesOf(statuses, 'project').find((s) => !s.hidden && plain(s.name) === name) : undefined
-  if (named) return { status: named.category as ProjectCategory, statusId: named.id }
+  if (named && isProjectCategory(named.category)) return { status: named.category, statusId: named.id }
   const status = PROJECT_TYPES[state.type] ?? 'planned'
   if (keep && keep.status === status && keep.statusId) return { status, statusId: keep.statusId }
   return { status, statusId: defaultStatus(statuses, 'project', status)?.id ?? '' }

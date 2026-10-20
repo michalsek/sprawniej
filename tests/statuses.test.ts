@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { canHide, CATEGORY_STATUSES, defaultStatus, issueStatuses, matchesStatus, pickedStatusIds, pickStatus, statusesOf, statusFilter, statusNamed, statusOfIssue } from '@/data/statuses'
+import { canHide, CATEGORY_STATUSES, defaultStatus, issueStatuses, matchesStatus, pickedStatusIds, pickStatus, PROJECT_CATEGORY_STATUSES, statusesOf, statusFilter, statusNamed, statusOfIssue, statusOfProject } from '@/data/statuses'
 import type { Status } from '@/model/schema'
 import { paintColor } from '@/model/status'
 import { sampleStatuses, statusIdOf } from './fixtures/sample'
@@ -54,6 +54,12 @@ describe('the default status of a category', () => {
     // a status of another category than the issue's (a guess on its way) doesn't count
     expect(statusOfIssue({ status: 'todo', statusId: 'testing' }, statuses).id).toBe(statusIdOf('todo'))
     expect(statusOfIssue({ status: 'todo', statusId: '' }, {})).toBe(CATEGORY_STATUSES[1])
+  })
+
+  test('a project shows its own status; one of another group (a guess on its way, or an issue status) doesn’t count', () => {
+    expect(statusOfProject({ status: 'planned', statusId: 'p-planned' }, statuses).id).toBe('p-planned')
+    expect(statusOfProject({ status: 'paused', statusId: 'p-planned' }, statuses)).toBe(PROJECT_CATEGORY_STATUSES[3])
+    expect(statusOfProject({ status: 'planned', statusId: statusIdOf('todo') }, statuses).id).toBe('p-planned')
   })
 
   test('picking: a status, or a category (its default), or nothing that is either', () => {

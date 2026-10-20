@@ -24,7 +24,8 @@ import { TitleText } from './TitleText'
 import { dragAnnouncements } from './dragText'
 import { CarryCount } from './CarryCount'
 import { selectionClick, useSelection } from './selection'
-import { AUTO_SCROLL, groupDropId, useIssueDrag } from './useIssueDrag'
+import { AUTO_SCROLL, columnDropId } from '@/features/board/columnsDrag'
+import { useIssueDrag } from './useIssueDrag'
 
 interface CardProps {
   issue: Issue
@@ -100,7 +101,7 @@ function SortableCard({ issue }: { issue: Issue }) {
 const iconButton = 'rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground'
 
 function Column({ group, ids, issueOf, onAdd }: { group: Group; ids: string[]; issueOf: (id: string) => Issue | undefined; onAdd?: (group: Group) => void }) {
-  const { setNodeRef, isOver } = useDroppable({ id: groupDropId(group.key) })
+  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(group.key) })
   return (
     <section ref={setNodeRef} className={cn('flex w-[21rem] shrink-0 flex-col rounded-xl bg-accent/30 transition-colors', isOver && 'bg-accent/50')}>
       <header className="flex h-12 items-center gap-2.5 px-4 text-[15px] font-medium">
@@ -127,7 +128,7 @@ function Column({ group, ids, issueOf, onAdd }: { group: Group; ids: string[]; i
 
 /** an empty group: somewhere to drop a card */
 function HiddenColumn({ group, onAdd }: { group: Group; onAdd?: (group: Group) => void }) {
-  const { setNodeRef, isOver } = useDroppable({ id: groupDropId(group.key) })
+  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(group.key) })
   return (
     <div
       ref={setNodeRef}

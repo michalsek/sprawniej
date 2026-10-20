@@ -61,7 +61,7 @@ function ProjectCard({ project: p, issues, dragRef, dragProps, style, ghost, lif
             <CalendarDays /> {shortDate(p.targetDate)}
           </span>
         )}
-        <span className="ml-auto flex w-28 items-center gap-2" aria-label={`${pct}% done`}>
+        <span className="ml-auto flex w-28 items-center gap-2" role="img" aria-label={`${pct}% done`}>
           <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
             <span className="block h-full rounded-full bg-status-done" style={{ width: `${pct}%` }} />
           </span>

@@ -14,6 +14,11 @@ export function keyBetween(prev: string | null, next: string | null): string {
   return generateKeyBetween(prev, next)
 }
 
+/** the highest key of these (byte order); ones without a key (projects an older version made) don't count */
+export function lastKey(xs: readonly { sortOrder?: string | null }[]): string | null {
+  return xs.reduce<string | null>((max, x) => (x.sortOrder && (max === null || x.sortOrder > max) ? x.sortOrder : max), null)
+}
+
 /** `n` keys in a row between `prev` and `next`, for several issues dropped together */
 export function keysBetween(prev: string | null, next: string | null, n: number): string[] {
   if (prev !== null && next !== null && prev >= next) return generateNKeysBetween(prev, null, n)

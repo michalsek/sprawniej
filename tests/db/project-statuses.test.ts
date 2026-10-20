@@ -71,6 +71,10 @@ describe.skipIf(!enabled)('project statuses', () => {
     await ok(ana.db.from('workspaces').delete().eq('id', other.ws))
   })
 
+  test('each group keeps a shown project status', async () => {
+    await expectError(ana.db.from('statuses').update({ hidden: true }).eq('id', st.canceled), '23514')
+  })
+
   test('members move projects: their status and their place', async () => {
     const p = await newProject()
     await ok(bob.db.from('projects').update({ status_id: st.in_progress, sort_order: 'a5' }).eq('id', p.id))

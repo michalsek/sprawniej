@@ -27,7 +27,7 @@ export function useProjectDrag(columns: ProjectColumn[]) {
     if (over && from && to && projects.has(id)) {
       const ids = cols.finalOrder(id, over.id, to)
       const at = ids.indexOf(id)
-      if (from !== to || at !== base[from].indexOf(id)) {
+      if (from !== to || at !== (base[from]?.indexOf(id) ?? -1)) {
         moveProject(id, { ...(from !== to && { statusId: to }), place: { prev: ids[at - 1] ?? null, next: ids[at + 1] ?? null } })
       }
     }

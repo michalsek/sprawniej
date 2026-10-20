@@ -10,11 +10,8 @@ import { moveIssue, moveIssues } from '@/data/actions'
 import { changedOnly, groupPatch, neighbours } from '@/data/ordering'
 import { nestChildren, type Group } from '@/data/select'
 import type { Display, Issue } from '@/model/schema'
-import { columnDropId, columnKey, isColumnId, useColumnsDrag } from '@/features/board/columnsDrag'
+import { columnKey, isColumnId, useColumnsDrag } from '@/features/board/columnsDrag'
 import { clearSelection, useSelection } from './selection'
-
-export { AUTO_SCROLL } from '@/features/board/columnsDrag'
-export const groupDropId = columnDropId
 
 const ORDER_NAMES: Record<Display['ordering'], string> = { manual: 'manual', priority: 'priority', due: 'due date', updated: 'last update', created: 'creation date' }
 

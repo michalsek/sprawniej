@@ -197,9 +197,6 @@ export interface ArchivedIssue extends Issue {
   comments: Comment[]
 }
 
-/** a project's categories (src/model/status.ts) */
-export const PROJECT_STATUSES = PROJECT_CATEGORIES
-
 /** a project (the projects table; `teams` from project_teams) */
 export const projectSchema = z
   .object({
@@ -208,7 +205,7 @@ export const projectSchema = z
     emoji: z.string(),
     description: z.string(),
     /** its category: decides what grouping issues by project leaves out (src/model/status.ts) */
-    status: z.enum(PROJECT_STATUSES),
+    status: z.enum(PROJECT_CATEGORIES),
     /** the workspace's status it has, one of `status`'s category ('' while it isn't known; see statusOfProject) */
     statusId: z.string(),
     /**

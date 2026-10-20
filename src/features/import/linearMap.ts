@@ -8,6 +8,7 @@
  */
 import { generateKeyBetween, generateNKeysBetween } from 'fractional-indexing'
 import { plainName as plain } from '@/lib/plain'
+import { lastKey } from '@/data/ordering'
 import { dueForArchive } from '@/data/select'
 import type { DataState } from '@/data/store'
 import type { Priority } from '@/model/status'
@@ -468,7 +469,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   const projectsByLinear = byLinearId(Object.values(ws.projects))
   const projectId = new Map<string, string>()
   // new projects go to the bottom of their columns, in Linear's order
-  let lastOrder = Object.values(ws.projects).reduce<string | null>((max, p) => (p.sortOrder && (max === null || p.sortOrder > max) ? p.sortOrder : max), null)
+  let lastOrder = lastKey(Object.values(ws.projects))
   for (const p of linear.projects) {
     if (!usedProjects.has(p.id) && !p.teams.nodes.some((t) => teamIds.has(t.id))) continue
     const old = projectsByLinear.get(p.id)

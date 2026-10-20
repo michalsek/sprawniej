@@ -21,7 +21,8 @@ import { TitleText } from './TitleText'
 import { dragAnnouncements } from './dragText'
 import { CarryCount } from './CarryCount'
 import { selectionClick, useSelection } from './selection'
-import { AUTO_SCROLL, groupDropId, useIssueDrag } from './useIssueDrag'
+import { AUTO_SCROLL, columnDropId } from '@/features/board/columnsDrag'
+import { useIssueDrag } from './useIssueDrag'
 
 interface RowProps {
   issue: Issue
@@ -103,7 +104,7 @@ interface SectionProps {
 
 function GroupSection({ group, ids, issueOf, onAdd }: SectionProps) {
   const [open, setOpen] = useState(true)
-  const { setNodeRef, isOver } = useDroppable({ id: groupDropId(group.key) })
+  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(group.key) })
   // how deep each row sits (sub-issues under their parent); an issue dragged in from elsewhere sits at the top level
   const depths = useMemo(() => new Map(nestChildren(group.issues).map((r) => [r.issue.id, r.depth])), [group.issues])
   return (
