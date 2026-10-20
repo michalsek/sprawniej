@@ -7,15 +7,29 @@
  *    use Section for its parts.
  * 2. Add an entry below, where it should show in the menu: id, group, a path under /settings/account/… or
  *    /settings/workspace/…, title, icon, who, component, and if you like description and words. A page with
- *    who: 'admins' needs forMembers (what a member who opens it reads).
- * 3. Name it in docs/user-guide.md as "Settings › Title".
+ *    who: 'admins' needs forMembers (what a member who opens it reads); tsc asks for it.
+ * 3. Add it to the list under "### Settings" in docs/user-guide.md, and describe it where it belongs there, as
+ *    "Settings › Title".
  * A new group goes in GROUPS in nav.ts.
  */
 import type { ComponentType } from 'react'
-import { Archive, CircleUser, Contact, Download, GitPullRequest, Group, KeyRound, Settings, Tags, UserPlus, Users, type LucideIcon } from 'lucide-react'
+// one icon a line, so pages added side by side don't change the same line
+import {
+  Archive,
+  CircleUser,
+  Contact,
+  Download,
+  GitPullRequest,
+  Group,
+  KeyRound,
+  Settings,
+  Tags,
+  UserPlus,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
 import { INVITE_DAYS } from '@/backend/workspaces'
 import { ImportPage } from '@/features/import/ImportPage'
-import { isGuest } from '@/model/schema'
 import { GitHubSettings } from './GitHubSettings'
 import { LabelsSettings } from './LabelsSettings'
 import { Members } from './Members'
@@ -27,8 +41,9 @@ import { LinearPeoplePage } from './pages/LinearPeoplePage'
 import { ProfilePage } from './pages/ProfilePage'
 import { TeamsPage } from './pages/TeamsPage'
 import { SignInWays } from './SignInWays'
+import { hasUnlinked } from './unlinked'
 
-export interface SettingsPage extends PageMeta {
+export type SettingsPage = PageMeta & {
   icon: LucideIcon
   component: ComponentType<{ admin: boolean }>
 }
@@ -97,7 +112,7 @@ export const PAGES: SettingsPage[] = [
     title: 'People from Linear',
     icon: Contact,
     who: 'everyone',
-    listed: (s) => Object.keys(s.people).some(isGuest),
+    listed: hasUnlinked,
     component: LinearPeoplePage,
     words: 'invite link import',
   },

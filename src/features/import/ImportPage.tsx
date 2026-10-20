@@ -41,7 +41,7 @@ const WENT_WRONG = 'Something went wrong. Try again in a moment.'
 
 function Steps({ now }: { now: number }) {
   return (
-    <ol className="mb-8 flex gap-6 text-sm" aria-label="Steps">
+    <ol className="mt-4 mb-8 flex gap-6 text-sm" aria-label="Steps">
       {STEPS.map((s, i) => (
         <li key={s} className={cn('flex items-center gap-2 text-muted-foreground', i === now && 'text-foreground', i < now && 'text-foreground/70')} aria-current={i === now ? 'step' : undefined}>
           <span className={cn('flex size-6 items-center justify-center rounded-full border text-xs', i === now && 'border-foreground', i < now && 'bg-foreground text-background')}>{i + 1}</span>
@@ -55,9 +55,9 @@ function Steps({ now }: { now: number }) {
 function Panel({ step, title, children, footer }: { step: number; title: string; children: ReactNode; footer?: ReactNode }) {
   return (
     <div className="flex-1 overflow-y-auto px-4 md:px-8">
-      <div className="mx-auto max-w-2xl py-10">
-        <Steps now={step} />
+      <div className="mx-auto max-w-3xl py-8">
         <h1 className="text-2xl font-semibold">{title}</h1>
+        <Steps now={step} />
         <div className="mt-4 text-[15px] leading-relaxed text-foreground/85">{children}</div>
         {footer && <div className="mt-8 flex flex-wrap items-center gap-3">{footer}</div>}
       </div>

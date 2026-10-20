@@ -66,11 +66,11 @@ choose **Change password**. Otherwise, ask whoever looks after Sprawniej for hel
 ### Inviting someone
 
 Only owners and admins can invite. Open the menu under your name (bottom left), choose **Settings**, then **Invite
-links** (or **Invite people** on **Members**), and press **Create an invite link**. Make **one link for each person**: you can add their email
-(so you remember where to send it) and pick whether they join as a **Member** or an **Admin**. Press **Create
-link**, then **Copy message** gives you a ready-to-send note with the link, **Copy link** just the link, and **Write
-an email** (when you added their email) opens your own mail app. Sprawniej doesn't send anything itself: you send the
-link.
+links** (or **Invite people** on **Members**), and press **Create an invite link**. Make **one link for each
+person**: you can add their email (so you remember where to send it) and pick whether they join as a **Member** or an
+**Admin**. Press **Create link**, then **Copy message** gives you a ready-to-send note with the link, **Copy link**
+just the link, and **Write an email** (when you added their email) opens your own mail app. Sprawniej doesn't send
+anything itself: you send the link.
 
 Each link works once, for 14 days, and stays under **Invite links** until it's used; an expired one stays there too,
 greyed out, until you delete it. To stop a link from working (for example, if you sent it to the wrong person), open
@@ -341,8 +341,8 @@ request's title or description takes it off the list.
 The change is made as the person who opened the pull request, so the issue's history says who and links to the pull
 request ("Ana moved it from In Progress to In Review · pull request #12"), and everyone following the issue gets a
 note in their Inbox. This only works for **people in the workspace who added GitHub as a way to sign in**
-(Settings › Ways to sign in): pull requests by anyone else move nothing and don't show on the issue. **Settings › GitHub** tells you whether yours
-count.
+(Settings › Ways to sign in): pull requests by anyone else move nothing and don't show on the issue. **Settings ›
+GitHub** tells you whether yours count.
 
 **Connecting a repository** (owners and admins): **Settings › GitHub › Connect a repository**, then type it as
 `owner/name` or paste its address. The repository also needs the Sprawniej GitHub App; whoever set up Sprawniej adds

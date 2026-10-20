@@ -60,7 +60,7 @@ export function TeamsPage() {
         </>
       ) : (
         <EmptyState icon={<SquareStack />} title="No teams yet" action={create}>
-          Each team has its own issues, projects and views.
+          Make one for each group of people who work together.
         </EmptyState>
       )}
       <TeamsDialog open={creating} onOpenChange={setCreating} />

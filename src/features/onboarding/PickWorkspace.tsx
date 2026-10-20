@@ -10,9 +10,8 @@ import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { NewWorkspace } from './NewWorkspace'
 import { Problem, Step } from './Step'
+import { WORKSPACE_PAGE } from './workspacePage'
 
-/** pages every workspace has: a link to one (opened before signing in) is kept while you choose */
-export const WORKSPACE_PAGE = /^\/(inbox|my-issues|projects|project\/[^/]+|views|view\/[^/]+|team\/[^/]+(\/.*)?|issue\/[^/]+|help|whats-new|settings(\/[a-z0-9-]+)*)$/
 
 export function PickWorkspace() {
   const [loc, navigate] = useLocation()

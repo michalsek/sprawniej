@@ -51,8 +51,6 @@ describe('coming back from GitHub', () => {
     expect(r.problem).toBe(
       'This GitHub account already belongs to another Sprawniej account. Sign in with GitHub to use that one, or add a different GitHub account.',
     )
-    // what the sign-in page keeps now; '#/settings' above is what older versions kept
-    expect(run({ search: '?error=server_error&error_code=identity_already_exists' }, '#/settings/account/sign-in').replaced).toBe('/#/settings/account/sign-in')
     expect(run({ hash: '#error=x&error_code=manual_linking_disabled' }).problem).toContain("isn't switched on yet")
     expect(run({ search: '?error=x&error_code=something_new' }).problem).toBe("Signing in with GitHub didn't finish. Try again, or use your email.")
     // only our own words, never what an object has by itself

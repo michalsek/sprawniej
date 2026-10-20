@@ -12,20 +12,22 @@ import { Button } from '@/ui/button'
 import { resolveSettings } from './nav'
 import { PAGES, type SettingsPage } from './pages'
 
-const MEMBERS = PAGES.find((p) => p.id === 'members')?.path ?? '/settings'
+/** where "Back to Settings" goes from a page you can't use (the import's error step goes there too) */
+const GENERAL = PAGES.find((p) => p.id === 'general')?.path ?? '/settings'
 
 function AdminsOnly({ page }: { page: SettingsPage }) {
+  const words = page.who === 'admins' ? page.forMembers : { title: 'open this page', text: '' }
   return (
     <EmptyState
       icon={<page.icon />}
-      title={`Only admins and owners can ${page.forMembers?.title ?? 'open this page'}`}
+      title={`Only admins and owners can ${words.title}`}
       action={
         <Button asChild variant="outline">
-          <Link href={MEMBERS}>Back to Members</Link>
+          <Link href={GENERAL}>Back to Settings</Link>
         </Button>
       }
     >
-      {page.forMembers?.text}
+      {words.text}
     </EmptyState>
   )
 }

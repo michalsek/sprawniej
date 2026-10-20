@@ -1,9 +1,11 @@
 /**
  * The first-visit tour: four small tips next to the real things they're about. It starts the first time you open
- * a team's issues, can be skipped, and never comes back unless you ask for it on the Help page.
+ * a team's issues, can be skipped, and never comes back unless you ask for it on the Help page. In Settings it waits
+ * (what it points at isn't there) and goes on where it was once you're back.
  */
 import { useEffect, useState } from 'react'
 import { useLocation } from 'wouter'
+import { isSettingsPath } from '@/features/settings/nav'
 import { Button } from '@/ui/button'
 import { useJoinTeams } from './joinTeamsState'
 import { endTour, tourDone, useTour } from './tourState'
@@ -40,7 +42,7 @@ function useRect(anchor: string | undefined): { rect: DOMRect | null; covered: b
 export function Tour() {
   const step = useTour((s) => s.step)
   const [location] = useLocation()
-  const tip = step === null ? undefined : STEPS[step]
+  const tip = step === null || isSettingsPath(location) ? undefined : STEPS[step]
   const { rect, covered } = useRect(tip?.anchor)
 
   // the first time someone opens a team's issues (after picking their teams, if they're asked)
@@ -52,12 +54,12 @@ export function Tour() {
   }, [location, joining])
 
   useEffect(() => {
-    if (step === null || covered) return
+    if (!tip || covered) return
     // Esc in a dialog (a new issue) closes that, not the tour
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && !e.defaultPrevented && endTour()
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [step, covered])
+  }, [tip, covered])
 
   if (step === null || !tip || covered) return null
   const last = step === STEPS.length - 1

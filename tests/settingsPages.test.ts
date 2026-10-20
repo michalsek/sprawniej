@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
+import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { EMPTY, type DataState } from '@/data/store'
-import { WORKSPACE_PAGE } from '@/features/onboarding/PickWorkspace'
-import { GROUPS, isSettingsPath, listedPages, resolveSettings } from '@/features/settings/nav'
+import { WORKSPACE_PAGE } from '@/features/onboarding/workspacePage'
+import { backTo, GROUPS, isSettingsPath, listedPages, resolveSettings } from '@/features/settings/nav'
 import { PAGES } from '@/features/settings/pages'
 
 const ids = (list: { id: string }[]) => list.map((p) => p.id)
@@ -24,12 +26,24 @@ describe('the list of settings pages', () => {
     }
   })
 
-  test('a page for admins and owners says what members read instead', () => {
-    for (const p of PAGES.filter((p) => p.who === 'admins')) expect(p.forMembers?.text).toBeTruthy()
+  test('no em dashes in what the pages say', () => {
+    for (const p of PAGES) {
+      const members = p.who === 'admins' ? [p.forMembers.title, p.forMembers.text] : []
+      expect([p.title, p.description, ...members].join(' ')).not.toContain('—')
+    }
   })
 
-  test('no em dashes in what the pages say', () => {
-    for (const p of PAGES) expect([p.title, p.description, p.forMembers?.title, p.forMembers?.text].join(' ')).not.toContain('—')
+  // links to settings pages are written out by hand around the app: each must open a page where it is now
+  test('every settings address written in the app opens a page', () => {
+    const src = join(import.meta.dir, '..', 'src')
+    const files = readdirSync(src, { recursive: true, encoding: 'utf8' }).filter((f) => /\.tsx?$/.test(f))
+    const found = files.flatMap((f) => [...readFileSync(join(src, f), 'utf8').matchAll(/['"`]#?(\/settings(?:\/[a-z0-9-]+)*)['"`]/g)].map((m) => ({ f, path: m[1] })))
+    expect(found.length).toBeGreaterThan(5)
+    for (const { f, path } of found) {
+      const r = resolveSettings(path, PAGES, true)
+      const ok = path === '/settings' || ('page' in r && r.page.path === path) || (f.endsWith('pages.tsx') && 'to' in r)
+      expect({ f, path, ok }).toEqual({ f, path, ok: true })
+    }
   })
 })
 
@@ -41,7 +55,6 @@ describe('what an address under Settings opens', () => {
   })
 
   test('older addresses open where the page is now', () => {
-    expect(resolveSettings('/settings/import', PAGES, true)).toEqual({ to: '/settings/workspace/import' })
     for (const p of PAGES) for (const old of p.oldPaths ?? []) expect(resolveSettings(old, PAGES, true)).toEqual({ to: p.path })
   })
 
@@ -92,5 +105,14 @@ describe('a link to a settings page opened before choosing a workspace', () => {
     expect(WORKSPACE_PAGE.test('/settings/import')).toBe(true)
     expect(WORKSPACE_PAGE.test('/settingsx')).toBe(false)
     expect(WORKSPACE_PAGE.test('/settings/<script>')).toBe(false)
+  })
+})
+
+describe('Back to Sprawniej', () => {
+  test('goes to the last page outside Settings, or Home when its team is gone', () => {
+    const teams = { ENG: {} }
+    expect(backTo('/team/ENG/issues/active', teams)).toBe('/team/ENG/issues/active')
+    expect(backTo('/team/OLD/issues/active', teams)).toBe('/')
+    expect(backTo('/inbox', teams)).toBe('/inbox')
   })
 })

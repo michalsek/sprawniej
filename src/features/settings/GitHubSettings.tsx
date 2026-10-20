@@ -175,7 +175,7 @@ function Repos({ ws }: { ws: string | null }) {
     <div>
       <div className="mb-3 flex flex-wrap items-start gap-3">
         <div className="min-w-0 flex-1">
-          <h3 className="font-medium">Repositories</h3>
+          <h2 className="font-medium">Repositories</h2>
           <p className="text-sm text-muted-foreground">
             A repository also needs the Sprawniej GitHub App.{' '}
             {GITHUB_APP_URL ? (

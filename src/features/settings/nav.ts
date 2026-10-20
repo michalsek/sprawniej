@@ -12,7 +12,7 @@ export const GROUPS: { id: SettingsGroup; title: string }[] = [
   { id: 'workspace', title: 'Workspace' },
 ]
 
-export interface PageMeta {
+interface PageBase {
   id: string
   group: SettingsGroup
   /** its address, e.g. '/settings/workspace/members' */
@@ -21,9 +21,6 @@ export interface PageMeta {
   title: string
   /** the line under the heading */
   description?: string
-  who: 'everyone' | 'admins'
-  /** admins-only pages: what a member who opens it reads, under "Only admins and owners can …" */
-  forMembers?: { title: string; text: string }
   /** keep it out of the menu and ⌘K while there's nothing in it (the address still opens) */
   listed?: (s: DataState) => boolean
   /** older addresses that open this page */
@@ -34,10 +31,13 @@ export interface PageMeta {
   ownLayout?: boolean
 }
 
+/** a page for admins and owners says what a member who opens it reads, under "Only admins and owners can …" */
+export type PageMeta = PageBase & ({ who: 'everyone' } | { who: 'admins'; forMembers: { title: string; text: string } })
+
 export const isSettingsPath = (loc: string) => loc === '/settings' || loc.startsWith('/settings/')
 
 /** whether you may open a page: admins-only pages are for admins and owners */
-export const canSee = (p: PageMeta, admin: boolean): boolean => p.who === 'everyone' || admin
+const canSee = (p: PageMeta, admin: boolean): boolean => p.who === 'everyone' || admin
 
 /** the pages the settings menu and ⌘K list for you, in order */
 export function listedPages<P extends PageMeta>(pages: P[], admin: boolean, s: DataState): P[] {
@@ -58,4 +58,10 @@ export function resolveSettings<P extends PageMeta>(loc: string, pages: P[], adm
   if (page) return { page, allowed: canSee(page, admin) }
   const moved = pages.find((p) => p.oldPaths?.includes(loc))
   return moved ? { to: moved.path } : { missing: true }
+}
+
+/** where "Back to Sprawniej" goes: the last page outside Settings, or Home when that page's team was deleted meanwhile */
+export function backTo(last: string, teams: Record<string, unknown>): string {
+  const team = /^\/team\/([^/]+)/.exec(last)?.[1]
+  return team && !teams[team] ? '/' : last
 }

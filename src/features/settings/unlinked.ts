@@ -11,7 +11,12 @@ export function workOf(s: Pick<DataState, 'issues' | 'comments'>, login: string)
   return [...n(issues, 'issue'), ...n(comments, 'comment')].join(' and ')
 }
 
+const unlinked = (p: Person) => isGuest(p.login)
+
+/** whether anyone from Linear hasn't joined yet (Settings lists People from Linear only then) */
+export const hasUnlinked = (s: Pick<DataState, 'people'>): boolean => Object.values(s.people).some(unlinked)
+
 /** the people from Linear who haven't joined yet */
 export function useUnlinked(): Person[] {
-  return useData(useShallow((s) => Object.values(s.people).filter((p) => isGuest(p.login)).sort((a, b) => a.name.localeCompare(b.name))))
+  return useData(useShallow((s) => Object.values(s.people).filter(unlinked).sort((a, b) => a.name.localeCompare(b.name))))
 }

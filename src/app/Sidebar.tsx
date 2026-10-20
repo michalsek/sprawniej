@@ -1,6 +1,6 @@
 /** The left column: product name, personal pages, workspace pages, your teams, and you at the bottom. */
-import { useState, type ReactNode } from 'react'
-import { Link, useLocation } from 'wouter'
+import { useState } from 'react'
+import { Link } from 'wouter'
 import { SquarePen, ChevronDown, ChevronsUpDown, CircleHelp, CircleUser, Inbox, Layers, LogOut, Box, Plus, Settings, SquareStack, Repeat, Sparkles } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { Logo } from '@/components/Logo'
@@ -14,39 +14,7 @@ import { openComposer } from '@/features/issues/composer'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
-
-/** a link in the sidebar, lit while you're on its page (or below it, unless `exact`) */
-export function NavItem({ href, icon, children, count, indent, exact }: { href: string; icon: ReactNode; children: ReactNode; count?: number; indent?: boolean; exact?: boolean }) {
-  const [location] = useLocation()
-  const active = location === href || (!exact && href !== '/' && location.startsWith(`${href}/`))
-  return (
-    <Link
-      href={href}
-      aria-current={active ? 'page' : undefined}
-      className={cn(
-        'flex h-9 items-center gap-3 rounded-lg px-3 text-[15px] text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60 [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/80',
-        active && 'bg-sidebar-accent text-sidebar-foreground',
-        indent && 'pl-9',
-      )}
-    >
-      {icon}
-      <span className="truncate">{children}</span>
-      {!!count && <span className="ml-auto rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-foreground">{count}</span>}
-    </Link>
-  )
-}
-
-export function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
-  return (
-    <div className="mt-6">
-      <div className="mb-1 flex items-center px-3 text-[13px] font-medium text-muted-foreground">
-        {title}
-        {action && <span className="ml-auto">{action}</span>}
-      </div>
-      <div className="flex flex-col gap-0.5">{children}</div>
-    </div>
-  )
-}
+import { NavGroup, NavItem } from './NavItem'
 
 function TeamGroup({ teamKey }: { teamKey: string }) {
   const team = useData((s) => s.teams[teamKey])
@@ -160,15 +128,15 @@ export function Sidebar() {
             My issues
           </NavItem>
         </div>
-        <Section title="Workspace">
+        <NavGroup title="Workspace">
           <NavItem href="/projects" icon={<Box />}>
             Projects
           </NavItem>
           <NavItem href="/views" icon={<Layers />}>
             Views
           </NavItem>
-        </Section>
-        <Section
+        </NavGroup>
+        <NavGroup
           title="Your teams"
           action={
             <button type="button" onClick={() => setTeamsOpen(true)} className="rounded-md p-1 hover:bg-sidebar-accent hover:text-foreground" aria-label="Join or create a team">
@@ -184,7 +152,7 @@ export function Sidebar() {
               You're not in a team yet. Join one to see its issues.
             </button>
           )}
-        </Section>
+        </NavGroup>
         <TeamsDialog open={teamsOpen} onOpenChange={setTeamsOpen} />
       </nav>
       <div className="border-t p-2">

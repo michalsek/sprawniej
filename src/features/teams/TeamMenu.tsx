@@ -1,6 +1,7 @@
 /**
- * ⋯ next to a team (in the sidebar and Settings › Teams): edit its emoji and name (they save as you change them), leave it, or delete it.
- * Deleting takes the team's issues with it, so it says what goes and asks for the team's name first.
+ * ⋯ next to a team (in the sidebar and Settings › Teams): edit its emoji and name (they save as you change them),
+ * leave it, or delete it. Deleting takes the team's issues with it, so it says what goes and asks for the team's
+ * name first.
  */
 import { useEffect, useState } from 'react'
 import { useLocation } from 'wouter'

@@ -12,7 +12,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PagedList } from '@/components/PagedList'
 import { removeFromWorkspace, setRole } from '@/data/actions'
 import { choicesFor, myWho, ROLE_NAMES, ROLES, type Who } from '@/data/roles'
-import { isAdmin, ownerCount } from '@/data/select'
+import { ownerCount } from '@/data/select'
 import { useData } from '@/data/store'
 import { fuzzy } from '@/lib/fuzzy'
 import { isRole, type Person, type Role } from '@/model/schema'
@@ -53,7 +53,7 @@ function LockedRole({ role, why }: { role: Role; why?: string }) {
   )
 }
 
-export function Members() {
+export function Members({ admin }: { admin: boolean }) {
   const ws = useData((s) => s.workspace?.name ?? '')
   const meLogin = useData((s) => s.me?.login)
   const { members, people } = useData(useShallow((s) => ({ members: s.members, people: s.people })))
@@ -78,7 +78,6 @@ export function Members() {
 
   const sorted = [...rows].sort((a, b) => RANK[a.who.role] - RANK[b.who.role] || a.person.name.localeCompare(b.person.name))
   const me = useData(useShallow(myWho))
-  const admin = useData(isAdmin)
   const shown = fuzzy(sorted, query, (r) => [r.person.name, r.who.login])
   const admins = sorted.filter((r) => r.who.role !== 'member' && r.who.login !== meLogin).map((r) => r.person.name)
 
