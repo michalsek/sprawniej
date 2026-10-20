@@ -49,8 +49,6 @@ const DAY = 86_400_000
 
 /** how long a link works (the database's default) */
 export const INVITE_DAYS = 14
-/** the lengths to pick from, in days; any other is 1 to MAX_INVITE_DAYS */
-export const INVITE_LENGTHS = [7, 14] as const
 /** the database takes 30 days after a link is made; 28 leaves room for a clock that is a little off */
 export const MAX_INVITE_DAYS = 28
 /** "up to N people": the most the app offers (the database takes up to 1000) */
@@ -273,7 +271,7 @@ export function expiresText(expiresAt: string, now: number): string {
   return days <= 0 ? 'expires today' : days === 1 ? 'expires tomorrow' : `expires in ${days} days`
 }
 
-export const isExpired = (i: Pick<Invite, 'expiresAt'>, now: number): boolean => Date.parse(i.expiresAt) < now
+const isExpired = (i: Pick<Invite, 'expiresAt'>, now: number): boolean => Date.parse(i.expiresAt) < now
 
 /** whether a listed link still works, and if not, why (as the database decides, private.invite_state) */
 export function inviteState(

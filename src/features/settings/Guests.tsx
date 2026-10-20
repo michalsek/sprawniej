@@ -6,7 +6,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'wouter'
 import { Copy, Link2, Search, UserPlus, Users } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
-import { expiresText, guestEmails, isExpired } from '@/backend/workspaces'
+import { expiresText, guestEmails, inviteState } from '@/backend/workspaces'
 import { PersonAvatar } from '@/components/Avatar'
 import { EmptyState } from '@/components/EmptyState'
 import { PagedList } from '@/components/PagedList'
@@ -67,7 +67,7 @@ export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; ad
   }
   const openInviteFor = (g: Person) => {
     const id = profileIdOf(g.login)
-    return id ? invites.invites.find((i) => i.forProfile === id && !isExpired(i, now)) : undefined
+    return id ? invites.invites.find((i) => i.forProfile === id && inviteState(i, now) === 'open') : undefined
   }
 
   return (

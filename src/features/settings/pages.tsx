@@ -28,7 +28,6 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react'
-import { INVITE_DAYS } from '@/backend/workspaces'
 import { ImportPage } from '@/features/import/ImportPage'
 import { GitHubSettings } from './GitHubSettings'
 import { LabelsSettings } from './LabelsSettings'
@@ -98,7 +97,7 @@ export const PAGES: SettingsPage[] = [
     group: 'workspace',
     path: '/settings/workspace/invites',
     title: 'Invite links',
-    description: `Each link works once, for ${INVITE_DAYS} days. Whoever opens it can create an account and join.`,
+    description: 'A link works for as long as you choose, for one person or several. Whoever opens it can create an account and join. You can end a link at any time.',
     icon: UserPlus,
     who: 'admins',
     forMembers: { title: 'invite people', text: 'Ask one of them for an invite link.' },

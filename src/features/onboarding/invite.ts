@@ -29,8 +29,12 @@ export function inviteUrl(token: string): { url: string; local: boolean } {
   return { url: `${published ?? authRedirectUrl()}#/join/${token}`, local: published === null }
 }
 
-/** "Saturday 31 October", in this computer's time zone */
-const untilDay = (at: string) => new Date(at).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+/**
+ * When a link stops working: "Saturday 31 October at 18:00", in this computer's time zone. The time is there so
+ * "until Saturday" isn't read as "all of Saturday".
+ */
+export const untilText = (at: string) =>
+  new Date(at).toLocaleString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })
 
 /**
  * A ready-to-send message ("Hi Jan! …"). `forName`: the person from Linear it is for; `shared`: a link for several
@@ -39,7 +43,7 @@ const untilDay = (at: string) => new Date(at).toLocaleDateString('en-GB', { week
 export function inviteMessage(url: string, workspace: string, o: { forName?: string | null; expiresAt: string; shared?: boolean }): string {
   const first = o.forName?.trim().split(/\s+/)[0]
   const works = o.shared ? 'It works' : "It's just for you and works"
-  return `${first ? `Hi ${first}!` : 'Hi!'} We plan and track our work in Sprawniej. Open this link to join ${workspace}. ${works} until ${untilDay(o.expiresAt)}:\n${url}`
+  return `${first ? `Hi ${first}!` : 'Hi!'} We plan and track our work in Sprawniej. Open this link to join ${workspace}. ${works} until ${untilText(o.expiresAt)}:\n${url}`
 }
 
 /** "Ania, Tomek and 4 others are here." (invite_info shows up to 8, so 8 may mean more) */

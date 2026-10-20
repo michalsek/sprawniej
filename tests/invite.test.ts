@@ -53,12 +53,12 @@ describe('the ready-to-send message', () => {
   const expiresAt = new Date(2026, 9, 31, 12).toISOString()
   test('greets someone from Linear by their first name; a link for one person is just for them', () => {
     expect(inviteMessage(url, 'Acme', { forName: 'Jan Kowalski', expiresAt })).toBe(
-      `Hi Jan! We plan and track our work in Sprawniej. Open this link to join Acme. It's just for you and works until Saturday 31 October:\n${url}`,
+      `Hi Jan! We plan and track our work in Sprawniej. Open this link to join Acme. It's just for you and works until Saturday 31 October at 12:00:\n${url}`,
     )
   })
   test('a link for several people or anyone is not', () => {
     expect(inviteMessage(url, 'Acme', { expiresAt, shared: true })).toBe(
-      `Hi! We plan and track our work in Sprawniej. Open this link to join Acme. It works until Saturday 31 October:\n${url}`,
+      `Hi! We plan and track our work in Sprawniej. Open this link to join Acme. It works until Saturday 31 October at 12:00:\n${url}`,
     )
   })
 })

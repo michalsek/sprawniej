@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { expiresAtFor, expiresText, InviteError, inviteProblem, inviteState, isExpired, maxUsesFor, toInviteInfo } from '@/backend/workspaces'
+import { expiresAtFor, expiresText, InviteError, inviteProblem, inviteState, maxUsesFor, toInviteInfo } from '@/backend/workspaces'
 
 describe('what the join page reads', () => {
   test('people, an inviter, no workspace id for those not in it', () => {
@@ -64,8 +64,6 @@ describe('when a link stops working', () => {
     expect(expiresText(at(3), now)).toBe('expires in 3 days')
     expect(expiresText(at(14), now)).toBe('expires in 14 days')
     expect(expiresText(at(0, -1), now)).toBe('expired')
-    expect(isExpired({ expiresAt: at(0, -1) }, now)).toBe(true)
-    expect(isExpired({ expiresAt: at(1) }, now)).toBe(false)
   })
 })
 
