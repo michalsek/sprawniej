@@ -4,3 +4,4 @@ dev-dist
 *.local
 .DS_Store
 supabase/.env
+supabase/functions/github-webhook/index.js

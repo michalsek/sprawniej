@@ -403,6 +403,12 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# GitHub pull requests move issues (docs/github-app.md). GitHub signs its deliveries instead of signing in, and the
+# code is bundled from src/github by `bun run deploy:github` (the bundle isn't in git).
+[functions.github-webhook]
+verify_jwt = false
+entrypoint = "./functions/github-webhook/index.js"
+
 [analytics]
 enabled = true
 port = 54327
