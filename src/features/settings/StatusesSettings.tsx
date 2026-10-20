@@ -4,7 +4,7 @@
  * things that have it. Each group keeps at least one shown status. Everything saves by itself.
  *
  * On screen this says "group", never "category" (CLAUDE.md, writing). One component for every kind of status; what
- * differs per kind is in KIND_TEXT (project statuses add their entry there).
+ * differs per kind (issues, projects) is in KIND_TEXT.
  */
 import { useMemo, useState } from 'react'
 import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, useSensor, useSensors, type Announcements, type DragEndEvent } from '@dnd-kit/core'
@@ -20,7 +20,7 @@ import { STATUS_COLORS } from '@/model/colors'
 import type { Status } from '@/model/schema'
 import type { StatusKind } from '@/model/status'
 import { StatusIcon } from '@/features/issues/icons'
-import { StatusDot } from '@/features/projects/ProjectProperties'
+import { StatusDot } from '@/features/projects/StatusDot'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
@@ -41,8 +41,8 @@ function freshName(statuses: Record<string, Status>, kind: StatusKind): string {
 interface RowProps {
   status: Status
   statuses: Record<string, Status>
-  /** how many have it (undefined: this kind doesn't count yet) */
-  uses: number | undefined
+  /** how many have it */
+  uses: number
   text: KindText
   /** the group's default, marked when the group has a choice */
   isDefault: boolean
@@ -129,7 +129,7 @@ function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, belo
           {status.hidden && <Hint text={text.hiddenHint}>Hidden</Hint>}
           {isDefault && <Hint text={text.defaultHint}>Default</Hint>}
         </span>
-        {uses !== undefined && <span className={cn('w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums sm:w-20', dim)}>{text.count(uses)}</span>}
+        <span className={cn('w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums sm:w-20', dim)}>{text.count(uses)}</span>
         {hideable ? (
           hide
         ) : (
@@ -182,7 +182,7 @@ interface GroupProps {
   group: GroupInfo
   list: Status[]
   statuses: Record<string, Status>
-  uses: ReadonlyMap<string, number> | undefined
+  uses: ReadonlyMap<string, number>
   fresh: string | null
   onAdd: (group: string) => void
 }
@@ -235,7 +235,7 @@ function GroupSection({ kind, group, list, statuses, uses, fresh, onAdd }: Group
                 key={s.id}
                 status={s}
                 statuses={statuses}
-                uses={uses ? (uses.get(s.id) ?? 0) : undefined}
+                uses={uses.get(s.id) ?? 0}
                 text={text}
                 isDefault={choice && s.id === first?.id}
                 fresh={s.id === fresh}
@@ -267,7 +267,7 @@ export function StatusesSettings({ kind }: { kind: StatusKind }) {
   const issues = useData((s) => s.issues)
   const projects = useData((s) => s.projects)
   const counter = KIND_TEXT[kind].uses
-  const uses = useMemo(() => counter?.({ issues, projects }), [counter, issues, projects])
+  const uses = useMemo(() => counter({ issues, projects }), [counter, issues, projects])
   const [fresh, setFresh] = useState<string | null>(null)
   const all = useMemo(() => statusesOf(statuses, kind), [statuses, kind])
   const add = (group: string) => {

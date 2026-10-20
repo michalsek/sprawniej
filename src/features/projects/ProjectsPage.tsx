@@ -26,7 +26,7 @@ import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { NewProjectDialog } from './NewProjectDialog'
 import { ProjectBoard } from './ProjectBoard'
-import { StatusDot } from './ProjectProperties'
+import { StatusDot } from './StatusDot'
 import { useProgressIssues } from './useProjectIssues'
 
 /** one project in the list: its emoji changes in place, the star keeps it in your sidebar, and ⋯ renames or deletes it */

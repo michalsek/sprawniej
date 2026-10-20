@@ -886,7 +886,8 @@ export function createProject(input: NewProject): Project {
   const asked = input.statusId && canTake(input.statusId, s.statuses) ? pickProjectStatus(input.statusId, s.statuses) : undefined
   const picked = asked || pickProjectStatus('planned', s.statuses) || { status: 'planned' as const }
   const statusId = picked.statusId ?? ''
-  const below = statusId ? placeKeyless(columnOf(s.projects, s.statuses, statusId)) : { keys: new Map<string, string | null>(), changes: [] }
+  // while statuses aren't known, the column is the category's (statusOfProject's made-up status has its id)
+  const below = placeKeyless(columnOf(s.projects, s.statuses, statusId || picked.status))
   const project: Project = {
     id: ulid(),
     name: input.name.trim(),

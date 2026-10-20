@@ -17,8 +17,8 @@ export interface GroupInfo {
 /** what the page says for each kind of status */
 export interface KindText {
   groups: GroupInfo[]
-  /** how many things of this kind have each status, by status id (none yet: no count shows) */
-  uses?: (s: Pick<DataState, 'issues' | 'projects'>) => ReadonlyMap<string, number>
+  /** how many things of this kind have each status, by status id */
+  uses: (s: Pick<DataState, 'issues' | 'projects'>) => ReadonlyMap<string, number>
   /** "1 issue", "3 issues" */
   count: (n: number) => string
   /** what Default means, in a tooltip */

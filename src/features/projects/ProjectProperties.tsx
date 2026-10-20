@@ -8,17 +8,12 @@ import { useData } from '@/data/store'
 import { shortDate } from '@/features/issues/format'
 import { usePeopleItems } from '@/features/issues/pickers'
 import { projectStatuses, statusOfProject } from '@/data/statuses'
-import type { Project, Status } from '@/model/schema'
-import { paintColor } from '@/model/status'
-import { cn } from '@/lib/utils'
+import type { Project } from '@/model/schema'
+import { StatusDot } from './StatusDot'
 
 export const chip =
   'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm text-foreground/90 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60 [&_svg]:size-3.5'
 
-/** a project status's dot, in the status's own colour */
-export function StatusDot({ status, className }: { status: Pick<Status, 'kind' | 'category' | 'color'>; className?: string }) {
-  return <span className={cn('size-2.5 shrink-0 rounded-full', className)} style={{ background: paintColor(status) }} />
-}
 
 type Value = Pick<Project, 'status' | 'statusId' | 'lead' | 'targetDate' | 'teams'>
 

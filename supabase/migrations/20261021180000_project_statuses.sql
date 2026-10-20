@@ -25,15 +25,20 @@ create index projects_status on public.projects (workspace_id, status_id);
 alter table public.projects add column sort_order text collate "C";
 
 -- Every workspace there is gets the six (new ones get them from the seed_statuses trigger, which seeds every kind in
--- private.status_defaults), every project the status of its own category, and an order: by name within the
+-- private.status_defaults), except in a group where it already has a project status (statuses could be made before
+-- this file, and a seeded name could clash with one of them); every project the default status of its own category
+-- (private.default_status: the first shown one); and an order: by name within the
 -- workspace, so each column starts in the order the list showed. Quietly, as an import: no broadcast per row
 -- (changed_at moves, so browsers read the projects again). The setting lasts until it is switched off below, whether
 -- or not the file runs in one transaction.
 select set_config('sprawniej.importing', 'on', false);
-select private.seed_statuses(w.id, 'project') from public.workspaces w;
-update public.projects p set status_id = s.id
-  from public.statuses s
- where s.workspace_id = p.workspace_id and s.kind = 'project' and s.category = p.status;
+insert into public.statuses (id, workspace_id, kind, category, name, color, position)
+select gen_random_uuid()::text, w.id, d.kind, d.category, d.name, d.color, d.position
+  from public.workspaces w cross join private.status_defaults d
+ where d.kind = 'project'
+   and not exists (select 1 from public.statuses s
+                    where s.workspace_id = w.id and s.kind = 'project' and s.category = d.category);
+update public.projects p set status_id = private.default_status(p.workspace_id, 'project', p.status);
 -- Keys as fractional-indexing writes them: a head letter for the length of the whole part ('a' one digit, 'b' two,
 -- 'c' three), then base-62 digits in byte order. The n-th project (from 0) gets: a0 … az for the first 62, then b10 …
 -- bzz (n / 62 and n % 62), then c100 … (n / 3844, n / 62 % 62, n % 62).

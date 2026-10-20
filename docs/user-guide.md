@@ -264,7 +264,8 @@ group by group. Everything saves as you go:
 Below the issue statuses, **Project statuses** work the same way for projects: the six groups are **Backlog**,
 **Planned** (new projects start here), **In progress**, **Paused**, **Completed** and **Canceled**, and the statuses
 are the columns of the project board. Grouping issues by project leaves out projects that are Completed or Canceled.
-Projects that come in from the Linear import, or from teammates on an older version, land on a group's **Default**.
+Projects from the Linear import take the status with the same name, or else their group's **Default**; projects that
+teammates on an older version change or make land on the group's **Default**.
 Next to each project status: how many projects have it.
 
 ### Priority

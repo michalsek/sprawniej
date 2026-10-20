@@ -17,7 +17,7 @@ import type { Issue, Project } from '@/model/schema'
 import { cn } from '@/lib/utils'
 import { AUTO_SCROLL, columnDropId } from '@/features/board/columnsDrag'
 import { projectDragAnnouncements } from './dragText'
-import { StatusDot } from './ProjectProperties'
+import { StatusDot } from './StatusDot'
 import { useProjectDrag } from './useProjectDrag'
 
 interface CardProps {

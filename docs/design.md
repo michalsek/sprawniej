@@ -65,7 +65,7 @@ not an icon. What differs per kind (group names, counts, the Default tooltip) is
 
 Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
 
-A project status is a **dot** in the status's own colour (`StatusDot` in `src/features/projects/ProjectProperties.tsx`,
+A project status is a **dot** in the status's own colour (`src/features/projects/StatusDot.tsx`,
 painted like issue statuses: a status with its group's starting colour follows the theme). The six a workspace starts
 with: Backlog, Paused and Canceled grey, Planned light grey, In progress yellow, Completed indigo.
 
