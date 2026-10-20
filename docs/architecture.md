@@ -24,7 +24,7 @@ Supabase project
   Postgres: RLS policies, column grants, triggers (numbers, authors, times, history, inbox checks)
      |  a "live" trigger on every shared table
      v
-  Realtime broadcast: ws:<workspace id> (shared rows), me:<profile id> (your inbox and read marks)
+  Realtime broadcast: ws:<workspace id> (shared rows), me:<profile id> (your inbox, read marks, favourites)
      |
      v
 Browser
@@ -164,7 +164,9 @@ ends with one "catch up" message.
 
 **Catching up** asks for every row whose `changed_at` is after the mark (minus 10 seconds, so nothing that was being
 saved at that moment slips through), archived rows too, plus the `deletions` since then, plus the labels, followers and
-comments of issues that are new to this browser. It runs after the connection or the channels come back, after the
+comments of issues that are new to this browser. Your favourites leave nothing behind when they go (nobody else may
+know what you unstarred), so each catch-up also reads their keys and drops the ones that went; opening from a copy
+does the same for inbox notes. It runs after the connection or the channels come back, after the
 tab was hidden for more than a minute, after "catch up" messages (an import sends one per batch; they are gathered for
 up to 10 seconds), and a few seconds after a team or project is deleted. When this browser last had everything more
 than 44 days ago (deletions are kept 45 days), it reads everything again instead.
@@ -187,7 +189,8 @@ whole database. A browser that won't keep anything (a private window, full disk)
 ## Live changes
 
 Every shared table has a `live` trigger (`private.broadcast`, `supabase/migrations/20261019000004_realtime.sql`) that
-sends each change to `ws:<workspace id>` (shared rows) or `me:<profile id>` (your inbox notes and read marks). Both
+sends each change to `ws:<workspace id>` (shared rows) or `me:<profile id>` (your inbox notes, read marks and
+favourites; they come from all your workspaces, and the app keeps only the open one's). Both
 channels are private: the database checks you may listen when you join (`realtime.messages` policy), so the app hands
 over the sign-in first. An update sends only the columns that changed, plus the keys and `changed_at`; a delete sends
 the keys. A row over 200 kB sends a nudge without its text (`partial`), and the app fetches the row. Imports and
@@ -441,6 +444,10 @@ state; nothing is saved until you drop. In a list, sub-issues sit under their pa
 from the nearest issues at its own level (top-level issues among top-level ones, sub-issues among their siblings).
 Reordering only means something in Manual order; under another ordering a drop can still change the group, and
 otherwise we explain where to switch to Manual.
+
+Favourites in the sidebar use the same kind of keys: each person's own `sortOrder` per favourite, so a drop (or Move
+up, Move down) saves only the moved one (`src/data/favourites.ts`, `src/app/Favourites.tsx`). Space picks one up from
+the keyboard, as with issues, and the arrow keys then move it rather than the focus in the issue list.
 
 How a built-in page looks (grouping, ordering, what's hidden) is personal: it's kept in this browser per page
 (`src/data/displays.ts`), never in the workspace. Filters set on a built-in page are personal too and last until you

@@ -236,8 +236,9 @@ reads and adds; only the author edits or deletes, while still a member.
 ### views
 
 `id`, `workspace_id`, `team_id` (`team`; null: a workspace view), `owner_id` (`owner`, set by a trigger), `name`,
-`emoji`, `description`, `filters`, `display`, `created_at`, `linear_id`, `changed_at`, `extra`. A view belongs to
-everyone: any member changes it. `filters` and `display` hold logins and team keys, as the app uses them:
+`emoji`, `description`, `filters`, `display`, `created_at`, `linear_id`, `changed_at`, `extra`. Unique by
+`(workspace_id, id)` too, so favourites can point at a view within its workspace. A view belongs to everyone: any
+member changes it. `filters` and `display` hold logins and team keys, as the app uses them:
 
 ```json
 {
@@ -271,6 +272,32 @@ it as from Notion.
 One row per person and workspace: `profile_id`, `workspace_id`, `read_until` (`readUntil`: "Mark all as read", every
 note up to then counts as read), `changed_at`, `extra`. Yours only. The one table written with an upsert, so you may
 write every column.
+
+### favourites
+
+The projects and views someone starred, kept in their sidebar in their own order. One row per person and starred
+thing, in one workspace:
+
+| Column | Meaning |
+| --- | --- |
+| `profile_id` | whose favourite it is |
+| `workspace_id` | the workspace of the project or view |
+| `kind` (`kind`) | `project` or `view` |
+| `item_id` (`id`) | the project's or view's id |
+| `sort_order` (`sortOrder`) | its place in your list: a fractional key, compared as plain text, like an issue's |
+| `project_id`, `view_id` | generated from `kind` and `item_id` (the id in the column of its kind, null in the other), only so each kind has a real foreign key; the app never sends or reads them |
+| `changed_at`, `extra` | as everywhere |
+
+Key `(profile_id, item_id)`: the app makes it, so starring again after unstarring is the same row, and starring in two
+tabs at once makes one (it is added unless there). `(workspace_id, project_id)` points at `projects` and
+`(workspace_id, view_id)` at `views`, both deleting the favourite along with what it stars (deleting a team deletes its
+views, and so their favourites). Deleting the person or the workspace deletes them too.
+
+Yours only, and only while you are a member: nobody else reads, adds, changes or deletes them. Only `sort_order` and
+`extra` change; to star something else, unstar and star again. They come and go on your own channel (`me:`), and
+deleting one leaves no `deletions` row (it would tell every member what you unstarred), so a browser compares its
+favourites' keys every time it catches up. Leaving a workspace keeps them, out of reach; joining again brings them
+back, minus whatever was deleted meanwhile. Imports and `move_person` don't touch them.
 
 ### issue_events
 
@@ -306,7 +333,8 @@ keys: `{"id": "…"}` or `{"issue_id": "…", "label_id": "…"}`), `deleted_at`
 included, so a browser that catches up drops them too, but only for the tables `private.wiring` marks with
 `forget = true`: workspace members, teams, team members, labels, statuses (which are never deleted, except with their
 workspace), projects, project teams, issues, issue labels, followers, pull requests, comments and views, plus profiles of guests (a profile with an account belongs to no workspace, so it
-leaves none). Workspaces, invites, invite uses, inbox notes and read marks leave none; a browser compares its inbox notes instead.
+leaves none). Workspaces, invites, invite uses, inbox notes, read marks and favourites leave none; a browser compares
+its inbox notes and favourites instead.
 Nothing is noted while the whole workspace is going. Kept 45 days.
 
 ### github_repos
@@ -525,6 +553,7 @@ let them add, change and delete them, except:
 - comments: only the author edits and deletes, while a member;
 - inbox: you read, mark and delete your own notes; you add notes only as their actor;
 - read_state: yours only;
+- favourites: yours only, while you are a member;
 - workspaces: admins and owners rename, owners delete; creating is `create_workspace()`;
 - workspace_members: admins and owners change roles and remove people;
 - invites, github_repos and notion_connections: admins and owners only;
@@ -542,7 +571,7 @@ with a copy in `src/backend/changes.ts`.
 ## Realtime
 
 Two private channels per open workspace: `ws:<workspace id>` for every shared table, and `me:<profile id>` for your
-inbox notes and read marks. You may listen to `ws:` while you are a member, and to your own `me:`; browsers can't send
+inbox notes, read marks and favourites (from all your workspaces: the app keeps the open one's). You may listen to `ws:` while you are a member, and to your own `me:`; browsers can't send
 on either. Each message has the event `change` and
 
 ```json

@@ -136,8 +136,9 @@ you don't need to end those links.
 ### Leaving a workspace
 
 To leave a workspace yourself, press **Leave workspace** in **Settings › General**. Your issues and comments
-stay, with your name; to come back, ask for a new invite. A workspace always keeps at least one owner: if you're the
-only one, make someone else an owner first.
+stay, with your name; to come back, ask for a new invite. Your favourites there come back with you, except anything
+deleted while you were away. A workspace always keeps at least one owner: if you're the only one, make someone else
+an owner first.
 
 ## Your work saves by itself
 
@@ -362,6 +363,7 @@ sidebar to see them, and **New view** to make one. A view shows issues from the 
 A view belongs to everyone. Changing its name, emoji, description, filters, grouping or List / Board saves straight
 away, for everyone. In the list of views, click a view's emoji to change it, or use **⋯** to rename or delete it. On
 the view's own page, click its name or description to change them. Deleting a view leaves its issues as they are.
+Press the star (☆) on a view to keep it in your sidebar (see Favourites).
 
 ## Projects
 
@@ -371,7 +373,26 @@ a target date and which teams work on it. The bar shows how many of its issues a
 click an emoji to change it, or use **⋯** to rename or delete a project.
 
 Add issues to a project from the project's page, or pick the project on any issue. Deleting a project
-(**⋯ › Delete project**) keeps its issues; they just no longer belong to a project.
+(**⋯ › Delete project**) keeps its issues; they just no longer belong to a project. Press the star (☆) on a project
+to keep it in your sidebar (see Favourites).
+
+## Favourites
+
+Keep the projects and views you open often in your sidebar: they show in the **Workspace** section, under
+**Projects** and **Views**.
+
+- **Add one:** press the star (☆) next to **⋯** at the top of a project's or view's page, or on its row in the list of
+  projects or views (it shows when you point at the row). Or open ⌘K on its page and pick **Add to favourites**. A new
+  favourite goes to the bottom.
+- **Open one:** click it in the sidebar.
+- **Change the order:** drag it up or down. With the keyboard, move to it with `Tab`, press `Space` to pick it up, use
+  the arrow keys, and press `Space` again to put it down (`Esc` puts it back). Or use its **⋯ › Move up** or
+  **Move down**.
+- **Remove one:** press the star again, use **⋯ › Remove from favourites** in the sidebar, or **Remove from
+  favourites** in ⌘K.
+
+Your favourites are only yours: teammates don't see them, and yours don't change theirs. Each workspace has its own.
+When a project or view is deleted, it leaves your favourites by itself. Finished projects stay until you remove them.
 
 ## Labels
 
@@ -511,14 +532,15 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
 - `J` / `K`, or `↓` / `↑`: move to the next or previous issue in a list or board.
 - `X`: pick the issue (to change or move several at once).
 - `Enter`: open it.
-- `Space`: pick it up to move it with the arrows; `Space` again puts it down.
+- `Space`: pick it up to move it with the arrows; `Space` again puts it down. The same works for a favourite in the
+  sidebar.
 - `Esc`: let go of picked issues, or go back from an issue.
 
 ## On a phone
 
-Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar; in
-Settings, the same button opens the settings menu. Press and hold an
-issue to drag it.
+Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar; in Settings, the
+same button opens the settings menu. Press and hold an issue to drag it, or a favourite in the sidebar to change their
+order. The star on a list row always shows on a phone.
 
 ## Pictures
 

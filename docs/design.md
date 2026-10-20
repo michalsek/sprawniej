@@ -74,7 +74,13 @@ Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
 ## Pieces
 
 - **Sidebar**: logo and "Sprawniej" at the top; Inbox, My issues; small grey section labels in sentence case
-  (*Workspace*, *Your teams*); your picture, name and @handle at the bottom with a menu.
+  (*Workspace*, *Your teams*); your picture, name and @handle at the bottom with a menu. Your favourites sit inside
+  *Workspace*, under Projects and Views after a small gap, with no label of their own: rows like the others (emoji and
+  name, cut with an ellipsis, the full name on hover), with a ⋯ that shows on hover. With none, one quiet dashed hint
+  in their place ("Star a project or view to keep it here."), like "You're not in a team yet".
+- **Favourite star**: a grey outline star next to ⋯ on a project's or view's page and on its row in the lists; when
+  on, filled with the text colour. Never yellow: the star is not a meaning colour. On list rows it shows on hover or
+  focus (always on touch screens), and always when on.
 - **Top bar**: sidebar toggle, a thin divider, breadcrumbs (`Sprawniej / 🛠️ Engineering / Issues`), the save chip,
   and the search box with `⌘K`.
 - **Buttons**: outlined by default (like Punchcard's `Today`). One filled button per screen at most (white in Dark,
