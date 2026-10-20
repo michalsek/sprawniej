@@ -29,7 +29,7 @@ interface Lookup {
   connection: string
   workspace: string
   actor: string | null
-  people: { id: string; login: string }[]
+  people: { id: string; login: string; handle: string | null }[]
   issues: {
     id: string
     ref: string
@@ -140,6 +140,7 @@ describe.skipIf(!enabled)('GitHub', () => {
     expect(found.workspace).toBe(ws)
     expect(found.actor).toBe(bob.profileId)
     expect(found.people.map((p) => p.id).sort()).toEqual([ana.profileId, bob.profileId].sort())
+    expect(found.people.find((p) => p.id === ana.profileId)).toEqual({ id: ana.profileId, login: ana.login, handle: null })
     expect(found.issues.map((i) => i.id).sort()).toEqual([one.id, done.id, moved.id].sort())
     const first = found.issues.find((i) => i.id === one.id)
     expect(first?.created_by).toBe(ana.profileId)

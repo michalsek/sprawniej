@@ -684,6 +684,7 @@ export type Database = {
           extra: Json
           github_id: number | null
           guest_of: string | null
+          handle: string | null
           id: string
           linear_ids: string[]
           login: string
@@ -698,6 +699,7 @@ export type Database = {
           extra?: Json
           github_id?: number | null
           guest_of?: string | null
+          handle?: string | null
           id?: string
           linear_ids?: string[]
           login: string
@@ -712,6 +714,7 @@ export type Database = {
           extra?: Json
           github_id?: number | null
           guest_of?: string | null
+          handle?: string | null
           id?: string
           linear_ids?: string[]
           login?: string
@@ -1112,6 +1115,7 @@ export type Database = {
           extra: Json
           github_id: number | null
           guest_of: string | null
+          handle: string | null
           id: string
           linear_ids: string[]
           login: string
@@ -1144,6 +1148,7 @@ export type Database = {
           extra: Json
           github_id: number | null
           guest_of: string | null
+          handle: string | null
           id: string
           linear_ids: string[]
           login: string
@@ -1251,6 +1256,30 @@ export type Database = {
       set_guest_email: {
         Args: { p_email: string; p_profile: string }
         Returns: undefined
+      }
+      set_handle: {
+        Args: { p_handle: string }
+        Returns: {
+          avatar_url: string
+          changed_at: string
+          created_at: string
+          extra: Json
+          github_id: number | null
+          guest_of: string | null
+          handle: string | null
+          id: string
+          linear_ids: string[]
+          login: string
+          name: string
+          name_set_here: boolean
+          user_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "profiles"
+          isOneToOne: true
+          isSetofReturn: true
+        }
       }
       signup_code_needed: { Args: never; Returns: boolean }
       use_signup_code: {
