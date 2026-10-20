@@ -35,7 +35,8 @@ update public.projects p set status_id = s.id
   from public.statuses s
  where s.workspace_id = p.workspace_id and s.kind = 'project' and s.category = p.status;
 -- Keys as fractional-indexing writes them: a head letter for the length of the whole part ('a' one digit, 'b' two,
--- 'c' three), then base-62 digits in byte order. The n-th project gets the n-th key: a0, a1 … az, b00 … bzz, c000 …
+-- 'c' three), then base-62 digits in byte order. The n-th project (from 0) gets: a0 … az for the first 62, then b10 …
+-- bzz (n / 62 and n % 62), then c100 … (n / 3844, n / 62 % 62, n % 62).
 with d as (select '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'::text as s),
      o as (select id, (row_number() over (partition by workspace_id order by lower(name), id) - 1)::integer as n
              from public.projects)

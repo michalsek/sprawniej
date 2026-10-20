@@ -314,7 +314,8 @@ that still has its category's starting colour is painted in the theme's colour f
 Planned, In progress, Paused, Completed, Canceled. `projects.status` is the category, as always; `projects.status_id`
 is the status, kept in step by the same trigger (`a_category`, `follow_status('project')`). Grouping issues by project
 leaves out completed and canceled projects, by category. The app sends only `status_id` (picking a status, a drop on
-the board, a new project, which starts in Planned's default unless a column's "+" made it); an older version sends
+the board, a new project, which starts in Planned's default unless a column's "+" made it), or only `status` while the
+workspace's statuses aren't loaded yet; an older version sends
 only `status` and lands on its category's default; the import sends both (docs/linear-import.md). The helpers are in
 `src/data/statuses.ts` too (`projectStatuses`, `statusOfProject`, `pickProjectStatus`); a project dropped into a
 status still being saved waits for it, as an issue does.

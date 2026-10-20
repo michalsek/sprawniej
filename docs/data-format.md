@@ -184,7 +184,9 @@ first."). Broadcast on `ws:`.
 | `lead_id` (`lead`), `target_date` (`targetDate`, a day) | null when none |
 | `linear_id`, `created_at`, `changed_at`, `extra` | see Common columns |
 
-The app sends `status_id` and never `status` (the database fills it in). When the project statuses came
+The app sends `status_id` and not `status` (the database fills it in); only while the workspace's statuses aren't
+loaded yet does it send `status` alone. Issues send both (`status` when the category changes); either way the trigger
+keeps them in step. When the project statuses came
 (`20261021150000_project_statuses.sql`), every project got the status of its category, and `sort_order` in name order
 per workspace (`a0` … `az`, `b10` …), so each column started in the order the list showed.
 

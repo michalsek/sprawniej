@@ -66,7 +66,7 @@ Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
 
 A project status is a **dot** in the status's own colour (`StatusDot` in `src/features/projects/ProjectProperties.tsx`,
 painted like issue statuses: a status with its group's starting colour follows the theme). The six a workspace starts
-with: Backlog and Paused grey, Canceled grey, Planned light grey, In progress yellow, Completed indigo.
+with: Backlog, Paused and Canceled grey, Planned light grey, In progress yellow, Completed indigo.
 
 ## Type and spacing
 
