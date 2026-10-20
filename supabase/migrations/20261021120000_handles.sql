@@ -25,6 +25,7 @@ declare
   gid bigint;
   gavatar text;
   tries integer := 0;
+  clash text;
 begin
   if uid is null then raise exception 'Please sign in first.' using errcode = '42501'; end if;
   if exists (select 1 from public.profiles where user_id = uid) then
@@ -52,12 +53,22 @@ begin
       return next p;
       return;
     exception when unique_violation then
-      -- taken at the same moment: looked at again above; a hidden login that clashed gets another ending
-      tries := tries + 1;
-      if tries >= 5 then
-        raise exception 'Someone already uses @%. Pick another one.', wanted using errcode = '23505';
+      get stacked diagnostics clash = constraint_name;
+      if clash in ('profiles_login', 'profiles_handle') then
+        -- the handle or login was taken at the same moment: looked at again above; a hidden login gets another ending
+        tries := tries + 1;
+        if tries >= 5 then
+          raise exception 'Someone already uses @%. Pick another one.', wanted using errcode = '23505';
+        end if;
+        if key <> wanted then key := left(wanted, 34) || '-' || substr(md5(random()::text), 1, 4); end if;
+      elsif exists (select 1 from public.profiles where user_id = uid) then
+        -- picked in another tab at the same moment
+        raise exception 'You already have a name here.' using errcode = 'SP001';
+      elsif gid is not null and exists (select 1 from public.profiles where github_id = gid) then
+        gid := null;                                  -- someone claimed this GitHub id meanwhile: without it
+      else
+        raise;
       end if;
-      if key <> wanted then key := left(wanted, 34) || '-' || substr(md5(random()::text), 1, 4); end if;
     end;
   end loop;
 end $$;

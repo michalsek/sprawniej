@@ -78,10 +78,11 @@ describe.skipIf(!enabled)('handles', () => {
     await expectError(one.db.rpc('create_profile', { p_login: h('BOBBY'), p_name: 'New' }), '23505')
     await expectError(one.db.rpc('create_profile', { p_login: ana.login, p_name: 'New' }), '23505')
     // Bob's login is his hidden key still: the newcomer gets one of their own, and shows as @<Bob's old login>
-    const made = await ok(one.db.rpc('create_profile', { p_login: bob.login, p_name: 'New' }).single())
-    expect(made.handle).toBe(bob.login)
-    expect(made.login).not.toBe(bob.login)
-    expect(made.login.startsWith(`${bob.login}-`)).toBe(true)
+    // in other capitals too: it's the same handle
+    const typed = bob.login.toUpperCase()
+    const made = await ok(one.db.rpc('create_profile', { p_login: typed, p_name: 'New' }).single())
+    expect(made.handle).toBe(typed)
+    expect(made.login.startsWith(`${typed}-`)).toBe(true)
     await expectError(set(bob, bob.login), '23505')
   })
 
