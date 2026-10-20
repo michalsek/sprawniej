@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { CATEGORIES } from '@/model/status'
 import { client, closeChannels, defaultStatuses, enabled, expectDenied, expectError, getWorld, newIssue, newWorkspace, ok, ulid, type Someone, type World } from './support'
 
-// A workspace's own statuses (supabase/migrations/20261020160000_statuses.sql): seeded per workspace, kept in step
+// A workspace's own statuses (supabase/migrations/20261021140000_statuses.sql): seeded per workspace, kept in step
 // with the fixed category in issues.status both ways, hidden instead of deleted, and named in inbox notes.
 
 describe.skipIf(!enabled)('statuses', () => {
