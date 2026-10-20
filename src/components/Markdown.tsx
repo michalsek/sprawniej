@@ -5,6 +5,7 @@
 import { lazy, Suspense, type ComponentProps } from 'react'
 import type { Ticks } from './MarkdownView'
 import { usePictureUrl } from '@/data/assets'
+import { showable } from '@/data/checklist'
 import { linkReferences } from '@/data/mentions'
 import { findArchivedByRef, findByRef, useData } from '@/data/store'
 
@@ -36,7 +37,11 @@ const NO_TICKS: Ticks = {}
  */
 export function Markdown({ children, references, ticks = NO_TICKS }: { children: string; references?: boolean; ticks?: Ticks }) {
   // a string, so this only redraws when the result changes
-  const text = useData((s) => (references ? linkReferences(children, s.people, (ref) => !!findByRef(s.issues, ref) || !!findArchivedByRef(s, ref)) : children))
+  // empty checklist items show as boxes too (showable keeps every line where it was, so a tick names its line)
+  const text = useData((s) => {
+    const md = showable(children)
+    return references ? linkReferences(md, s.people, (ref) => !!findByRef(s.issues, ref) || !!findArchivedByRef(s, ref)) : md
+  })
   return (
     <Suspense fallback={<p className="whitespace-pre-wrap">{children}</p>}>
       <MarkdownView components={COMPONENTS} ticks={ticks}>

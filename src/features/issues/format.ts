@@ -1,3 +1,5 @@
+import type { Ticks } from '@/components/MarkdownView'
+
 const MONTH = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' })
 const MONTH_YEAR = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' })
 
@@ -48,3 +50,6 @@ export function timeAgo(iso: string, now = new Date()): string {
 /** what each state of a pull request is called on the issue page */
 export const pullStateName = (state: 'open' | 'draft' | 'merged' | 'closed'): string =>
   ({ open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' })[state]
+
+/** an archived issue's checklists show as they were */
+export const ARCHIVED_TICKS: Ticks = { note: 'Restore this issue to tick its boxes.' }

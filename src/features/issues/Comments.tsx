@@ -5,18 +5,19 @@
  * can be ticked without opening it for editing; other people's can't.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { setCheckedAtLine } from '@/data/checklist'
+import { checklistItems, setCheckedAtLine } from '@/data/checklist'
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { PersonAvatar } from '@/components/Avatar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Markdown } from '@/components/Markdown'
+import type { Ticks } from '@/components/MarkdownView'
 import { createComment, deleteComment, updateComment } from '@/data/actions'
 import { useData } from '@/data/store'
 import { Editor } from '@/editor/LazyEditor'
 import type { ArchivedIssue, Comment, Issue } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
-import { shortDate } from './format'
+import { ARCHIVED_TICKS, shortDate } from './format'
 import { CreatedLine, HistoryLine } from './HistoryLine'
 import { takeJump } from './jumpTo'
 import { useIssueHistory } from './useHistory'
@@ -27,13 +28,16 @@ function CommentItem({ comment, mine, archived }: { comment: Comment; mine: bool
   const author = useData((s) => s.people[comment.author])
   const [editing, setEditing] = useState(false)
   const [confirm, setConfirm] = useState(false)
-  const ticks = useMemo(
-    () =>
-      mine
-        ? { onTick: (line: number, checked: boolean) => updateComment(comment.issue, comment.id, setCheckedAtLine(comment.body, line, checked)) }
-        : { note: archived ? 'Restore this issue to tick its boxes.' : `Only ${author?.name ?? 'the person who wrote it'} can tick this.` },
-    [mine, archived, comment.issue, comment.id, comment.body, author?.name],
-  )
+  const ticks = useMemo<Ticks>(() => {
+    if (archived) return ARCHIVED_TICKS
+    if (!mine) return { note: `Only ${author?.name ?? 'the person who wrote it'} can tick this.` }
+    return {
+      onTick: (line, checked) => updateComment(comment.issue, comment.id, setCheckedAtLine(comment.body, line, checked)),
+      // a numbered item can have a box too, but only the comment's text can change it
+      lines: checklistItems(comment.body).map((i) => i.line),
+      note: 'Choose Edit on this comment to change this box.',
+    }
+  }, [mine, archived, comment.issue, comment.id, comment.body, author?.name])
   return (
     <li className="group rounded-lg border p-4" id={`comment-${comment.id}`}>
       <div className="mb-2 flex items-center gap-2 text-sm">

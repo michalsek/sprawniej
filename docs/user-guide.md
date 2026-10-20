@@ -188,13 +188,13 @@ An **issue** is one piece of work: a task, a bug, an idea. Each has a short ID l
 - **Links and formatting:** paste a link and it becomes clickable. Select some words and paste a link to turn
   them into a link. Type `/` at the start of a line (or after a space) for a list of what you can add: a checklist,
   a heading, a bulleted or numbered list, a quote, a code block, a table or a divider. Keep typing to narrow it down
-  (`/tab` finds Table), pick with the arrows and `Enter` or a tap, and `Esc` closes it. Or type it straight away and
-  it formats as you type: `# `, `## ` or `### ` for a heading, `- ` for a list, `1. ` for a numbered list, `[] ` for
-  a checklist, `> ` for a quote, ```` ``` ```` for code, `---` for a divider, `**bold**`, `*italic*`, `~~struck~~`
-  and `` `code` ``.
-- **Tables:** pick **Table** from the `/` list. `Tab` goes to the next cell, and `Tab` in the last cell adds a row.
-  Inside a table, `/` also adds a row below or a column to the right, and removes a row, a column or the whole table.
-  A cell holds one line of text. On a phone, a wide table scrolls sideways.
+  (`/tab` finds Table, `/heading 2` finds Heading 2), pick with the arrows and `Enter` or a tap, and `Esc` closes it.
+  Or type it straight away and it formats as you type: `# `, `## ` or `### ` for a heading, `- ` for a list, `1. `
+  for a numbered list, `[] ` for a checklist, `> ` for a quote, ```` ``` ```` for code, `---` for a divider,
+  `**bold**`, `*italic*`, `~~struck~~` and `` `code` ``.
+- **Tables:** pick **Table** from the `/` list. `Tab` goes to the next cell, and `Tab` in the last cell adds a line.
+  Inside a table, `/` adds a line below or a column to the right, and removes a line, a column or the whole table.
+  A cell holds a little text (`Shift` `Enter` starts a new line in it). On a phone, a wide table scrolls sideways.
 - **Mention someone:** type `@` and their name or handle. They'll get a note in their Inbox. A mention counts by the
   handle someone has now (see Your handle).
 - **Point to another issue:** type its ID, like `ENG-7`. Hold `⌘` (or `Ctrl`) and click it to open it.
@@ -216,7 +216,7 @@ Break an issue into steps and tick them off as you go.
 - **"That checklist item changed meanwhile":** a teammate reworded or removed the item just as you ticked it. Your
   tick is taken back; have a look at the new text and tick it again.
 - **In comments:** checklists work there too. The person who wrote a comment can tick its boxes without opening it
-  for editing; nobody else can.
+  for editing; nobody else can (tapping a box you can't tick says why).
 
 ### Working at the same time as others
 
