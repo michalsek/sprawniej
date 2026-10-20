@@ -1,31 +1,35 @@
 /**
- * The rich text editor for descriptions and comments. It formats as you type (**bold**, "- " lists, "[] " checklists,
- * ``` code), turns pasted links into links (paste a link onto selected words to link them), and stores plain Markdown.
+ * The rich text editor for descriptions and comments. It formats as you type (**bold**, "# " headings, "- " lists,
+ * "[] " checklists, "> " quotes, ``` code), and "/" opens a list of what you can add (SlashMenu.tsx: headings, lists,
+ * checklists, quotes, code, tables, a divider). It turns pasted links into links (paste a link onto selected words to
+ * link them), and stores plain Markdown (content.ts says what it can hold).
  *
  * Saving: `onChange` gets the Markdown a moment after you stop typing, and at once when you leave the field. Only
  * your own edits are saved: clicking in and out again saves nothing. A teammate's change shows up here too (merged
  * into yours if you're writing here).
+ *
+ * Ticking a checklist box (checklist.ts) doesn't put the cursor in the text. With `onTick`, a tick made while
+ * nothing else is waiting to be saved goes on its own (only that box), so it never undoes a teammate's tick or text;
+ * otherwise it's saved with the rest of the text.
  */
 import { useEffect, useRef } from 'react'
 import { EditorContent, useEditor } from '@tiptap/react'
-import StarterKit from '@tiptap/starter-kit'
+import type { Editor as TiptapEditor } from '@tiptap/core'
 import { Markdown } from '@tiptap/markdown'
-import { TaskItem, TaskList } from '@tiptap/extension-list'
 import { Placeholder } from '@tiptap/extensions'
-import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
-import { createLowlight } from 'lowlight'
 import { toast } from 'sonner'
-import { addImage } from '@/data/actions'
+import { addImage, type ChecklistTick } from '@/data/actions'
+import { checklistItems, openable, setChecked } from '@/data/checklist'
 import { cn } from '@/lib/utils'
 import { MentionSuggest } from './MentionSuggest'
 import { References } from './references'
-import { LANGUAGES } from './languages'
+import { SlashMenu } from './SlashMenu'
+import { TICK, type TickMeta } from './checklist'
+import { contentExtensions } from './content'
 import { tidyMarkdown } from './tidy'
 import { onBeforeHide } from '@/lib/beforeHide'
 import { mergeText } from './mergeText'
-import { hasPending, Picture, savedMarkdown, settlePicture } from './picture'
-
-const lowlight = createLowlight(LANGUAGES)
+import { hasPending, savedMarkdown, settlePicture } from './picture'
 
 const SAVE_AFTER = 400
 
@@ -39,9 +43,11 @@ interface Props {
   onSubmit?: (markdown: string) => void
   /** the field's accessible name */
   label?: string
+  /** a checklist box ticked (or unticked) on its own: true when it was saved that way */
+  onTick?: (tick: ChecklistTick) => boolean
 }
 
-export function Editor({ value, onChange, placeholder = 'Add a description…', autoFocus, className, onSubmit, label = 'Description' }: Props) {
+export function Editor({ value, onChange, placeholder = 'Add a description…', autoFocus, className, onSubmit, label = 'Description', onTick }: Props) {
   const lastSent = useRef(value)
   /** you changed something since the last save */
   const dirty = useRef(false)
@@ -51,27 +57,16 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const changeRef = useRef(onChange)
   const submitRef = useRef(onSubmit)
+  const tickRef = useRef(onTick)
   useEffect(() => {
     changeRef.current = onChange
     submitRef.current = onSubmit
+    tickRef.current = onTick
   })
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        codeBlock: false,
-        link: { openOnClick: false, autolink: true, linkOnPaste: true, defaultProtocol: 'https' },
-      }),
-      CodeBlockLowlight.configure({ lowlight }),
-      TaskList,
-      TaskItem.configure({ nested: true }),
-      Placeholder.configure({ placeholder }),
-      Markdown,
-      References,
-      MentionSuggest,
-      Picture,
-    ],
-    content: value,
+    extensions: [...contentExtensions(), Placeholder.configure({ placeholder }), Markdown, References, MentionSuggest, SlashMenu],
+    content: openable(value),
     contentType: 'markdown',
     autofocus: autoFocus ? 'end' : false,
     editorProps: {
@@ -83,7 +78,8 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
         return addPictures(event.dataTransfer?.files, at)
       },
       handleKeyDown: (_view, event) => {
-        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && submitRef.current) {
+        // ⌘ Shift Enter ticks a checklist item (checklist.ts)
+        if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey && submitRef.current) {
           flush()
           submitRef.current(lastSent.current)
           return true
@@ -91,7 +87,9 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
         return false
       },
     },
-    onUpdate: () => {
+    onUpdate: ({ editor, transaction }) => {
+      const tick = transaction.getMeta(TICK) as TickMeta | undefined
+      if (tick && saveTick(editor, tick)) return
       dirty.current = true
       saveLater()
     },
@@ -114,7 +112,7 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
     if (!editor || !data || data.types.includes('text/html') || editor.isActive('codeBlock')) return false
     const text = data.getData('text/plain')
     if (!looksLikeMarkdown(text)) return false
-    return editor.commands.insertContent(text, { contentType: 'markdown' })
+    return editor.commands.insertContent(openable(text), { contentType: 'markdown' })
   }
 
   /**
@@ -157,6 +155,26 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
     takeTheirs(latestValue.current)
   }
 
+  /**
+   * A box ticked while nothing else waits to be saved: just that box is saved (`onTick`). Only when the text here is
+   * the saved text with exactly this one box changed, so the item it names is the one you ticked.
+   */
+  function saveTick(editor: TiptapEditor, tick: TickMeta): boolean {
+    const save = tickRef.current
+    if (!save || dirty.current || waiting.current) return false
+    const before = lastSent.current
+    const was = checklistItems(before)
+    const now = checklistItems(tidyMarkdown(savedMarkdown(editor)))
+    const item = was[tick.index]
+    if (!item || item.checked === tick.checked || was.length !== now.length) return false
+    if (now.some((n, k) => n.checked !== (k === tick.index ? tick.checked : was[k].checked))) return false
+    // first: the saved tick comes back here as the new text, and must read as ours, not as a teammate's change
+    lastSent.current = setChecked(before, tick.index, tick.checked)
+    if (save({ index: tick.index, text: item.text, checked: tick.checked, before })) return true
+    lastSent.current = before
+    return false
+  }
+
   function saveLater() {
     clearTimeout(timer.current)
     timer.current = setTimeout(flush, SAVE_AFTER)
@@ -192,7 +210,7 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
     const base = lastSent.current
     lastSent.current = value
     if (!dirty.current && !editor.isFocused) {
-      editor.commands.setContent(value, { contentType: 'markdown', emitUpdate: false })
+      editor.commands.setContent(openable(value), { contentType: 'markdown', emitUpdate: false })
       return
     }
     const mine = dirty.current ? tidyMarkdown(savedMarkdown(editor)) : base
@@ -221,9 +239,9 @@ const looksLikeMarkdown = (text: string) => /^(#{1,6} |[-*+] |\d+\. |> |```|[-*]
  * with your own words (a teammate's line above them pushes it down instead of leaving it behind).
  */
 function replaceChanged(editor: NonNullable<ReturnType<typeof useEditor>>, markdown: string) {
-  const json = editor.markdown?.parse(markdown)
+  const json = editor.markdown?.parse(openable(markdown))
   if (!json) {
-    editor.commands.setContent(markdown, { contentType: 'markdown', emitUpdate: false })
+    editor.commands.setContent(openable(markdown), { contentType: 'markdown', emitUpdate: false })
     return
   }
   const next = editor.schema.nodeFromJSON(json)

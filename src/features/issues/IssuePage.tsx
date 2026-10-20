@@ -12,7 +12,7 @@ import { NotFound } from '@/app/NotFound'
 import { PersonAvatar } from '@/components/Avatar'
 import { LabelChip } from '@/components/LabelChip'
 import { Picker, type PickerItem } from '@/components/Picker'
-import { archiveIssues, createLabel, deleteIssue, markRead, moveIssueToTeam, setFollowers, subscribe, updateIssue } from '@/data/actions'
+import { archiveIssues, createLabel, deleteIssue, markRead, moveIssueToTeam, setChecklistItem, setFollowers, subscribe, updateIssue } from '@/data/actions'
 import { followers } from '@/data/notify'
 import { isClosed, isUnread } from '@/data/select'
 import { statusOfIssue } from '@/data/statuses'
@@ -284,7 +284,13 @@ export function IssuePage() {
           </div>
           <PullRequests issueId={issue.id} />
           {stacked && <div className="mt-4 rounded-lg border px-2 py-2">{properties}</div>}
-          <Editor key={issue.id} value={issue.description} onChange={(description) => updateIssue(issue.id, { description })} className="mt-4" />
+          <Editor
+            key={issue.id}
+            value={issue.description}
+            onChange={(description) => updateIssue(issue.id, { description })}
+            onTick={(tick) => setChecklistItem(issue.id, tick)}
+            className="mt-4"
+          />
 
           <SubIssues issue={issue} />
           <Comments issue={issue} />

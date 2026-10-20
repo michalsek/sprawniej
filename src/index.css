@@ -198,7 +198,24 @@
     & table { @apply my-4 w-full text-left; }
     & th { @apply border-b py-2 pr-4 font-medium text-muted-foreground; }
     & td { @apply border-b py-2 pr-4; }
+    & del, & s { @apply text-muted-foreground; }
+    /* checklists, read only or ticked here (MarkdownView.tsx): the same look as in the editor */
+    & ul.contains-task-list { @apply list-none pl-1; }
+    & li.task-list-item {
+      @apply relative pl-6;
+      & > label { @apply absolute top-0 left-0 flex h-[1.65em] items-center; }
+      &:has(> label > input:checked) { @apply text-muted-foreground line-through; }
+    }
+    & li.task-list-item input[type="checkbox"], & ul[data-type="taskList"] input[type="checkbox"] {
+      accent-color: var(--status-done);
+      width: 0.95rem;
+      height: 0.95rem;
+    }
   }
+  /* a table wider than the page scrolls sideways (phones), in reading views and in the editor */
+  .prose-sprawniej table { @apply block max-w-full overflow-x-auto; }
+  .prose-sprawniej .tableWrapper { @apply my-4 max-w-full overflow-x-auto; }
+  .prose-sprawniej .tableWrapper table { @apply my-0 table; }
 
   .prose-sprawniej pre {
     @apply my-4 overflow-x-auto rounded-lg border bg-muted/60 p-3 font-mono text-[13px];
@@ -221,11 +238,16 @@
     list-style: none;
     padding-left: 0.25rem;
     & li { display: flex; gap: 0.5rem; align-items: flex-start; }
-    & li > label { margin-top: 0.3rem; user-select: none; }
-    & li > div { flex: 1; }
+    /* a bigger place to tap than the box itself */
+    & li > label { display: flex; align-items: center; height: 1.65em; padding: 0 0.25rem; margin: 0 -0.25rem; user-select: none; cursor: pointer; }
+    & li > div { flex: 1; min-width: 0; }
+    & li > div > p { margin: 0; }
     & li[data-checked="true"] > div { color: var(--muted-foreground); text-decoration: line-through; }
-    & input[type="checkbox"] { accent-color: var(--status-done); width: 0.95rem; height: 0.95rem; }
   }
+  /* tables: one line of text per cell, the picked cells shaded */
+  & td, & th { vertical-align: top; min-width: 4rem; position: relative; }
+  & td > p, & th > p { margin: 0; }
+  & .selectedCell::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: color-mix(in oklab, var(--ring) 15%, transparent); }
 }
 .mention {
   border-radius: 0.25rem;
