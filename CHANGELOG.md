@@ -4,6 +4,13 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.5.0: Change your @handle
+*2026-10-20*
+
+- Change the @handle teammates see and mention you by, in Settings › Profile. It saves by itself, also if you signed up with GitHub
+- Mentions follow the handle people have now: typing @ suggests it, and your teammates see your new one at once
+- After you change it, old mentions of your earlier handle read as plain text, and someone else may pick it
+
 ## 2.4.0: Settings has its own pages
 *2026-10-20*
 

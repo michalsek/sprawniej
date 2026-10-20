@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.4.0'
+export const APP_VERSION = '2.5.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,16 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.5.0',
+    date: '2026-10-20',
+    title: 'Change your @handle',
+    notes: [
+      'Change the @handle teammates see and mention you by, in Settings › Profile. It saves by itself, also if you signed up with GitHub',
+      'Mentions follow the handle people have now: typing @ suggests it, and your teammates see your new one at once',
+      'After you change it, old mentions of your earlier handle read as plain text, and someone else may pick it',
+    ],
+  },
   {
     version: '2.4.0',
     date: '2026-10-20',
