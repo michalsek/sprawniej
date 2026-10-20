@@ -33,9 +33,6 @@ describe('what the join page reads', () => {
     const info = toInviteInfo({ workspace_id: 'ws', workspace_name: 'Acme', invited_by_name: null, invited_by_login: null, role: 'member', state: 'member', people: null })
     expect(info).toMatchObject({ workspaceId: 'ws', invitedBy: null, forName: null, state: 'member', people: [] })
     expect(toInviteInfo({ state: 'later' }).state).toBe('used')
-  })
-
-  test('ended, full and made before you left', () => {
     for (const state of ['ended', 'full', 'left'] as const) expect(toInviteInfo({ state }).state).toBe(state)
   })
 })
@@ -76,10 +73,11 @@ describe('whether a listed link still works', () => {
   const now = new Date(2026, 9, 19, 12, 0).getTime()
   const use = { profileId: 'p1', at: '2026-10-19T10:00:00.000Z' }
   const link = { endedAt: null, expiresAt: new Date(2026, 9, 26).toISOString(), maxUses: 3, uses: [use] }
-  test('open, ended, full, expired; ended wins', () => {
+  test('open, used, ended, full, expired; ended wins over the time', () => {
     expect(inviteState(link, now)).toBe('open')
     expect(inviteState({ ...link, maxUses: null, uses: [use, use, use, use] }, now)).toBe('open')
     expect(inviteState({ ...link, uses: [use, use, use] }, now)).toBe('full')
+    expect(inviteState({ ...link, maxUses: 1 }, now)).toBe('used')
     expect(inviteState({ ...link, expiresAt: new Date(2026, 9, 18).toISOString() }, now)).toBe('expired')
     expect(inviteState({ ...link, endedAt: '2026-10-19T11:00:00.000Z', uses: [use, use, use], expiresAt: new Date(2026, 9, 18).toISOString() }, now)).toBe('ended')
   })

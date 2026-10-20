@@ -66,6 +66,7 @@ export const RULES = {
   ownRole: "You can't change your own role.",
   lastOwner: 'A workspace needs at least one owner. Make someone else an owner first.',
   notInviter: 'Only admins and owners can invite people.',
+  notEnder: 'Only admins and owners can end invite links.',
   notLinker: 'Only admins and owners can link people.',
   notGitHub: 'Only admins and owners can connect repositories.',
 }
@@ -236,7 +237,8 @@ export async function createInvite(
       role: o.role,
       for_profile: o.forProfile ?? null,
       for_email: email ? email : null,
-      expires_at: expiresAtFor(o.days ?? INVITE_DAYS, Date.now()),
+      // the database's clock sets the usual length; another one comes from here
+      ...(o.days !== undefined && o.days !== INVITE_DAYS && { expires_at: expiresAtFor(o.days, Date.now()) }),
       max_uses: o.forProfile ? 1 : maxUsesFor(o.maxUses === undefined ? 1 : o.maxUses),
     })
     .select(INVITE_COLUMNS)
@@ -274,7 +276,11 @@ export function expiresText(expiresAt: string, now: number): string {
 export const isExpired = (i: Pick<Invite, 'expiresAt'>, now: number): boolean => Date.parse(i.expiresAt) < now
 
 /** whether a listed link still works, and if not, why (as the database decides, private.invite_state) */
-export function inviteState(i: Pick<Invite, 'endedAt' | 'expiresAt' | 'maxUses' | 'uses'>, now: number): 'open' | 'ended' | 'full' | 'expired' {
+export function inviteState(
+  i: Pick<Invite, 'endedAt' | 'expiresAt' | 'maxUses' | 'uses'>,
+  now: number,
+): 'open' | 'used' | 'ended' | 'full' | 'expired' {
+  if (i.maxUses === 1 && i.uses.length > 0) return 'used'
   if (i.endedAt) return 'ended'
   if (i.maxUses !== null && i.uses.length >= i.maxUses) return 'full'
   return isExpired(i, now) ? 'expired' : 'open'

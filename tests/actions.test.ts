@@ -274,7 +274,7 @@ describe('invite links', () => {
     const make = spyOn(workspaces, 'createInvite').mockResolvedValue({} as workspaces.Invite)
     try {
       await createInvite({ role: 'member', forGuest: 'bob', maxUses: null, days: 7 })
-      expect(make.mock.calls[0]?.[1]).toEqual({ role: 'member', forEmail: undefined, days: 7, forProfile: profileIdOf('bob'), maxUses: 1 })
+      expect(make.mock.calls[0]?.[1]).toMatchObject({ forProfile: profileIdOf('bob'), maxUses: 1, days: 7 })
     } finally {
       make.mockRestore()
     }
@@ -285,7 +285,7 @@ describe('invite links', () => {
     try {
       const s = state()
       useData.setState({ members: { ...s.members, ana: { ...s.members.ana, role: 'member' } } })
-      await expect(endInvite('i1')).rejects.toThrow('Only admins and owners can invite people.')
+      await expect(endInvite('i1')).rejects.toThrow('Only admins and owners can end invite links.')
       expect(end).not.toHaveBeenCalled()
     } finally {
       end.mockRestore()

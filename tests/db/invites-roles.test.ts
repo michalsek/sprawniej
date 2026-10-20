@@ -324,14 +324,22 @@ describe.skipIf(!enabled)('invites, members and roles', () => {
 
   test('a link for up to 3 people lets three join, then it is full', async () => {
     const { ws } = await newWorkspace(w.ana, 'up to three')
-    const { token } = await link(ws, { max_uses: 3 })
+    await addMember(w.ana, w.bob, ws)
+    const { id, token } = await link(ws, { max_uses: 3 })
     const people = await Promise.all(['up3a', 'up3b', 'up3c', 'up3d'].map(signUp))
     for (const p of people.slice(0, 3)) expect(await ok(join(p, token))).toBe(ws)
     await expectError(join(people[3], token), 'SP007')
     expect((await info(people[3], token))[0]).toMatchObject({ state: 'full', people: [], for_name: null, workspace_id: null })
-    expect(await usesOf(ws)).toEqual(people.slice(0, 3).map((p) => p.profileId).sort())
+    const usedBy = async () => (await ok(w.ana.db.from('invite_uses').select('profile_id').eq('invite_id', id))).map((u) => u.profile_id).sort()
+    expect(await usedBy()).toEqual(people.slice(0, 3).map((p) => p.profileId).sort())
+    // someone already in who opens the full link gets the workspace and uses no place
+    expect(await ok(join(w.bob, token))).toBe(ws)
+    expect(await usedBy()).toHaveLength(3)
     // only a link for one person is marked accepted
     expect((await ok(w.ana.db.from('invites').select('accepted_at').eq('token', token).single())).accepted_at).toBeNull()
+
+    const expired = await link(ws, { max_uses: null, expires_at: '2020-01-01T00:00:00Z' })
+    await expectError(join(people[3], expired.token), 'SP003')
   })
 
   test('two people at the last place: one joins, the other finds it full', async () => {
@@ -433,7 +441,7 @@ describe.skipIf(!enabled)('invites, members and roles', () => {
     expect(heard.status).toBe('SUBSCRIBED')
     await ok(join(w.dee, token))
     expect(await heard.waitFor((m) => m.table === 'workspace_members' && m.op === 'INSERT' && m.row?.profile_id === w.dee.profileId)).toBeDefined()
-    expect(heard.got.filter((m) => m.table === 'invites' || m.table === 'invite_uses')).toEqual([])
+    expect(await heard.waitFor((m) => m.table === 'invites' || m.table === 'invite_uses', 2000)).toBeUndefined()
   })
 
   test('you pick a name before you can join', async () => {

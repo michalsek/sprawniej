@@ -974,7 +974,7 @@ export async function createInvite(o: { role: InviteRole; forGuest?: string; for
 /** nobody new can join with the link from now on; who joined stays. It can't be undone. */
 export async function endInvite(id: string): Promise<void> {
   openHere()
-  if (!isAdmin(useData.getState())) throw new Error(RULES.notInviter)
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notEnder)
   await stopInvite(id)
 }
 
