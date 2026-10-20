@@ -269,6 +269,20 @@ within ten minutes (notes about a comment always are). Read marks are `inbox.rea
 Every night read notes older than 30 days and unread ones older than 90 go; a note counts as read when its `read_at`
 is set or it is no newer than `read_until`.
 
+## GitHub
+
+Pull requests move issues (docs/github-app.md). GitHub sends each pull request event, signed with a shared secret,
+to the Edge Function `github-webhook` in the same Supabase project. The function is the code in `src/github`
+(bundled by `bun run deploy:github`): it checks the signature, works out what the event means (opened or ready: In
+Review; merged: Done) and which refs it mentions, and calls two SQL functions only the service role may run.
+`github_lookup` finds the workspaces that connected the repository (`github_repos`, Settings › GitHub), the author's
+profile there (by `github_id`, members only) and the issues. The function works out the Inbox notes with
+`src/data/notify.ts`, the same rules the app uses, and `github_apply` moves the issues in one transaction with
+`sprawniej.actor` set to the author and `sprawniej.via` to the pull request, so the triggers write history in their
+name with a link, the broadcast reaches open browsers and `c_check_note` checks the notes. Nothing moves backwards,
+and nothing moves for authors who aren't members with GitHub linked. `ensure_profile` fills `github_id` from the
+GitHub sign-in way when someone adds GitHub later.
+
 ## Archive
 
 Archiving sets `issues.archived_at` (and `archived_by`): the issue stays in the same table, with its comments.
@@ -335,6 +349,7 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | `src/backend` | Every call to Supabase: sign-in, profiles, workspaces and invites, opening, the copy in this browser, live changes, saving, pictures, history, saving imports |
 | `src/backend/apply/` | `applyRows` in parts: the copy of the database's rows, taking things in, working out the store |
 | `src/backend/writes/` | Sending saves: grouping requests, the transport, what a failure means |
+| `src/github` | The GitHub webhook (runs as the Edge Function `github-webhook`, never in the browser): signature, refs, moves, notes |
 | `src/editor` | TipTap editor for descriptions and comments, its Markdown, mentions, pictures and merging |
 | `src/features/onboarding` | Sign-in, picking your handle, choosing and creating workspaces, joining with an invite |
 | `src/features/*` | Screens, one folder per area (issues, views, projects, inbox, settings, import, help…) |
@@ -344,7 +359,7 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | `src/config.ts` | The app's public address (invite links) and where sign-in comes back to |
 | `src/version.ts` | The version and the What's new notes (`CHANGELOG`) |
 | `src/session.ts` | Which workspace is open and the ones you opened before (localStorage) |
-| `supabase/` | `config.toml` (sign-in settings), `migrations/` (the database), `dev/cleanup-tests.sql` |
+| `supabase/` | `config.toml` (sign-in and function settings), `migrations/` (the database), `functions/github-webhook` (where the bundle goes), `dev/cleanup-tests.sql` |
 | `tests` | `bun test` for the pure logic, with a pretend backend and database (`tests/support`) and test data (`tests/fixtures`: a sample workspace, pretend Linear answers) |
 | `tests/db` | Database tests against a real project (`bun run test:db`) |
 

@@ -134,6 +134,37 @@ The app is published to GitHub Pages by hand; nothing is published on a push.
 
 Migrations reach the project before the app that needs them is published.
 
+## GitHub: pull requests move issues
+
+Optional. docs/github-app.md has the design; these are the steps for a project.
+
+1. **Make a GitHub App** on the account or organisation that owns the repositories (GitHub, Settings, Developer
+   settings, GitHub Apps, New GitHub App):
+   - Homepage URL: the site address. Callback URL and Setup URL empty; "Request user authorization" off.
+   - Webhook: active, URL `https://<ref>.supabase.co/functions/v1/github-webhook`, and a secret you make with
+     `openssl rand -hex 32`. Keep it in your shell only.
+   - Repository permissions: **Pull requests: Read-only** (Metadata: Read-only comes with it). Nothing else.
+   - Subscribe to events: **Pull request**. Where can it be installed: **Only on this account**.
+2. **Give the function the secret**, for this one command only, never in a file:
+   ```sh
+   GITHUB_WEBHOOK_SECRET=... bunx supabase secrets set "GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET" --project-ref <ref>
+   ```
+   The function also reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, which Supabase gives every function.
+3. **Deploy the function** (bundles `src/github` and deploys it without Docker; `config.toml` turns off the sign-in
+   check for it, since GitHub signs its deliveries instead):
+   ```sh
+   bun run deploy:github
+   ```
+4. **Install the App** on the repositories (the App's page, Install App), then connect each one in the app:
+   Settings › GitHub › Connect a repository. For the link on that screen, add the repository variable
+   `VITE_GITHUB_APP_URL` (`https://github.com/apps/<name>`) before publishing.
+5. **Check it**: the App's page, Advanced, Recent Deliveries shows each delivery and the function's answer
+   (`{"moved": ["ENG-12"]}`); Redeliver sends one again. Settings › GitHub shows what the latest pull request did. The
+   function's logs are in the dashboard (Edge Functions, github-webhook, Logs).
+
+Pull requests only move issues for their author's own workspaces, and only when the author added GitHub as a way to
+sign in, so GitHub sign-in (step 4 of "A new project") needs to be on.
+
 ## Database tests
 
 For a development or throwaway project only. Once a team works in a project, the tests need a separate development

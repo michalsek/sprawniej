@@ -46,7 +46,7 @@ account**; it saves by itself. Your handle (@you) stays the same.
 - **GitHub.** **Add GitHub** takes you to GitHub and back; from then on **Continue with GitHub** signs you in.
   **Remove** stops it, when you added GitHub to an account made with your email. An account made with GitHub keeps
   GitHub, even after you set a password. If it says signing in with GitHub isn't switched on yet, use your email and
-  password.
+  password. Adding GitHub also lets your work on GitHub move your issues (see GitHub, below).
 
 **Forgot your password?** Sprawniej can't email you a new one yet. If you also added GitHub, sign in with GitHub and
 choose **Change password**. Otherwise, ask whoever looks after Sprawniej for help.
@@ -306,6 +306,29 @@ Your **Inbox** tells you when someone:
 The number in the sidebar is how many you haven't read. Opening a note (or its issue) marks it read. Hover a note to
 mark it read or delete it; **Mark all as read** and the `⋯` menu at the top work on all of them. Read notes clear
 themselves after a month, and unread ones after three.
+
+## GitHub
+
+When your team connects a GitHub repository, its pull requests move the issues they mention:
+
+- a pull request opens, or a draft becomes ready for review: the issue moves to **In Review**;
+- it's merged: the issue moves to **Done**.
+
+Mention an issue by its number, like `ENG-12`, in the branch name (`eng-12-fix-login` works too), the pull request's
+title or its description. One pull request can move several issues. An issue that moved to another team is found by
+its old number as well. Nothing moves backwards: an issue that is already Done, Canceled or a Duplicate stays as it
+is, and so does an archived one. A pull request closed without merging, or still a draft, moves nothing.
+
+The change is made as the person who opened the pull request, so the issue's history says who and links to the pull
+request ("Ana moved it from In Progress to In Review · pull request #12"), and everyone following the issue gets a
+note in their Inbox. This only works for **people in the workspace who added GitHub as a way to sign in**
+(Settings › Your account): pull requests by anyone else move nothing. **Settings › GitHub** tells you whether yours
+count.
+
+**Connecting a repository** (owners and admins): **Settings › GitHub › Connect a repository**, then type it as
+`owner/name` or paste its address. The repository also needs the Sprawniej GitHub App; whoever set up Sprawniej adds
+it. Each repository shows what its latest pull request did, so you can check it works. **Remove** stops its pull
+requests moving issues; issues that already moved stay where they are.
 
 ## Moving over from Linear
 

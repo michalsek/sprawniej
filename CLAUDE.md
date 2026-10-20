@@ -20,7 +20,8 @@ Read before changing things:
 - **Every change goes through `src/data/actions.ts`, and every call to Supabase lives in `src/backend/`.** Components
   never send changes, call the database client or set the data store themselves; nothing outside `src/backend` (and
   the database tests in `tests/db`) imports `@supabase/supabase-js`. One path keeps "always saved" true, and one
-  folder keeps the backend replaceable.
+  folder keeps the backend replaceable. The one exception is `src/github`, the Edge Function: it isn't the app, and it
+  reaches the database only through `github_lookup` and `github_apply`, with plain `fetch`.
 - **One row per thing.** Things several people change at once (labels on an issue, team members, followers, a
   project's teams) are rows in a join table, never a list in a column. A save sends only the columns that changed
   (`src/backend/writes.ts`). That is what keeps two people's changes from undoing each other.
@@ -50,7 +51,8 @@ saving, pictures, history, saving imports) · `src/features/<area>` screens · `
 `bunx --bun shadcn@latest add <name>`; fix the `cn` import to `@/lib/utils` after adding) · `src/lib` small helpers
 (search without Polish letters, `cn`, hooks) · `src/config.ts` the public address and where sign-in comes back ·
 `src/version.ts` version and What's new · `src/session.ts` which workspace is open · `scripts/changelog.ts` writes CHANGELOG.md ·
-`supabase/` config, migrations, test cleanup · `tests/` logic tests, `tests/db` database tests.
+`src/github` the GitHub webhook (the Edge Function `github-webhook`, never in the browser; docs/github-app.md) ·
+`supabase/` config, migrations, functions, test cleanup · `tests/` logic tests, `tests/db` database tests.
 
 ## Releasing
 `main` is what GitHub Pages serves, but publishing is **by hand**: push `main`, then run the *Deploy to GitHub Pages*
@@ -105,7 +107,8 @@ meaning (statuses, priorities, labels); everything else is neutral grey.
   its own tool and should explain itself. The one exception is the Linear import, which has to name what it imports from.
 - **No em dashes** anywhere. Use a comma, colon, parentheses or a new sentence.
 - Screens that teammates see never say commit, push, pull, merge, repo, token, database, server, row, Supabase or
-  sync. Say "saved", "Saving…", "We can't reach Sprawniej right now. We'll keep trying", "your teammates' changes show
+  sync. The GitHub parts (Settings › GitHub, the pull request link in history, the guide's GitHub section) may say
+  "pull request", "merged" and "repository". Say "saved", "Saving…", "We can't reach Sprawniej right now. We'll keep trying", "your teammates' changes show
   up".
 - Every new feature updates `docs/user-guide.md` (it is also the in-app Help page) and gives its empty list a helpful
   empty state (what goes here + one button).

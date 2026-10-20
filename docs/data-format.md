@@ -221,6 +221,8 @@ was signed in, such as the nightly archive), `at`, `changes`:
   "description": true, "labels": { "added": ["01J…"] }, "team": ["WEB-2", "ENG-14"], "archived": true }
 ```
 
+A change a pull request made also has `"via": {"pullRequest": {"repo": "acme/web", "number": 12, "url": "…"}}`.
+
 Each changed field is `[before, after]` (`title`, `status`, `priority`, `assignee`, `project`, `parent`, `dueDate`,
 `estimate`); `description` only says it changed; `labels` is `{"added": [id]}` or `{"removed": [id]}`; `team` is the
 old and new reference; `archived` or `restored` is `true`. `src/data/history.ts` turns them into lines.
@@ -239,6 +241,16 @@ included, so a browser that catches up drops them too, but only for the tables `
 followers, comments and views, plus profiles of guests (a profile with an account belongs to no workspace, so it
 leaves none). Workspaces, invites, inbox notes and read marks leave none; a browser compares its inbox notes instead.
 Nothing is noted while the whole workspace is going. Kept 45 days.
+
+### github_repos
+
+Which GitHub repository feeds which workspace (docs/github-app.md): `id`, `workspace_id`, `repo` (`owner/name` as an
+admin typed it; unique per workspace, case aside), `repository_id` (GitHub's number, filled when the first pull
+request comes; from then on the repository is found by it, and `repo` follows a rename), `added_by` (set by a
+trigger), `created_at`, `last_event_at` and `last_event` (what the latest pull request did, for Settings:
+`{"number", "url", "title", "login", "to", "refs", "moved", "skipped": "author"}`), `changed_at`. Only admins and owners
+read, add and delete them; nobody updates one (only `github_apply` writes the rest). Never broadcast. Two workspaces
+may connect the same repository.
 
 ### private.guest_emails
 
@@ -313,7 +325,7 @@ are and puts everything else in our own words.
 
 | Function | Who | What it does |
 | --- | --- | --- |
-| `ensure_profile()` | signed in | Your profile; or a profile with your GitHub id that nobody has claimed; or a new one with your GitHub login when it's free. No rows: pick a name. `SP004`: not let in yet (give a sign-up code first). |
+| `ensure_profile()` | signed in | Your profile (given your GitHub id if it had none and you added GitHub as a way to sign in); or a profile with your GitHub id that nobody has claimed; or a new one with your GitHub login when it's free. No rows: pick a name. `SP004`: not let in yet (give a sign-up code first). |
 | `create_profile(login, name)` | signed in, once, let in | Your profile with the @handle you picked. |
 | `signup_code_needed()` | signed in | True while you have no profile and weren't let in (a GitHub sign-up without a code). |
 | `use_signup_code(code, invite)` | signed in | Lets your account in with a sign-up code or an open invite link's token (`SP005` with the reason when it can't). Nothing to do if you're in already. |
@@ -326,6 +338,8 @@ are and puts everything else in our own words.
 | `set_guest_email(profile, email)` | admins | Keeps (or, empty, forgets) a guest's email. |
 | `guest_emails(workspace)` | admins | The workspace's guests' emails. |
 | `import_rows(workspace, table, rows)` | admins | Up to 1000 rows of one table, inserted or updated quietly (below). |
+| `github_lookup(repository_id, repo, author, refs)` | the service role only (the Edge Function `github-webhook`) | For each workspace that connected the repository: the author's profile if they are a member there now (by `github_id`), the members' logins, and the issues the refs name (by number or an old number, not archived) with their followers and comments. |
+| `github_apply(connection, repository_id, repo, actor, via, moves, notes, event)` | the service role only | Moves the issues as `actor` (a member now), only from the statuses each move allows, adds the notes for the issues that moved, and records the repository's number, name and `last_event`. Without an actor it only records. |
 
 `import_rows` takes `profiles` (guests), `teams`, `team_members`, `labels`, `projects`, `project_teams`, `issues`,
 `issue_labels`, `issue_followers`, `comments` and `views`, with the columns `private.import_spec` lists. Whatever the
@@ -345,10 +359,11 @@ for rows that will only be updated (Postgres checks the proposed row before it f
 - `valid_login`, `is_completed`, `take_number`, `swap_login`, `move_person`, and the nightly jobs.
 - Sign-up codes: `let_in` (the one rule), `before_user_created` (the Auth hook; only `supabase_auth_admin` may run it),
   `must_be_let_in` (the profiles trigger), and for the SQL editor `make_signup_code`, `switch_off_signup_code`.
-- Three settings change what triggers do within one transaction: `sprawniej.importing` (imports and `move_person`:
+- Four settings change what triggers do within one transaction: `sprawniej.importing` (imports and `move_person`:
   no history, no broadcast per row, keep the times and numbers that came), `sprawniej.trusted` (`accept_invite` and
   `leave_workspace`: skip the role guard) and `sprawniej.actor` (who the service role, the SQL editor or a job acts
-  for). No function the browser calls puts its input into them.
+  for) and `sprawniej.via` (the pull request a change came through, copied into its history event; only
+  `github_apply` sets it, with `sprawniej.actor`). No function the browser calls puts its input into them.
 
 New functions are closed by default: nobody runs one unless a migration grants it by name.
 
@@ -358,7 +373,7 @@ New functions are closed by default: nobody runs one unless a migration grants i
 
 - `a_stamp` on every table `private.wiring` gives a stamp (all but invites, history, used numbers and deletions): `changed_at` (`touch`); on issues also authors, times and who archived
   (`issue_times`); on comments the author and `edited_at` (`comment_times`). Imports keep the times they bring.
-- `a_author` on views (`owner_id`), inbox (`actor_id`) and invites (`invited_by`): whoever is signed in.
+- `a_author` on views (`owner_id`), inbox (`actor_id`), invites (`invited_by`) and github_repos (`added_by`): whoever is signed in.
 - `b_number` on issues: the next number of the team (Issue numbers in docs/architecture.md).
 - `c_check_note` on inbox: drops a note for someone who isn't a member now or for yourself, and a repeat of the same
   note about the same issue from the same person within ten minutes (notes about a comment always go).
@@ -386,7 +401,7 @@ let them add, change and delete them, except:
 - read_state: yours only;
 - workspaces: admins and owners rename, owners delete; creating is `create_workspace()`;
 - workspace_members: admins and owners change roles and remove people;
-- invites: admins and owners only;
+- invites and github_repos: admins and owners only;
 - profiles: see the profiles table;
 - issue_events, issue_numbers, deletions: read only.
 

@@ -37,6 +37,7 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_KEY: ${{ vars.VITE_SUPABASE_KEY }}
           VITE_PUBLIC_URL: ${{ vars.VITE_PUBLIC_URL }}
+          VITE_GITHUB_APP_URL: ${{ vars.VITE_GITHUB_APP_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

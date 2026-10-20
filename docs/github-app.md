@@ -4,7 +4,9 @@ When a pull request that mentions an issue (`ENG-12`) opens or becomes ready for
 In Review. When it is merged, the issue moves to Done. The change is written as the person who opened the pull
 request, so the issue's history and their teammates' Inbox show them, with a link to the pull request.
 
-Status: **design, waiting for agreement.** Nothing here is built yet.
+Status: **agreed and built** (2.1.0). The user agreed section 6 on 2026-10-20: the author rule, GitHub sign-in is
+on, the wording, pull request links on the issue page later. The steps for a project are in docs/supabase-setup.md
+(GitHub: pull requests move issues).
 
 ## The pieces
 
@@ -163,15 +165,16 @@ with `fetch` and the REST API, so `@supabase/supabase-js` stays inside `src/back
 - By hand: deploy, connect a throwaway repository, open a pull request mentioning a test issue, mark it ready, merge
   it, and watch the issue move in a browser.
 
-## 6. Questions to agree on
+## 6. Agreed (2026-10-20)
 
-1. **The author rule** (5 above): nothing moves for authors who aren't members with GitHub linked. The alternative
-   (move anyway, written as nobody) lets anyone who can open a pull request in the repository move issues, and lets
-   another workspace that connects the same repository read our pull requests' numbers and links.
-2. **GitHub sign-in must be on** for the author rule to match anyone: the OAuth app from the 2.0.0 list, and each
-   teammate adds GitHub in Settings › Your account. Until then nothing moves.
-3. **Words.** Teammate screens must not say "pull" or "merge". This feature can't avoid "pull request" and "merged".
-   Allow them in Settings › GitHub, the history link and the guide's GitHub part only?
+1. **The author rule** (5 above): nothing moves for authors who aren't members with GitHub linked. Moving anyway, as
+   nobody, would let anyone who can open a pull request in the repository move issues, and would let another
+   workspace that connects the same repository read our pull requests' numbers and links.
+2. **GitHub sign-in is on.** Each teammate adds GitHub in Settings › Your account; `ensure_profile` then fills their
+   `github_id`.
+3. **Words.** Settings › GitHub, the history link and the guide's GitHub part may say "pull request", "merged" and
+   "repository" (CLAUDE.md, Writing).
 4. **Links on the issue page** (an `issue_pull_requests` table: the pull requests that mention an issue, shown under
-   its title, live). Left for later: the history link covers "why did this move".
-5. **Release:** 2.1.0 (MINOR). The migration only adds and replaces two functions; older apps keep working.
+   its title, live) are left for later. They need a new shared table with realtime, the read cache and a new piece of
+   the issue page, about as much work again as the rest; the history link already says why an issue moved.
+5. **Release:** 2.1.0 (MINOR). The migration only adds a table and replaces two functions; older apps keep working.
