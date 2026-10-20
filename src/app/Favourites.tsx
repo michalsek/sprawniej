@@ -108,10 +108,11 @@ export function Favourites() {
 
   const onDragEnd = ({ active, over }: DragEndEvent) => {
     // the click that ends a mouse drag doesn't open the favourite: dnd-kit stops that click on the document, before
-    // React sees it, but not the link's own way of opening, so it's stopped here on the window first
+    // React sees it, but not the link's own way of opening, so it's stopped here on the window first, for as long as
+    // dnd-kit stops it (50 ms)
     const stop = (e: MouseEvent) => e.preventDefault()
     window.addEventListener('click', stop, { capture: true, once: true })
-    setTimeout(() => window.removeEventListener('click', stop, { capture: true }))
+    setTimeout(() => window.removeEventListener('click', stop, { capture: true }), 50)
     if (over && active.id !== over.id) moveFavourite(String(active.id), ids.indexOf(String(over.id)))
   }
 
