@@ -142,11 +142,11 @@ the app or by an import still write none. `private.issue_history` is unchanged.
 | --- | --- | --- |
 | 1 | not `POST` | 405, nothing read |
 | 2 | `c` missing or not a uuid | 404, no database call |
-| 3 | no key (`k`, or the `X-Sprawniej-Secret` header), or not 64 hex digits | 401 |
+| 3 | no key: `k` when it is 64 hex digits, otherwise the `X-Sprawniej-Secret` header's | 401 |
 | 4 | the project settings missing | 500 |
 | 5 | over 1 MB (by `content-length`, then by what arrived) | 413 |
 | 6 | `notion_lookup` with the key's sha256 | `unknown` 404 ("Notion was disconnected"), `wrong_key` 401 ("This address was replaced") |
-| 7 | not JSON, or not a page (said only after the key is checked) | 400 |
+| 7 | not JSON, or not a page (said only after the key is checked; properties of a shape Notion never sends read as nothing) | 400 |
 | 8 | the page is in the trash or archived | 200 `{"skipped": …}`, nothing made |
 | 9 | `notion_apply` | 200 `{"issue": "ENG-12", "new": true}` or `"new": false`; `problem: team` 409; `problem: busy` 429 |
 | 10 | a database call fails | 500 (`server.ts`) |
@@ -154,9 +154,15 @@ the app or by an import still write none. `private.issue_history` is unchanged.
 Notion pauses an automation on an answer that isn't 2xx. "Nothing to do" (a page sent before, a page in the trash) is
 200; what someone has to fix (an old or wrong key, no team, flooding) isn't, so Notion's "!" tells them to look.
 
-**Logs.** Never the address (it holds the key), the headers, the body, titles or emails. One line per page made or
-found: `notion { issue, new }`, and the error on a 500, which names the database call and its code, without the
-details (they can hold the title).
+**Logs.** Our function never logs the address (it holds the key), the headers, the body, titles or emails. One line
+per answer: `notion { issue, new }`, `{ skipped: 'trash' }`, `{ refused: 'not a page' }` or `{ problem }`, and the
+error on a 500, which names the database call and its code, without the details (they can hold the title).
+
+Supabase's own logs are another matter: **its invocation logs keep the full address of every request, key
+included** (Dashboard, Edge Functions, notion-webhook, Invocations; and the API gateway's logs). Only the project's
+owners see them, and they hold the service key anyway. Someone who would rather the key showed in no log at all uses
+the header form instead: in Notion, the address without `&k=…` as the URL, plus a custom header
+`X-Sprawniej-Secret` with the key as its value.
 
 **What the page means** (`page.ts`; names and values compared with `plainName`, so case, accents, spaces and
 punctuation don't count):
@@ -173,10 +179,17 @@ punctuation don't count):
 | team | `Team` (select, status or text) | a team's key or name; otherwise the connection's |
 | description | `Description`, `Details` or `Notes` (text) | Markdown, then a blank line and `[Notion page](url)` |
 
-**Rich text** (`markdown.ts`): each part's text with bold, italic, strikethrough and code; an `https://` link becomes a
+**Rich text** (`markdown.ts`): neighbouring parts with the same marks and link are joined first, so a word bold in
+part reads right; then the text with bold (`**`), italic (`*`, which also works inside a word), strikethrough and code; an `https://` link becomes a
 Markdown link (any other is dropped); underline and colour are dropped; a line break stays one, a blank line is a new
 paragraph; mentions and equations are their text; `<` and `>` are escaped, so no HTML comes through. The description
-is cut so that it and the link back fit in 50,000 characters.
+is cut so that it and the link back fit in 50,000 characters. Titles and descriptions are cut by characters, never in
+the middle of an emoji.
+
+**The page's address** must be on notion.so or notion.site and hold nothing after the host that Markdown or HTML would
+read (no spaces, parentheses, double quotes or angle brackets); otherwise it becomes `https://www.notion.so/<id>`. The
+rule and the uuid and page id patterns are in `src/model/notion.ts`; `notion_apply` and `private.notion_pages` copy
+them with `-- @regex notion-…` markers, which `tests/statusLists.test.ts` compares.
 
 **Notes** (`notes.ts`): `issueNotes()` from `src/data/notify.ts` for a new issue, as the app does: the assignee
 (unless they are the author) and every member @mentioned in the description. Each gets a ULID.
@@ -229,9 +242,10 @@ is cut so that it and the link back fit in 50,000 characters.
 ## 7. Agreed (2026-10-20)
 
 1. **The same page again** keeps its issue and answers with it (200). Nothing a teammate changed is overwritten.
-2. **The key goes in the address** (`…?c=<id>&k=<key>`): one paste into Notion. The header `X-Sprawniej-Secret` works
-   too. Supabase's own request logs may keep the full address; only project owners see them, and they hold the
-   service key anyway. Not `Authorization: Bearer`, which the gateway may read as a sign-in.
+2. **The key goes in the address** (`…?c=<id>&k=<key>`): one paste into Notion. Supabase's own invocation and gateway
+   logs keep that full address, key included; only project owners see them, and they hold the service key anyway.
+   The header form (the address without `k`, plus the custom header `X-Sprawniej-Secret`) keeps the key out of every
+   log. Not `Authorization: Bearer`, which the gateway may read as a sign-in.
 3. **One connection per workspace**, with a team, plus an optional Team property naming a team by key or name.
 4. **The author** is only the Created by property's person, matched by email to a member now. Otherwise nobody: "From
    Notion".

@@ -186,8 +186,11 @@ function needs no secret: each workspace's address carries its own key, and the 
 3. **Connect a workspace** in the app: Settings › Notion › Connect Notion, then paste the address into a Notion
    database button or automation ("Send webhook").
 4. **Check it**: Settings › Notion shows what the latest page did. The function's logs are in the dashboard (Edge
-   Functions, notion-webhook, Logs): one line per page, with the issue it became and whether it was new. They never
-   show the address, emails or titles.
+   Functions, notion-webhook, Logs): one line per page, with the issue it became and whether it was new, or why
+   nothing was made. They never show the address, emails or titles. Supabase's own invocation logs (the Invocations
+   tab, and the API gateway's) do keep the full address of each request, key included; only the project's owners see
+   them. To keep the key out of every log, paste the address without `&k=…` into Notion and add the custom header
+   `X-Sprawniej-Secret` with the key as its value.
 
 **Testing without Notion.** Notion's "Send webhook" needs a paid plan, but its request is easy to copy:
 `tests/fixtures/notion-page.json` is shaped exactly like one. On a development project, with the migration pushed and
