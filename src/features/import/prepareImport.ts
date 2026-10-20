@@ -4,7 +4,7 @@
  */
 import { ImportProblem, type ImportPlan } from '@/backend/importRows'
 import type { DataState } from '@/data/store'
-import { isGuest } from '@/model/schema'
+import { handleOf, isGuest } from '@/model/schema'
 import type { LinearData } from './linearApi'
 import { buildImport, existingFrom, type Existing, type ImportChoices, type ImportExtras, type ImportResult } from './linearMap'
 
@@ -33,7 +33,7 @@ export function prepareImport(store: Store, extras: ImportExtras, data: LinearDa
     if (!login || isGuest(login)) continue
     const m = store.members[login]
     if (!m || m.removedAt) {
-      throw new ImportProblem(`${store.people[login]?.name || login} isn't in this workspace any more. Go back to Who's who and pick someone else.`)
+      throw new ImportProblem(`${store.people[login]?.name || handleOf(store.people[login] ?? { login })} isn't in this workspace any more. Go back to Who's who and pick someone else.`)
     }
   }
   const existing = existingFrom(store, extras, store.me.login)

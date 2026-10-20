@@ -33,6 +33,18 @@ describe('mentions', () => {
   test('new mentions are the ones that were not there before', () => {
     expect(newMentions('@bob', '@bob @cy', people)).toEqual(['cy'])
   })
+  test('by the handle someone has now, case aside; a handle they moved off is plain text', () => {
+    const renamed = { ...people, bob: { ...people.bob, handle: 'robert' } }
+    expect(mentionedLogins('hi @Robert', renamed)).toEqual(['bob'])
+    expect(mentionedLogins('hi @bob', renamed)).toEqual([])
+    expect(mentionedLogins('hi @BOB and @Cy', people)).toEqual(['bob', 'cy'])
+    expect(newMentions('@bob', '@robert', renamed)).toEqual(['bob'])
+    expect(newMentions('@robert', '@ROBERT thanks', renamed)).toEqual([])
+  })
+  test('someone may take a handle another person moved off', () => {
+    const swapped = { ...people, bob: { ...people.bob, handle: 'robert' }, cy: { ...people.cy, handle: 'bob' } }
+    expect(mentionedLogins('@bob', swapped)).toEqual(['cy'])
+  })
 })
 
 describe('notes', () => {
@@ -175,5 +187,9 @@ describe('linkReferences', () => {
     expect(linkReferences(md, people, (r) => r === 'ENG-1')).toBe(
       'ping [@bob](#@bob) about [ENG-1](#/issue/ENG-1) and ENG-9, `@bob ENG-1`, [ENG-1](https://x.dev) https://x.dev/@bob',
     )
+  })
+  test('links a handle someone has now to their login, as typed; an old one stays plain', () => {
+    const renamed = { ...people, bob: { ...people.bob, handle: 'robert' } }
+    expect(linkReferences('@Robert and @bob', renamed, () => false)).toBe('[@Robert](#@bob) and @bob')
   })
 })

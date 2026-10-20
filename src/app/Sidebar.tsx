@@ -8,6 +8,7 @@ import { PersonAvatar } from '@/components/Avatar'
 import { useSwitchWorkspace } from '@/components/SignOut'
 import { isUnread, myTeamKeys } from '@/data/select'
 import { useData } from '@/data/store'
+import { handleOf } from '@/model/schema'
 import { TeamMenu } from '@/features/teams/TeamMenu'
 import { TeamsDialog } from '@/features/teams/TeamsDialog'
 import { openComposer } from '@/features/issues/composer'
@@ -60,7 +61,7 @@ function Me() {
           <PersonAvatar person={me} className="size-10 text-sm" />
           <span className="min-w-0 flex-1">
             <span className="block truncate text-[15px] font-semibold">{me.name}</span>
-            <span className="block truncate text-[13px] text-muted-foreground">@{me.login}</span>
+            <span className="block truncate text-[13px] text-muted-foreground">@{handleOf(me)}</span>
           </span>
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
         </DropdownMenuTrigger>

@@ -8,7 +8,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { PersonAvatar } from '@/components/Avatar'
 import type { PickerItem } from '@/components/Picker'
 import { issueRef, useData } from '@/data/store'
-import { isGuest, type Issue } from '@/model/schema'
+import { handleOf, isGuest, type Issue } from '@/model/schema'
 import { ESTIMATES, PRIORITY_ORDER, PRIORITY_NAMES, STATUSES, type Priority, type StatusId } from '@/model/status'
 import { EstimateIcon } from './DueDate'
 import { estimateName } from './format'
@@ -34,7 +34,7 @@ export function usePeopleItems(): PickerItem<string | null>[] {
         .map((p) => ({
           value: p.login as string | null,
           label: p.login === me ? `${p.name} (you)` : isGuest(p.login) ? `${p.name} (hasn’t joined)` : p.name,
-          keywords: [p.login],
+          keywords: [handleOf(p)],
           icon: <PersonAvatar person={p} />,
         })),
     ],

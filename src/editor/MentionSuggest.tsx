@@ -1,11 +1,11 @@
-/** Type @ to pick a person. Inserts plain "@login " text (see references.ts). */
+/** Type @ to pick a person, by name or @handle. Inserts plain "@handle " text, with the handle they have now (see references.ts). */
 import { Extension } from '@tiptap/core'
 import { PluginKey } from '@tiptap/pm/state'
 import { ReactRenderer } from '@tiptap/react'
 import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
 import { useData } from '@/data/store'
 import { plain } from '@/lib/plain'
-import { isGuest, type Person } from '@/model/schema'
+import { handleOf, isGuest, type Person } from '@/model/schema'
 import { PeopleList, type ListHandle } from './PeopleList'
 
 function place(el: HTMLElement, rect: DOMRect | null | undefined) {
@@ -28,11 +28,11 @@ export const MentionSuggest = Extension.create({
           const q = plain(query)
           // people from Linear who haven't joined can't be mentioned (nobody would hear it)
           return Object.values(useData.getState().people)
-            .filter((p) => !isGuest(p.login) && (plain(p.login).includes(q) || plain(p.name).includes(q)))
+            .filter((p) => !isGuest(p.login) && (plain(handleOf(p)).includes(q) || plain(p.name).includes(q)))
             .slice(0, 6)
         },
         command: ({ editor, range, props }) => {
-          editor.chain().focus().insertContentAt(range, `@${props.login} `).run()
+          editor.chain().focus().insertContentAt(range, `@${handleOf(props)} `).run()
         },
         render: () => {
           let renderer: ReactRenderer<ListHandle> | null = null

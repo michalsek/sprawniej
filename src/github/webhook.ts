@@ -116,8 +116,8 @@ export interface Lookup {
   workspace: string
   /** the pull request's author, when they are a member of this workspace with GitHub */
   actor: string | null
-  /** the workspace's members now */
-  people: { id: string; login: string }[]
+  /** the workspace's members now; `handle` when they changed it (an older github_lookup doesn't send it) */
+  people: { id: string; login: string; handle?: string | null }[]
   issues: LookupIssue[]
 }
 
@@ -150,7 +150,9 @@ export function notesFor(issue: LookupIssue, to: StatusId, actor: string, member
   const idOf = new Map(members.map((p) => [p.login, p.id]))
   // someone who left keeps their profile id here: no login, so no note
   const login = (id: string | null) => (id ? (loginOf.get(id) ?? id) : null)
-  const people: Record<string, Person> = Object.fromEntries(members.map((p) => [p.login, { login: p.login, githubId: 0, name: '', avatarUrl: '' }]))
+  const people: Record<string, Person> = Object.fromEntries(
+    members.map((p) => [p.login, { login: p.login, ...(p.handle && { handle: p.handle }), githubId: 0, name: '', avatarUrl: '' }]),
+  )
   const comments: Comment[] = issue.comments.map((c, n) => ({ id: String(n), issue: issue.id, author: login(c.author_id) ?? '', createdAt: '', body: c.body }))
   const before: Issue = {
     id: issue.id,

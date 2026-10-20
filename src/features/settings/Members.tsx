@@ -15,7 +15,7 @@ import { choicesFor, myWho, ROLE_NAMES, ROLES, type Who } from '@/data/roles'
 import { ownerCount } from '@/data/select'
 import { useData } from '@/data/store'
 import { fuzzy } from '@/lib/fuzzy'
-import { isRole, type Person, type Role } from '@/model/schema'
+import { handleOf, isRole, type Person, type Role } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { Input } from '@/ui/input'
@@ -78,7 +78,7 @@ export function Members({ admin }: { admin: boolean }) {
 
   const sorted = [...rows].sort((a, b) => RANK[a.who.role] - RANK[b.who.role] || a.person.name.localeCompare(b.person.name))
   const me = useData(useShallow(myWho))
-  const shown = fuzzy(sorted, query, (r) => [r.person.name, r.who.login])
+  const shown = fuzzy(sorted, query, (r) => [r.person.name, handleOf(r.person)])
   const admins = sorted.filter((r) => r.who.role !== 'member' && r.who.login !== meLogin).map((r) => r.person.name)
 
   async function run(row: Row, to: Role | 'removed') {
@@ -147,7 +147,7 @@ export function Members({ admin }: { admin: boolean }) {
                   {person.name}
                   {mine && <span className="font-normal text-muted-foreground"> (you)</span>}
                 </span>
-                <span className="block truncate text-sm text-muted-foreground">@{who.login}</span>
+                <span className="block truncate text-sm text-muted-foreground">@{handleOf(person)}</span>
               </span>
               {choices.roles.length > 1 ? (
                 <Select value={who.role} disabled={busy === who.login} onValueChange={(v) => isRole(v) && pick(row, v)}>

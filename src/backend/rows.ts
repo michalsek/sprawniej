@@ -96,7 +96,7 @@ const names = <T>(...keys: (keyof Known<T> & string)[]): ReadonlySet<string> => 
 /** the fields each kind has (or makes up from other tables), so none of them is kept in `extra` as well */
 const KNOWN = {
   workspace: names<Workspace>('id', 'name', 'createdAt'),
-  person: names<Person & Linked & { id: string; linearIds: string[] }>('id', 'login', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'linearId', 'linearIds'),
+  person: names<Person & Linked & { id: string; linearIds: string[] }>('id', 'login', 'handle', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'linearId', 'linearIds'),
   team: names<Team & Linked & { id: string }>('id', 'key', 'name', 'emoji', 'members', 'createdAt', 'lastNumber', 'autoArchive', 'linearId'),
   label: names<Label & Linked>('id', 'name', 'color', 'linearId'),
   project: names<Project & Linked>('id', 'name', 'emoji', 'description', 'status', 'lead', 'teams', 'targetDate', 'createdAt', 'linearId'),
@@ -171,12 +171,13 @@ export function rowToWorkspace(row: Row<'workspaces'>): Workspace {
   return { ...fromExtra(row.extra, KNOWN.workspace), id: row.id, name: row.name, createdAt: iso(row.created_at) }
 }
 
-/** a guest keeps one Linear id (`linearId`); an account can stand for several (`linearIds`) */
+/** a guest keeps one Linear id (`linearId`); an account can stand for several (`linearIds`). `handle` only when it isn't the login */
 export function rowToPerson(row: Row<'profiles'>): Person {
   const ids = row.linear_ids ?? []
   return {
     ...fromExtra(row.extra, KNOWN.person),
     login: row.login,
+    ...(row.handle != null && row.handle !== row.login && { handle: row.handle }),
     githubId: row.github_id ?? 0,
     name: row.name,
     avatarUrl: row.avatar_url,

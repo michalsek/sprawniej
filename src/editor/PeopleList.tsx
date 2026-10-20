@@ -1,7 +1,7 @@
 /** The list under the cursor when you type @ in the editor. */
 import { forwardRef, useImperativeHandle, useState } from 'react'
 import { PersonAvatar } from '@/components/Avatar'
-import type { Person } from '@/model/schema'
+import { handleOf, type Person } from '@/model/schema'
 import { cn } from '@/lib/utils'
 
 export interface ListHandle {
@@ -42,7 +42,7 @@ export const PeopleList = forwardRef<ListHandle, { items: Person[]; command: (p:
         >
           <PersonAvatar person={p} />
           <span className="truncate">{p.name}</span>
-          <span className="ml-auto truncate text-muted-foreground">@{p.login}</span>
+          <span className="ml-auto truncate text-muted-foreground">@{handleOf(p)}</span>
         </button>
       ))}
     </div>

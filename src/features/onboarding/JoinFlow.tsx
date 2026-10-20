@@ -13,6 +13,7 @@ import { INVITE_DAYS, inviteInfo, inviteProblem, type InviteInfo } from '@/backe
 import { PersonAvatar } from '@/components/Avatar'
 import { useSignOut } from '@/components/SignOut'
 import { joinWorkspace } from '@/data/actions'
+import { handleOf } from '@/model/schema'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { ProfileFailed, Waiting } from './Gatekeeping'
@@ -143,8 +144,8 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
     )
   }, [stage, token, info, joinProblem, navigate])
 
-  const login = profile.state === 'ready' ? profile.mine.person.login : undefined
-  const signedInAs = user?.email || (login ? `@${login}` : '')
+  const handle = profile.state === 'ready' ? handleOf(profile.mine.person) : undefined
+  const signedInAs = user?.email || (handle ? `@${handle}` : '')
 
   const goHome = () => {
     forget()

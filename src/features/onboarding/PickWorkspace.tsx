@@ -6,6 +6,7 @@ import { myWorkspaces, type WorkspaceInfo } from '@/backend/workspaces'
 import { EmptyState } from '@/components/EmptyState'
 import { Logo } from '@/components/Logo'
 import { useSignOut } from '@/components/SignOut'
+import { handleOf } from '@/model/schema'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { NewWorkspace } from './NewWorkspace'
@@ -60,7 +61,7 @@ export function PickWorkspace() {
             </Button>
           )}
           <span className="ml-auto text-sm text-muted-foreground">
-            Signed in as @{user?.login} ·{' '}
+            Signed in as @{user && handleOf(user)} ·{' '}
             <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={signOut}>
               sign out
             </button>

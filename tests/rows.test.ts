@@ -53,6 +53,7 @@ const profile = (more: Partial<Row<'profiles'>> = {}): Row<'profiles'> => ({
   avatar_url: 'https://a/ana.png',
   name_set_here: false,
   guest_of: null,
+  handle: null,
   linear_ids: [],
   created_at: T(0),
   changed_at: T(0),
@@ -137,6 +138,14 @@ describe('people', () => {
     expect(account.linearIds).toEqual(['L-1', 'L-2'])
     expect(account.linearId).toBeUndefined()
     expect(personToProfile(account, WS, registry())).toMatchObject({ id: 'p-ana', guest_of: null, linear_ids: ['L-1', 'L-2'] })
+  })
+
+  test('a handle only when it isn’t the login, and never kept in extra', () => {
+    expect(rowToPerson(profile({ handle: 'ania' })).handle).toBe('ania')
+    expect('handle' in rowToPerson(profile())).toBe(false)
+    expect('handle' in rowToPerson(profile({ handle: 'ana' }))).toBe(false)
+    expect(rowToPerson(profile({ handle: 'ania', extra: { handle: 'old' } })).handle).toBe('ania')
+    expect(personToProfile(rowToPerson(profile({ handle: 'ania' })), WS, registry()).extra).toEqual({})
   })
 
   test('a name typed here is remembered', () => {

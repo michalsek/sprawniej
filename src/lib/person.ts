@@ -15,8 +15,8 @@ export function personColor(login: string): string {
   return `hsl(${h % 360} 50% 42%)`
 }
 
-/** probably the same person: the same name, or a handle that is their name */
-export function sameName(name: string, other: { login: string; name?: string | null }): boolean {
+/** probably the same person: the same name, or an @handle that is their name */
+export function sameName(name: string, other: { login: string; handle?: string; name?: string | null }): boolean {
   const n = plainName(name)
-  return !!n && ((!!other.name && plainName(other.name) === n) || plainName(other.login) === n)
+  return !!n && ((!!other.name && plainName(other.name) === n) || plainName(other.handle ?? other.login) === n)
 }

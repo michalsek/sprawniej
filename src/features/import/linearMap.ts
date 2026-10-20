@@ -11,7 +11,7 @@ import { plainName as plain } from '@/lib/plain'
 import { dueForArchive } from '@/data/select'
 import type { DataState } from '@/data/store'
 import type { Priority } from '@/model/status'
-import { AUTO_ARCHIVE_MONTHS, isGuest, linearIdsOf, type Comment, type Issue, type Known, type Label, type Person, type Project, type Team, type View } from '@/model/schema'
+import { AUTO_ARCHIVE_MONTHS, handleOf, isGuest, linearIdsOf, type Comment, type Issue, type Known, type Label, type Person, type Project, type Team, type View } from '@/model/schema'
 import { SUBSCRIBERS_READ, type LIssue, type LinearData, type LLabel, type LTeam, type LUser } from './linearApi'
 import { mapViewFilter, type FilterContext } from './linearFilters'
 import { mapStatus } from './linearStatus'
@@ -26,7 +26,7 @@ export function guessPerson(u: LUser, people: Person[]): string | null {
   const local = u.email ? plain(u.email.split('@')[0]) : ''
   const hit =
     people.find((p) => p.name && names.includes(plain(p.name))) ??
-    people.find((p) => names.includes(plain(p.login)) || (local && plain(p.login) === local))
+    people.find((p) => names.includes(plain(handleOf(p))) || (local && plain(handleOf(p)) === local))
   return hit?.login ?? null
 }
 

@@ -10,7 +10,7 @@ import { PersonAvatar } from '@/components/Avatar'
 import { linkPerson } from '@/data/actions'
 import { sameName } from '@/lib/person'
 import { useData } from '@/data/store'
-import { isGuest, type Person } from '@/model/schema'
+import { handleOf, isGuest, type Person } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from '@/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
@@ -36,7 +36,7 @@ export function LinkPersonDialog({ guest, onClose }: { guest: Person; onClose: (
         .filter(([login, m]) => !m.removedAt && !isGuest(login))
         .map(([login]) => {
           const person = s.people[login] ?? { login, githubId: 0, name: login, avatarUrl: '' }
-          return { key: login, person, hint: `@${login}` }
+          return { key: login, person, hint: `@${handleOf(person)}` }
         })
         .sort((a, b) => a.person.name.localeCompare(b.person.name)),
     [s.members, s.people],
@@ -54,7 +54,7 @@ export function LinkPersonDialog({ guest, onClose }: { guest: Person; onClose: (
     setBusy(true)
     try {
       await linkPerson(guest.login, choice.key)
-      toast(`${guest.name} is now @${choice.key}`, { description: 'Their issues, comments and views are theirs.' })
+      toast(`${guest.name} is now @${handleOf(choice.person)}`, { description: 'Their issues, comments and views are theirs.' })
       onClose()
     } catch (e) {
       toast(e instanceof Error ? e.message : "We couldn't link them. Try again in a moment.")

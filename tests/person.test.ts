@@ -7,6 +7,8 @@ test('names that probably match', () => {
   expect(sameName('Łukasz Bąk', { login: 'lb', name: 'Lukasz Bak' })).toBe(true)
   expect(sameName('Darek', { login: 'darek' })).toBe(true)
   expect(sameName('Darek Smith', { login: 'darekk', name: null })).toBe(false)
+  expect(sameName('Darek', { login: 'dk', handle: 'darek' })).toBe(true)
+  expect(sameName('Darek', { login: 'darek', handle: 'dk' })).toBe(false)
 })
 
 test('a name made comparable: no accents, no case, letters and digits only', () => {

@@ -23,7 +23,7 @@ import { leaveImport, startImport, useImportRun } from './importRun'
 import { LinearError, readBasics, readTeams, type LinearData } from './linearApi'
 import { emojiFor, guessPerson, guestLogins, involvedUsers, linearName, type ImportChoices, type ImportResult } from './linearMap'
 import { prepareImport, type Prepared } from './prepareImport'
-import { isGuest, TEAM_KEY_PATTERN, type Member, type Person } from '@/model/schema'
+import { handleOf, isGuest, TEAM_KEY_PATTERN, type Member, type Person } from '@/model/schema'
 
 type Stage =
   | { at: 'key' }
@@ -303,7 +303,7 @@ export function ImportPage() {
   if (stage.at === 'people') {
     const users = involvedUsers(stage.data)
     const guests = guestLogins(users, everyone)
-    const here = hereNow(everyone, members).sort((a, b) => (a.name || a.login).localeCompare(b.name || b.login))
+    const here = hereNow(everyone, members).sort((a, b) => (a.name || handleOf(a)).localeCompare(b.name || handleOf(b)))
     return (
       <Panel
         step={2}
@@ -346,7 +346,7 @@ export function ImportPage() {
                   <SelectItem value={NOBODY}>No one</SelectItem>
                   {here.map((p) => (
                     <SelectItem key={p.login} value={p.login}>
-                      <PersonAvatar person={p} className="size-5 text-[8px]" /> {p.name || p.login}
+                      <PersonAvatar person={p} className="size-5 text-[8px]" /> {p.name || handleOf(p)}
                     </SelectItem>
                   ))}
                 </SelectContent>

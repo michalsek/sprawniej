@@ -9,7 +9,7 @@ import { z } from 'zod'
 import { PRIORITY_IDS, STATUS_IDS } from './status'
 
 const iso = z.string() // ISO 8601 date-time
-const login = z.string() // @handle
+const login = z.string() // a person's hidden key (Person.login)
 
 /** a shape's own fields, without the "anything else" `.loose()` allows, so a misspelled field doesn't compile */
 export type Known<T> = { [K in keyof T as string extends K ? never : number extends K ? never : K]: T[K] }
@@ -26,12 +26,15 @@ export const workspaceSchema = z
 export type Workspace = z.infer<typeof workspaceSchema>
 
 /**
- * Someone with a profile: a name and an @handle (the profiles table). `linearIds` remembers who they were in Linear
- * once someone from Linear is linked to their account (Settings › People from Linear).
+ * Someone with a profile: a name and an @handle (the profiles table). `login` is the hidden key everything points at
+ * and never changes; `handle` is the @handle people see and mention, when they changed it (handleOf). `linearIds`
+ * remembers who they were in Linear once someone from Linear is linked to their account (Settings › People from Linear).
  */
 export const personSchema = z
   .object({
     login,
+    /** the @handle they changed to (Settings › Your account); missing: the same as `login` */
+    handle: z.string().optional(),
     githubId: z.number().int(),
     name: z.string(),
     avatarUrl: z.string(),
@@ -40,6 +43,9 @@ export const personSchema = z
   })
   .loose()
 export type Person = z.infer<typeof personSchema>
+
+/** the @handle people see and mention now (without the @) */
+export const handleOf = (p: Pick<Person, 'login' | 'handle'>): string => p.handle ?? p.login
 
 /**
  * Someone the Linear import brought who isn't in the workspace yet (`~jan-kowalski`). Their issues, comments and

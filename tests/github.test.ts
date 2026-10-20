@@ -149,6 +149,13 @@ describe('notes', () => {
     const i = issue({ description: 'cc @cy', followers: [{ profile_id: ANA, following: false }] })
     expect(notesFor(i, 'done', BOB, members)).toEqual([{ issue: 'i1', to: CY, status: 'done' }])
   })
+
+  test('a mention of someone’s handle now counts, case aside; of a handle they moved off, not', () => {
+    const renamed = members.map((p) => (p.login === 'cy' ? { ...p, handle: 'cyprian' } : p))
+    const i = issue({ description: 'cc @Cyprian', followers: [{ profile_id: ANA, following: false }] })
+    expect(notesFor(i, 'done', BOB, renamed)).toEqual([{ issue: 'i1', to: CY, status: 'done' }])
+    expect(notesFor(issue({ description: 'cc @cy', followers: [{ profile_id: ANA, following: false }] }), 'done', BOB, renamed)).toEqual([])
+  })
 })
 
 describe('the handler', () => {

@@ -18,6 +18,11 @@ describe('matching people', () => {
     expect(guessPerson({ ...data.users[2], name: 'Mikolaj Pochec' }, people)).toBe('mikolaj')
     expect(guessPerson(data.users[2], people)).toBeNull()
   })
+  test('by the @handle someone has now, not a login they moved off', () => {
+    const renamed = [{ ...person('rs', 'Someone'), handle: 'bstone' }, { ...person('ana-n', 'A. N.'), handle: 'an' }]
+    expect(guessPerson(data.users[1], renamed)).toBe('rs')
+    expect(guessPerson({ ...data.users[0], name: 'Anna', displayName: 'ana-n' }, renamed)).toBeNull()
+  })
   test('only people who appear in the issues and views', () => {
     expect(involvedUsers({ ...data, issues: data.issues.slice(1, 3), comments: [], views: [] }).map((u) => u.id)).toEqual(['u-ana', 'u-old'])
     // subscribers and people a view filters by count too
