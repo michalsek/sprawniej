@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.6.0'
+export const APP_VERSION = '2.7.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,17 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.7.0',
+    date: '2026-10-20',
+    title: 'Light and dark',
+    notes: [
+      'Sprawniej now comes in light too. It follows your device, or pick Light or Dark in Settings › Profile',
+      'Your choice follows you to every device you sign in on, and your other tabs switch at once',
+      'Press ⌘K and type light, dark or appearance to switch quickly',
+      'Statuses, labels, due dates and code stay easy to read in both, and checkboxes and scrollbars match the look',
+    ],
+  },
   {
     version: '2.6.0',
     date: '2026-10-20',

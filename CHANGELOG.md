@@ -4,6 +4,14 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.7.0: Light and dark
+*2026-10-20*
+
+- Sprawniej now comes in light too. It follows your device, or pick Light or Dark in Settings › Profile
+- Your choice follows you to every device you sign in on, and your other tabs switch at once
+- Press ⌘K and type light, dark or appearance to switch quickly
+- Statuses, labels, due dates and code stay easy to read in both, and checkboxes and scrollbars match the look
+
 ## 2.6.0: Invite links for several people
 *2026-10-20*
 
