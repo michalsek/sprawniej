@@ -4,9 +4,10 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation } from 'wouter'
-import { Box, CircleHelp, Inbox, Layers, PanelLeft, Settings, Sparkles, SquarePen, SquareStack, User } from 'lucide-react'
+import { Box, CircleHelp, Inbox, Layers, Monitor, Moon, PanelLeft, Settings, Sparkles, SquarePen, SquareStack, Sun, User } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { loadArchive } from '@/backend'
+import { setTheme } from '@/data/actions'
 import { searchIssues } from '@/data/search'
 import { isAdmin } from '@/data/select'
 import { findByRef, issueRef, useData } from '@/data/store'
@@ -29,6 +30,8 @@ interface Entry {
   run: () => void
   shortcut?: string
 }
+
+const THEME_WORDS = 'theme light dark mode colours colors appearance'
 
 const matches = (e: Entry, q: string) => plain(q).split(/\s+/).every((w) => plain(`${e.label} ${e.words ?? ''}`).includes(w))
 
@@ -76,6 +79,12 @@ function Palette() {
     { id: 'new', label: 'New issue', icon: <SquarePen />, run: () => openComposer(), shortcut: 'C' },
     { id: 'sidebar', label: 'Show or hide the sidebar', icon: <PanelLeft />, run: () => useChrome.getState().toggleSidebar() },
   ]
+  // only when searched for ("dark", "light", "appearance"), so the list you open with stays short
+  const looks: Entry[] = [
+    { id: 'theme-light', label: 'Use light appearance', words: THEME_WORDS, icon: <Sun />, run: () => setTheme('light') },
+    { id: 'theme-dark', label: 'Use dark appearance', words: THEME_WORDS, icon: <Moon />, run: () => setTheme('dark') },
+    { id: 'theme-system', label: 'Follow the system appearance', words: `${THEME_WORDS} device`, icon: <Monitor />, run: () => setTheme('system') },
+  ]
 
   const q = query.trim().toLowerCase()
   const found = searchIssues(issues, query)
@@ -95,7 +104,7 @@ function Palette() {
   const oldFirst = !!exactOld && !exactActive
   const show = (list: Entry[]) => (q ? list.filter((e) => matches(e, q)) : list)
   const groups: [string, Entry[]][] = [
-    ['Actions', show(actions)],
+    ['Actions', show(q ? [...actions, ...looks] : actions)],
     // each settings page shows once you type, so the list doesn't start long
     ['Go to', [...show(pages), ...(q ? show(settings) : [])]],
     ['Views and projects', q ? show(things) : []],
