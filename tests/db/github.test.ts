@@ -209,15 +209,15 @@ describe.skipIf(!enabled)('GitHub', () => {
   })
 
   test('adding GitHub as a way to sign in fills the GitHub id', async () => {
-    const eve = await signUp('eve')
+    const gil = await signUp('gil-github')
     const id = githubId()
     await ownerSql(
       `insert into auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
-       values (${lit(String(id))}, ${lit(eve.userId)}, ${lit({ sub: String(id), user_name: `dbt-${RUN}-eve-gh` })}::jsonb,
+       values (${lit(String(id))}, ${lit(gil.userId)}, ${lit({ sub: String(id), user_name: `dbt-${RUN}-gil-gh` })}::jsonb,
                'github', now(), now(), now())`,
     )
-    const me = await ok(eve.db.rpc('ensure_profile').single())
+    const me = await ok(gil.db.rpc('ensure_profile').single())
     expect(me.github_id).toBe(id)
-    expect(me.login).toBe(eve.login)
+    expect(me.login).toBe(gil.login)
   })
 })
