@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.7.1'
+export const APP_VERSION = '2.8.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,18 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.8.0',
+    date: '2026-10-20',
+    title: 'Send pages from Notion',
+    notes: [
+      'A button or an automation in Notion can now send a page to Sprawniej, and it becomes an issue with a link back to the page',
+      'Its description, status, priority, assignee, due date and labels come along when the page has them, and a Team property picks the team',
+      'Sending the same page again keeps the one issue',
+      'Admins connect it in Settings › Notion, pick the team pages go to, and can replace the address at any time',
+      'The first activity line says the issue came from Notion, and the Inbox shows Notion when nobody in the workspace made it',
+    ],
+  },
   {
     version: '2.7.1',
     date: '2026-10-20',

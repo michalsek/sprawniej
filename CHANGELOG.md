@@ -4,6 +4,15 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.8.0: Send pages from Notion
+*2026-10-20*
+
+- A button or an automation in Notion can now send a page to Sprawniej, and it becomes an issue with a link back to the page
+- Its description, status, priority, assignee, due date and labels come along when the page has them, and a Team property picks the team
+- Sending the same page again keeps the one issue
+- Admins connect it in Settings › Notion, pick the team pages go to, and can replace the address at any time
+- The first activity line says the issue came from Notion, and the Inbox shows Notion when nobody in the workspace made it
+
 ## 2.7.1: Getting ready for your own statuses
 *2026-10-20*
 
