@@ -1,5 +1,6 @@
 /**
- * Sign-up codes: a new account needs a code or an open invite link (docs/data-format.md, "Who may make an account").
+ * Sign-up codes: a new account needs a code or an invite link that still has room (docs/data-format.md, "Who may make
+ * an account").
  * Email sign-ups are checked by the Auth hook before the account exists; an account made another way (GitHub) gets no
  * profile until it gives a code with use_signup_code().
  */
@@ -107,6 +108,57 @@ describe.skipIf(!enabled)('sign-up codes', () => {
     await ok(db.rpc('use_signup_code', { p_invite: token }))
     await ok(db.rpc('create_profile', { p_login: `dbt-${RUN}-ghinv`, p_name: 'Invited later' }).single())
     expect(await ok(db.rpc('accept_invite', { p_token: token }))).toBe(ws)
+  }, SLOW)
+
+  const link = async (ws: string, max_uses: number | null) =>
+    ok(w.ana.db.from('invites').insert({ workspace_id: ws, max_uses }).select('id, token').single())
+
+  test('a link for up to 2 makes at most 2 accounts that have not joined yet', async () => {
+    const { ws } = await newWorkspace(w.ana, 'signup two')
+    const { token } = await link(ws, 2)
+    const a = await signUpBare('two-a', { invite: token })
+    await signUpBare('two-b', { invite: token })
+    expect(await trySignUp('two-c', { invite: token })).toBe(BAD_INVITE)
+    // joining doesn't free a place: the one who joined still holds it
+    await ok(a.db.rpc('create_profile', { p_login: `dbt-${RUN}-two-a`, p_name: 'Two A' }).single())
+    expect(await ok(a.db.rpc('accept_invite', { p_token: token }))).toBe(ws)
+    expect(await trySignUp('two-d', { invite: token })).toBe(BAD_INVITE)
+  }, SLOW)
+
+  test('a link for anyone makes accounts until it ends; ended, expired and full links make none', async () => {
+    const { ws } = await newWorkspace(w.ana, 'signup anyone')
+    const anyone = await link(ws, null)
+    for (const n of ['any-a', 'any-b', 'any-c']) expect(await trySignUp(n, { invite: anyone.token })).toBeNull()
+    await ok(w.ana.db.rpc('end_invite', { p_invite: anyone.id }))
+    expect(await trySignUp('any-d', { invite: anyone.token })).toBe(BAD_INVITE)
+
+    const expired = (await ok(w.ana.db.from('invites').insert({ workspace_id: ws, max_uses: null, expires_at: '2020-01-01T00:00:00Z' }).select('token').single())).token
+    expect(await trySignUp('any-expired', { invite: expired })).toBe(BAD_INVITE)
+    const full = await link(ws, 2)
+    await ok(w.bob.db.rpc('accept_invite', { p_token: full.token }))
+    await ok(w.dee.db.rpc('accept_invite', { p_token: full.token }))
+    expect(await trySignUp('any-full', { invite: full.token })).toBe(BAD_INVITE)
+
+    // without a code (GitHub): the same rule
+    const { db, userId } = await signUpBare('github-shared')
+    await ownerSql(`delete from private.signups where user_id = '${userId}'`)
+    await expectError(db.rpc('use_signup_code', { p_invite: anyone.token }), 'SP005')
+    const open = await link(ws, 5)
+    await ok(db.rpc('use_signup_code', { p_invite: open.token }))
+    expect(await ok(db.rpc('signup_code_needed'))).toBe(false)
+
+    // deleting a link keeps the record of who signed up with it
+    await ok(w.ana.db.from('invites').delete().eq('id', open.id))
+    const [kept] = await ownerSql<{ invite_id: string | null }>(`select invite_id from private.signups where user_id = '${userId}'`)
+    expect(kept).toEqual({ invite_id: null })
+  }, SLOW)
+
+  test('two sign-ups at once with a link for one person make one account', async () => {
+    const { ws } = await newWorkspace(w.ana, 'signup race')
+    const { token } = await link(ws, 1)
+    const both = await Promise.all([trySignUp('race-a', { invite: token }), trySignUp('race-b', { invite: token })])
+    expect(both.filter((r) => r === null)).toHaveLength(1)
+    expect(both.filter((r) => r === BAD_INVITE)).toHaveLength(1)
   }, SLOW)
 
   test('accounts never let in are removed after 7 days; the rest stay', async () => {

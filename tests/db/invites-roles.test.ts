@@ -316,6 +316,126 @@ describe.skipIf(!enabled)('invites, members and roles', () => {
     await expectError(w.ana.db.rpc('link_person', { p_ws: w.ws, p_guest: elsewhere, p_to: w.bob.profileId }), 'P0002')
   })
 
+  // ---------- links for several people ----------
+
+  const link = async (ws: string, more: NewInvite = {}) => ok(w.ana.db.from('invites').insert({ workspace_id: ws, ...more }).select('id, token').single())
+  const join = (who: Someone, token: string) => who.db.rpc('accept_invite', { p_token: token })
+  const usesOf = async (ws: string) => (await ok(w.ana.db.from('invite_uses').select('invite_id, profile_id').eq('workspace_id', ws))).map((u) => u.profile_id).sort()
+
+  test('a link for up to 3 people lets three join, then it is full', async () => {
+    const { ws } = await newWorkspace(w.ana, 'up to three')
+    const { token } = await link(ws, { max_uses: 3 })
+    const people = await Promise.all(['up3a', 'up3b', 'up3c', 'up3d'].map(signUp))
+    for (const p of people.slice(0, 3)) expect(await ok(join(p, token))).toBe(ws)
+    await expectError(join(people[3], token), 'SP007')
+    expect((await info(people[3], token))[0]).toMatchObject({ state: 'full', people: [], for_name: null, workspace_id: null })
+    expect(await usesOf(ws)).toEqual(people.slice(0, 3).map((p) => p.profileId).sort())
+    // only a link for one person is marked accepted
+    expect((await ok(w.ana.db.from('invites').select('accepted_at').eq('token', token).single())).accepted_at).toBeNull()
+  })
+
+  test('two people at the last place: one joins, the other finds it full', async () => {
+    const { ws } = await newWorkspace(w.ana, 'last place')
+    const { token } = await link(ws, { max_uses: 2 })
+    const [first, a, b] = await Promise.all(['lpa', 'lpb', 'lpc'].map(signUp))
+    await ok(join(first, token))
+    const both = await Promise.all([join(a, token), join(b, token)])
+    expect(both.filter((r) => !r.error)).toHaveLength(1)
+    expect(both.find((r) => r.error)?.error?.code).toBe('SP007')
+    expect(await usesOf(ws)).toHaveLength(2)
+  })
+
+  test('a link for anyone lets everyone join until an admin ends it', async () => {
+    const { ws } = await newWorkspace(w.ana, 'anyone')
+    await addMember(w.ana, w.bob, ws)
+    const { id, token } = await link(ws, { max_uses: null })
+    const people = await Promise.all(['anya', 'anyb', 'anyc', 'anyd'].map(signUp))
+    for (const p of people.slice(0, 3)) expect(await ok(join(p, token))).toBe(ws)
+    // someone already in uses no place
+    expect(await ok(join(w.bob, token))).toBe(ws)
+    expect(await usesOf(ws)).toHaveLength(4)   // bob's own invite, and three
+
+    await expectError(w.bob.db.rpc('end_invite', { p_invite: id }), 'P0002')
+    await expectError(anonClient().rpc('end_invite', { p_invite: id }), '42501')
+    await ok(w.ana.db.rpc('end_invite', { p_invite: id }))
+    const ended = (await ok(w.ana.db.from('invites').select('ended_at').eq('id', id).single())).ended_at
+    expect(ended).not.toBeNull()
+    await ok(w.ana.db.rpc('end_invite', { p_invite: id }))
+    expect((await ok(w.ana.db.from('invites').select('ended_at').eq('id', id).single())).ended_at).toBe(ended)
+
+    await expectError(join(people[3], token), 'SP006')
+    expect((await info(people[3], token))[0]).toMatchObject({ state: 'ended', people: [] })
+    expect(await usesOf(ws)).toHaveLength(4)
+  })
+
+  test('how many people a link is for is set once, and a guest link is for one', async () => {
+    const { ws } = await newWorkspace(w.ana, 'link columns')
+    await expectError(w.ana.db.from('invites').insert({ workspace_id: ws, max_uses: 0 }), '23514')
+    await expectError(w.ana.db.from('invites').insert({ workspace_id: ws, max_uses: 1001 }), '23514')
+    const g = crypto.randomUUID()
+    await ok(importRows(ws, 'profiles', [{ id: g, login: `~dbt-${RUN}-g11`, name: 'Guest Eleven' }]))
+    await expectError(w.ana.db.from('invites').insert({ workspace_id: ws, for_profile: g, max_uses: null }), '23514')
+    await expectError(w.ana.db.from('invites').insert({ workspace_id: ws, for_profile: g, max_uses: 2 }), '23514')
+    await expectDenied(w.ana.db.from('invites').insert({ workspace_id: ws, ended_at: new Date().toISOString() }))
+
+    // made the way older apps make them: for one person
+    const { id, token } = await link(ws)
+    await expectDenied(w.ana.db.from('invites').update({ ended_at: new Date().toISOString() }).eq('id', id))
+    await expectDenied(w.ana.db.from('invites').update({ max_uses: 5 }).eq('id', id))
+    expect((await ok(w.ana.db.from('invites').select('max_uses').eq('id', id).single())).max_uses).toBe(1)
+    expect(await ok(join(w.dee, token))).toBe(ws)
+    await expectError(join(w.cy, token), 'SP002')
+    expect((await ok(w.ana.db.from('invites').select('accepted_by').eq('id', id).single())).accepted_by).toBe(w.dee.profileId)
+    expect(await usesOf(ws)).toEqual([w.dee.profileId])
+  })
+
+  test('who joined with a link: admins read it, nobody writes it', async () => {
+    const { ws } = await newWorkspace(w.ana, 'invite uses')
+    await addMember(w.ana, w.bob, ws)
+    const { id } = await link(ws, { max_uses: null })
+    const one = { invite_id: id, workspace_id: ws, profile_id: w.bob.profileId }
+    expect(await ok(w.ana.db.from('invite_uses').select('profile_id').eq('workspace_id', ws))).toEqual([{ profile_id: w.bob.profileId }])
+    expect(await ok(w.bob.db.from('invite_uses').select().eq('workspace_id', ws))).toEqual([])
+    expect(await ok(w.cy.db.from('invite_uses').select().eq('workspace_id', ws))).toEqual([])
+    await expectDenied(anonClient().from('invite_uses').select())
+    await expectDenied(w.ana.db.from('invite_uses').insert(one))
+    await expectDenied(w.ana.db.from('invite_uses').update({ at: new Date().toISOString() }).eq('workspace_id', ws))
+    await expectDenied(w.ana.db.from('invite_uses').delete().eq('workspace_id', ws))
+
+    // deleting a link takes its record with it
+    const used = await ok(w.ana.db.from('invite_uses').select('invite_id').eq('workspace_id', ws).single())
+    await ok(w.ana.db.from('invites').delete().eq('id', used.invite_id))
+    expect(await ok(w.ana.db.from('invite_uses').select().eq('workspace_id', ws))).toEqual([])
+  })
+
+  test('someone who left comes back only with a link made after that', async () => {
+    const { ws } = await newWorkspace(w.ana, 'left and back')
+    const [leaver, removed] = await Promise.all(['leaver', 'removed'].map(signUp))
+    await addMember(w.ana, leaver, ws)
+    await addMember(w.ana, removed, ws)
+    const before = await link(ws, { max_uses: null })
+
+    await ok(leaver.db.rpc('leave_workspace', { p_ws: ws }))
+    await expectError(join(leaver, before.token), 'SP008')
+    expect((await info(leaver, before.token))[0]).toMatchObject({ state: 'left', people: [] })
+    await ok(w.ana.db.from('workspace_members').update({ removed_at: new Date().toISOString() }).eq('workspace_id', ws).eq('profile_id', removed.profileId))
+    await expectError(join(removed, before.token), 'SP008')
+
+    const after = await link(ws, { max_uses: null })
+    expect(await ok(join(leaver, after.token))).toBe(ws)
+    expect(await ok(join(removed, after.token))).toBe(ws)
+  })
+
+  test('joining with a shared link is heard as a new member, never as the link', async () => {
+    const { ws } = await newWorkspace(w.ana, 'shared quiet')
+    const { token } = await link(ws, { max_uses: 5 })
+    const heard = await listen(w.ana, `ws:${ws}`)
+    expect(heard.status).toBe('SUBSCRIBED')
+    await ok(join(w.dee, token))
+    expect(await heard.waitFor((m) => m.table === 'workspace_members' && m.op === 'INSERT' && m.row?.profile_id === w.dee.profileId)).toBeDefined()
+    expect(heard.got.filter((m) => m.table === 'invites' || m.table === 'invite_uses')).toEqual([])
+  })
+
   test('you pick a name before you can join', async () => {
     const eve = await signUpBare('eve')
     const token = await invite(w.ws)
