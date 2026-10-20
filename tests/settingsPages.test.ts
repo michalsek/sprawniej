@@ -56,6 +56,8 @@ describe('what an address under Settings opens', () => {
 
   test('older addresses open where the page is now', () => {
     for (const p of PAGES) for (const old of p.oldPaths ?? []) expect(resolveSettings(old, PAGES, true)).toEqual({ to: p.path })
+    // bookmarks from before the pages were split
+    expect(resolveSettings('/settings/import', PAGES, true)).toEqual({ to: '/settings/workspace/import' })
   })
 
   test('a slash at the end goes, and an unknown address is missing', () => {

@@ -12,7 +12,6 @@ import { NewWorkspace } from './NewWorkspace'
 import { Problem, Step } from './Step'
 import { WORKSPACE_PAGE } from './workspacePage'
 
-
 export function PickWorkspace() {
   const [loc, navigate] = useLocation()
   const { user, recent, open } = useSession()
