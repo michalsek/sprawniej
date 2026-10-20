@@ -71,7 +71,7 @@ People at the top level (`source.user_id`, `data.created_by`) carry only an id, 
 person properties (`people`, `created_by`) as `person.email`. That is why the author comes from a **Created by**
 property. `tests/fixtures/notion-page.json` is a full example with made-up ids.
 
-## 2. The database (`supabase/migrations/20261021140000_notion.sql`)
+## 2. The database (`supabase/migrations/20261021150000_notion.sql`)
 
 Only adds, so older apps keep working.
 

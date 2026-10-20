@@ -176,7 +176,7 @@ sign in, so GitHub sign-in (step 4 of "A new project") needs to be on.
 Optional. docs/notion.md has the design; these are the steps for a project. Notion needs no app of ours and the
 function needs no secret: each workspace's address carries its own key, and the database keeps only its sha256.
 
-1. **The migration** (`20261021140000_notion.sql`) goes in with `bunx supabase db push`, before the app that needs it.
+1. **The migration** (`20261021150000_notion.sql`) goes in with `bunx supabase db push`, before the app that needs it.
 2. **Deploy the function** (bundles `src/notion` and deploys it without Docker; `config.toml` turns off the sign-in
    check for it, since Notion sends no sign-in):
    ```sh

@@ -488,7 +488,7 @@ New functions are closed by default: nobody runs one unless a migration grants i
   `status_id` sets `status` to its category (a status of another workspace or kind: `22023` "That status isn't in this
   workspace."; hidden ones are allowed); `status` changed alone (an older app, GitHub, the import) moves `status_id` to
   that category's default; an insert without `status_id` gets its category's default. Both sent: `status_id` wins.
-- `a_author` on views (`owner_id`), inbox (`actor_id`), invites (`invited_by`) and github_repos (`added_by`): whoever is signed in.
+- `a_author` on views (`owner_id`), inbox (`actor_id`), invites (`invited_by`), github_repos and notion_connections (`added_by`): whoever is signed in.
 - `b_number` on issues: the next number of the team (Issue numbers in docs/architecture.md).
 - `b_status` on inbox (`note_status`): a status note sent with `status_id` gets that status's category (an id that
   isn't one of the workspace's issue statuses is dropped); one sent with only `status` (an older app, `github_apply`)

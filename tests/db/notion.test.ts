@@ -27,7 +27,7 @@ import {
 
 // Notion: one connection per workspace (notion_connections), the page each issue came from (private.notion_pages),
 // the two functions for admins and the two only the webhook may call
-// (supabase/migrations/20261021140000_notion.sql, docs/notion.md).
+// (supabase/migrations/20261021150000_notion.sql, docs/notion.md).
 
 type Applied = { issue?: string; new?: boolean; archived?: boolean; problem?: string }
 

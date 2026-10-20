@@ -341,7 +341,7 @@ describe('teams, projects, views, inbox', () => {
   })
 
   test('a note about an issue made from Notion, by nobody, says so', () => {
-    const row: Row<'inbox'> = { id: 'n-2', workspace_id: WS, recipient_id: 'p-ana', actor_id: null, type: 'assigned', issue_id: 'i-1', comment_id: null, status: null, at: T(4), read_at: null, changed_at: T(5), extra: { from: 'notion' } }
+    const row: Row<'inbox'> = { id: 'n-2', workspace_id: WS, recipient_id: 'p-ana', actor_id: null, type: 'assigned', issue_id: 'i-1', comment_id: null, status: null, status_id: null, at: T(4), read_at: null, changed_at: T(5), extra: { from: 'notion' } }
     expect(rowToInbox(row, resolver())).toMatchObject({ actor: '', from: 'notion' })
   })
 })

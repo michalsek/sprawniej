@@ -37,6 +37,7 @@ export function notesFor(o: {
     title: '',
     description: o.description,
     status: 'todo',
+    statusId: '',
     priority: 0,
     assignee: (o.assignee && loginOf.get(o.assignee)) || null,
     labels: [],

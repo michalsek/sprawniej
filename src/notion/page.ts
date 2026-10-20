@@ -6,7 +6,7 @@
  */
 import { plainName } from '@/lib/plain'
 import { PAGE_ID, pageUrl } from '@/model/notion'
-import type { Priority, StatusId } from '@/model/status'
+import type { IssueCategory, Priority } from '@/model/status'
 import { cut, descriptionFor, type RichText } from './markdown'
 
 // ---------- the payload ----------
@@ -110,7 +110,7 @@ function emailOf(u: unknown): string | null {
 // ---------- the values ----------
 
 /** status names, as plainName gives them; anything else is Todo */
-const STATUS_WORDS: Record<StatusId, string[]> = {
+const STATUS_WORDS: Record<IssueCategory, string[]> = {
   backlog: ['backlog', 'icebox', 'later'],
   todo: ['todo', 'notstarted', 'new', 'open', 'ready', 'planned'],
   in_progress: ['inprogress', 'doing', 'started', 'wip', 'active'],
@@ -128,9 +128,9 @@ const PRIORITY_WORDS: Record<Exclude<Priority, 0>, string[]> = {
   4: ['low', 'lowest', 'p3', 'p4'],
 }
 
-export function statusFrom(name: string): StatusId {
+export function statusFrom(name: string): IssueCategory {
   const word = plainName(name)
-  return (Object.keys(STATUS_WORDS) as StatusId[]).find((s) => STATUS_WORDS[s].includes(word)) ?? 'todo'
+  return (Object.keys(STATUS_WORDS) as IssueCategory[]).find((s) => STATUS_WORDS[s].includes(word)) ?? 'todo'
 }
 
 function priorityFrom(name: string): Priority {
@@ -155,7 +155,7 @@ export interface PageIssue {
   title: string
   /** Markdown, ending with a link back to the page */
   description: string
-  status: StatusId
+  status: IssueCategory
   priority: Priority
   /** the assignee property's people with an email, in order: the first who is a member is assigned */
   assigneeEmails: string[]
