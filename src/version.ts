@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.10.0'
+export const APP_VERSION = '2.11.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,20 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.11.0',
+    date: '2026-10-20',
+    title: 'Checklists you can tick, and a / menu',
+    notes: [
+      'Tick checklist items right on the issue: click or tap the box, and it saves by itself (on a phone the keyboard stays away)',
+      'When you and a teammate tick items at the same time, both ticks stay, even after being offline',
+      'Type / in a description or a comment for a list of what you can add: a checklist, headings, lists, a quote, code, a table or a divider',
+      'Tables in descriptions and comments: Tab moves to the next cell, and / adds or removes lines and columns',
+      'Lists and boards show how far a checklist is, like 2/5',
+      'Comments show checklists, tables and struck text, and the person who wrote a comment can tick its boxes',
+      'Tables brought over from Linear stay when you edit the description',
+    ],
+  },
   {
     version: '2.10.0',
     date: '2026-10-20',

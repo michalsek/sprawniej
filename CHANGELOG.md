@@ -4,6 +4,17 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.11.0: Checklists you can tick, and a / menu
+*2026-10-20*
+
+- Tick checklist items right on the issue: click or tap the box, and it saves by itself (on a phone the keyboard stays away)
+- When you and a teammate tick items at the same time, both ticks stay, even after being offline
+- Type / in a description or a comment for a list of what you can add: a checklist, headings, lists, a quote, code, a table or a divider
+- Tables in descriptions and comments: Tab moves to the next cell, and / adds or removes lines and columns
+- Lists and boards show how far a checklist is, like 2/5
+- Comments show checklists, tables and struck text, and the person who wrote a comment can tick its boxes
+- Tables brought over from Linear stay when you edit the description
+
 ## 2.10.0: Favourites in your sidebar
 *2026-10-20*
 
