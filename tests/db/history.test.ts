@@ -29,8 +29,12 @@ describe.skipIf(!enabled)('history and deletions', () => {
     const before = await issueRow(issue.id)
     await ok(w.ana.db.from('issues').update({ sort_order: 'zz' }).eq('id', issue.id))
     const after = await issueRow(issue.id)
+    const st = await defaultStatuses(w.ana, w.ws)
     expect(await events(issue.id)).toEqual([
-      { actor_id: w.ana.profileId, changes: { title: ['Before', 'After'], status: ['todo', 'in_progress'] } },
+      {
+        actor_id: w.ana.profileId,
+        changes: { title: ['Before', 'After'], status: ['todo', 'in_progress'], statusId: [st.todo, st.in_progress] },
+      },
       { actor_id: w.ana.profileId, changes: { description: true } },
     ])
     expect(after.updated_at > before.updated_at).toBe(true)
@@ -62,11 +66,12 @@ describe.skipIf(!enabled)('history and deletions', () => {
     expect(restored.updated_at > archived.updated_at).toBe(true)
     const todo = await ok(w.ana.db.from('issues').update({ status: 'todo' }).eq('id', issue.id).select().single())
     expect(todo.completed_at).toBeNull()
+    const st = await defaultStatuses(w.ana, w.ws)
     expect((await events(issue.id)).map((e) => e.changes)).toEqual([
-      { status: ['todo', 'done'] },
+      { status: ['todo', 'done'], statusId: [st.todo, st.done] },
       { archived: true },
       { restored: true },
-      { status: ['done', 'todo'] },
+      { status: ['done', 'todo'], statusId: [st.done, st.todo] },
     ])
   })
 
