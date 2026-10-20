@@ -121,7 +121,8 @@ export function ArchivedIssuePage({ issue }: { issue: ArchivedIssue }) {
         <aside className="w-80 shrink-0 overflow-y-auto border-l px-5 py-8">
           {properties}
           <p className={cn('mt-8 px-2 text-xs text-muted-foreground')}>
-            Created {shortDate(issue.createdAt)} by {people[issue.createdBy]?.name ?? issue.createdBy}
+            Created {shortDate(issue.createdAt)}
+            {issue.createdBy && <> by {people[issue.createdBy]?.name ?? issue.createdBy}</>}
           </p>
         </aside>
       )}
