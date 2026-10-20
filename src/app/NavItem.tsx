@@ -3,6 +3,9 @@ import type { ReactNode } from 'react'
 import { Link, useLocation } from 'wouter'
 import { cn } from '@/lib/utils'
 
+/** how a sidebar link looks (favourites use it too) */
+export const NAV_LINK = 'flex h-9 items-center gap-3 rounded-lg px-3 text-[15px] text-sidebar-foreground/90 [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/80'
+
 /** a link in the sidebar, lit while you're on its page (or below it, unless `exact`) */
 export function NavItem({ href, icon, children, count, indent, exact }: { href: string; icon: ReactNode; children: ReactNode; count?: number; indent?: boolean; exact?: boolean }) {
   const [location] = useLocation()
@@ -12,7 +15,8 @@ export function NavItem({ href, icon, children, count, indent, exact }: { href: 
       href={href}
       aria-current={active ? 'page' : undefined}
       className={cn(
-        'flex h-9 items-center gap-3 rounded-lg px-3 text-[15px] text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60 [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/80',
+        NAV_LINK,
+        'transition-colors hover:bg-sidebar-accent/60',
         active && 'bg-sidebar-accent text-sidebar-foreground',
         indent && 'pl-9',
       )}

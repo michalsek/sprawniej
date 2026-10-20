@@ -20,6 +20,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { moveText } from './favouriteText'
+import { NAV_LINK } from './NavItem'
 
 /** a favourite moves only up and down, so the sidebar never scrolls sideways */
 const upAndDown: Modifier = ({ transform }) => ({ ...transform, x: 0 })
@@ -49,11 +50,7 @@ function FavouriteRow({ id, first, last }: { id: string; first: boolean; last: b
         data-favourite-id={id}
         title={thing.name}
         aria-current={active ? 'page' : undefined}
-        // NavItem's look in Sidebar.tsx, copied for now; one shared constant once the list is in the sidebar
-        className={cn(
-          'flex h-9 min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-lg px-3 text-[15px] text-sidebar-foreground/90 select-none [-webkit-touch-callout:none] [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/80',
-          active && 'text-sidebar-foreground',
-        )}
+        className={cn(NAV_LINK, 'min-w-0 flex-1 touch-manipulation select-none [-webkit-touch-callout:none]', active && 'text-sidebar-foreground')}
       >
         {thing.emoji ? <span className="w-[18px] text-center text-base leading-none">{thing.emoji}</span> : project ? <Box /> : <Layers />}
         <span className="truncate">{thing.name}</span>

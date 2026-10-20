@@ -1,4 +1,4 @@
-/** The left column: product name, personal pages, workspace pages, your teams, and you at the bottom. */
+/** The left column: product name, personal pages, workspace pages and your favourites, your teams, and you at the bottom. */
 import { useState } from 'react'
 import { Link } from 'wouter'
 import { SquarePen, ChevronDown, ChevronsUpDown, CircleHelp, CircleUser, Inbox, Layers, LogOut, Box, Plus, Settings, SquareStack, Repeat, Sparkles } from 'lucide-react'
@@ -15,6 +15,7 @@ import { openComposer } from '@/features/issues/composer'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
+import { Favourites } from './Favourites'
 import { NavGroup, NavItem } from './NavItem'
 
 function TeamGroup({ teamKey }: { teamKey: string }) {
@@ -136,6 +137,7 @@ export function Sidebar() {
           <NavItem href="/views" icon={<Layers />}>
             Views
           </NavItem>
+          <Favourites />
         </NavGroup>
         <NavGroup
           title="Your teams"
