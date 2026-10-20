@@ -9,7 +9,7 @@ import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { MyProfileState } from '@/app/useMyProfile'
 import { useAuth } from '@/backend/auth'
-import { INVITE_DAYS, inviteInfo, inviteProblem, type InviteInfo } from '@/backend/workspaces'
+import { inviteInfo, inviteProblem, type InviteInfo, type JoinProblem } from '@/backend/workspaces'
 import { PersonAvatar } from '@/components/Avatar'
 import { useSignOut } from '@/components/SignOut'
 import { joinWorkspace } from '@/data/actions'
@@ -62,6 +62,11 @@ function GoHome({ title, children }: { title: string; children: string }) {
 
 const NO_SUCH_LINK = 'It may have been deleted, or part of the link is missing. Ask whoever invited you for a new one.'
 
+/** the join problems that are how the link stands, so the page shows that link's screen */
+type LinkState = Extract<JoinProblem, InviteInfo['state']>
+const LINK_STATES: readonly JoinProblem[] = ['used', 'ended', 'full', 'expired', 'left'] satisfies LinkState[]
+const isLinkState = (k: JoinProblem): k is LinkState => LINK_STATES.includes(k)
+
 export function JoinFlow({ link, profile }: { link: { token: string | null } | 'old'; profile: MyProfileState }) {
   if (link === 'old') return <GoHome title="This invite link is from an older Sprawniej">Ask whoever invited you for a new link.</GoHome>
   if (!link.token) return <GoHome title="This invite link doesn't work">{NO_SUCH_LINK}</GoHome>
@@ -96,7 +101,7 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
   const joining = useRef(false)
   const { signOut, dialog: signOutDialog } = useSignOut(location.hash)
 
-  // signing in can make it "you're already in"
+  // signing in can make it "you're already in"; a refused account asks again (`attempt`), to say exactly why
   useEffect(() => {
     let stop = false
     inviteInfo(token).then(
@@ -132,7 +137,7 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
       },
       (e: unknown) => {
         const err = inviteProblem(e)
-        if (err.kind === 'used' || err.kind === 'expired') {
+        if (isLinkState(err.kind)) {
           setInfo({ ...info, state: err.kind, people: [], forName: null })
         } else if (err.kind === 'unknown') {
           setInfo(null)
@@ -171,9 +176,15 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
     case 'unknown':
       return <GoHome title="This invite link doesn't work">{NO_SUCH_LINK}</GoHome>
     case 'used':
-      return <GoHome title="This invite was already used">{`Each invite link works once. Ask ${by} for a new one.`}</GoHome>
+      return <GoHome title="This invite was already used">{`It was made for one person. Ask ${by} for a new one.`}</GoHome>
+    case 'ended':
+      return <GoHome title="This invite link was ended">{`Whoever made it ended it early. Ask ${by} for a new one.`}</GoHome>
+    case 'full':
+      return <GoHome title="This invite link is full">{`As many people as it allows have joined with it. Ask ${by} for a new one.`}</GoHome>
     case 'expired':
-      return <GoHome title="This invite has expired">{`Invite links work for ${INVITE_DAYS} days. Ask ${by} for a new one.`}</GoHome>
+      return <GoHome title="This invite has expired">{`Ask ${by} for a new one.`}</GoHome>
+    case 'left':
+      return <GoHome title={`This link was made before you left ${ws}`}>{`To come back, ask ${by} for a new link.`}</GoHome>
     case 'member':
       return (
         <Step
@@ -263,13 +274,13 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
           }
         >
           <p className="mb-6">You'll use it to sign in to Sprawniej from now on.</p>
-          <SignInForm mode={mode} onMode={setMode} onCheckEmail={setSentTo} invite={token} />
+          <SignInForm mode={mode} onMode={setMode} onCheckEmail={setSentTo} invite={token} onInviteRefused={() => setAttempt((n) => n + 1)} />
         </Step>
       )
     case 'profile':
       return profile.state === 'failed' ? <ProfileFailed problem={profile.problem} onRetry={profile.retry} /> : <Waiting title="Just a moment…" />
     case 'name':
-      return <PickLogin initialName={info?.forName ?? undefined} onDone={profile.picked} invite={token} />
+      return <PickLogin initialName={info?.forName ?? undefined} onDone={profile.picked} invite={token} onInviteRefused={() => setAttempt((n) => n + 1)} />
     case 'joining':
       return joinProblem ? (
         <Step

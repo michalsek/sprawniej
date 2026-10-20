@@ -1,7 +1,7 @@
 /** The first screen: sign in (with GitHub, or an email and a password), or create an account. */
 import { useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
-import { CODE_KEY, friendlyAuthError, githubAvailable, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
+import { CODE_KEY, friendlyAuthError, githubAvailable, INVITE_REFUSED, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Separator } from '@/ui/separator'
@@ -22,18 +22,21 @@ export type Mode = 'sign-in' | 'sign-up'
  * The sign-in form, also used when a sign-in ran out (SignInAgain). Without `onMode` there's no "Create an account".
  * `onCheckEmail`: a new account has to open an emailed link first. "Continue with GitHub" shows once we know GitHub
  * sign-in is switched on, or when Sprawniej can't be reached to ask (the button then says so).
- * A new account needs a sign-up code, unless it comes from an invite link (`invite`, its token).
+ * A new account needs a sign-up code, unless it comes from an invite link (`invite`, its token). `onInviteRefused`: the
+ * link couldn't make an account (it was used, ended, is full or expired).
  */
 export function SignInForm({
   mode = 'sign-in',
   onMode,
   onCheckEmail,
   invite,
+  onInviteRefused,
 }: {
   mode?: Mode
   onMode?: (m: Mode) => void
   onCheckEmail?: (email: string) => void
   invite?: string
+  onInviteRefused?: () => void
 }) {
   const urlProblem = useAuth((s) => s.urlProblem)
   const [email, setEmail] = useState('')
@@ -76,7 +79,9 @@ export function SignInForm({
       if (!signUp) await signInWithPassword(email, password)
       else if ((await signUpWithPassword(email, password, needsCode ? { code } : { invite })) === 'check-email') onCheckEmail?.(email.trim())
     } catch (err) {
-      setProblem(friendlyAuthError(err))
+      const why = friendlyAuthError(err)
+      setProblem(why)
+      if (why === INVITE_REFUSED) onInviteRefused?.()
     } finally {
       setBusy(null)
     }

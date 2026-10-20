@@ -4,7 +4,7 @@
  */
 import { useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
-import { CODE_KEY, giveSignupCode, signupCodeNeeded, useAuth } from '@/backend/auth'
+import { CODE_KEY, giveSignupCode, INVITE_REFUSED, signupCodeNeeded, useAuth } from '@/backend/auth'
 import { createProfile, LOGIN_PATTERN, ProfileProblem, suggestLogin, type MyProfile } from '@/backend/profiles'
 import { HandleInput } from '@/components/HandleInput'
 import { useSignOut } from '@/components/SignOut'
@@ -16,9 +16,20 @@ import { SignupCodeField } from './Welcome'
 
 /**
  * `initialName`: the name to start from when the sign-in has none (an invite for someone from Linear has theirs).
- * `invite`: the invite link's token, which lets a new account in without a code.
+ * `invite`: the invite link's token, which lets a new account in without a code. `onInviteRefused`: it couldn't (the
+ * link was used, ended, is full or expired).
  */
-export function PickLogin({ onDone, initialName, invite }: { onDone: (p: MyProfile) => void; initialName?: string; invite?: string }) {
+export function PickLogin({
+  onDone,
+  initialName,
+  invite,
+  onInviteRefused,
+}: {
+  onDone: (p: MyProfile) => void
+  initialName?: string
+  invite?: string
+  onInviteRefused?: () => void
+}) {
   const user = useAuth((s) => s.user)
   // signing out on the way in through an invite comes back to the invite
   const { signOut, dialog: signOutDialog } = useSignOut(location.hash.startsWith('#/join/') ? location.hash : undefined)
@@ -53,8 +64,10 @@ export function PickLogin({ onDone, initialName, invite }: { onDone: (p: MyProfi
       setNeeded(false)
       return true
     } catch (err) {
+      const why = err instanceof Error ? err.message : String(err)
       if (!askCode) setInviteRefused(true)
-      setProblem(err instanceof Error ? err.message : String(err))
+      setProblem(why)
+      if (why === INVITE_REFUSED) onInviteRefused?.()
       return false
     }
   }
