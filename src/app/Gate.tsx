@@ -17,6 +17,7 @@ import { PickLogin } from '@/features/onboarding/PickLogin'
 import { PickWorkspace } from '@/features/onboarding/PickWorkspace'
 import { Problem, Step } from '@/features/onboarding/Step'
 import { SignIn, SignInForm } from '@/features/onboarding/Welcome'
+import { handleOf } from '@/model/schema'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog'
@@ -72,6 +73,13 @@ function OpenWorkspace({ workspaceId, me, children }: { workspaceId: string; me:
     setFailedSignedOut(false)
     setAttempt((n) => n + 1)
   }
+
+  // the list of workspaces says who you are as you are now (a new name or @handle, also from another tab)
+  const mineNow = useData((s) => s.people[person.login])
+  useEffect(() => {
+    const was = useSession.getState().user
+    if (mineNow && (!was || was.name !== mineNow.name || handleOf(was) !== handleOf(mineNow))) useSession.getState().setProfile(me.id, mineNow)
+  }, [mineNow, me.id])
 
   // the list of workspaces shows each with its name as it is now
   useEffect(() => {
