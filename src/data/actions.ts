@@ -37,7 +37,7 @@ import { setHandle } from '@/backend/profiles'
 import { useSession } from '@/session'
 import { canLeave, myWho, ruleFor, whoIs } from './roles'
 import type { Comment, Display, Filters, Issue, Label, Project, Team, View } from '@/model/schema'
-import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
+import { AUTO_ARCHIVE_MONTHS, handleOf } from '@/model/schema'
 import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
@@ -925,7 +925,7 @@ export async function importFromLinear(plan: ImportPlan, progress: (saved: numbe
 
 function idOf(c: WriteContext, login: string): string {
   const id = c.registry.profileId(login)
-  if (!id) throw new Error(`Sprawniej doesn't know @${login} here.`)
+  if (!id) throw new Error(`Sprawniej doesn't know @${handleOf(useData.getState().people[login] ?? { login })} here.`)
   return id
 }
 

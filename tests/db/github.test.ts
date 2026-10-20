@@ -141,6 +141,11 @@ describe.skipIf(!enabled)('GitHub', () => {
     expect(found.actor).toBe(bob.profileId)
     expect(found.people.map((p) => p.id).sort()).toEqual([ana.profileId, bob.profileId].sort())
     expect(found.people.find((p) => p.id === ana.profileId)).toEqual({ id: ana.profileId, login: ana.login, handle: null })
+    // a changed handle comes along, so mentions of it count in the webhook
+    await ok(bob.db.rpc('set_handle', { p_handle: `${bob.login}-gh` }))
+    const [renamed] = await lookup(repositoryId, repo, bobGithub, refs)
+    expect(renamed.people.find((p) => p.id === bob.profileId)?.handle).toBe(`${bob.login}-gh`)
+    await ok(bob.db.rpc('set_handle', { p_handle: bob.login }))
     expect(found.issues.map((i) => i.id).sort()).toEqual([one.id, done.id, moved.id].sort())
     const first = found.issues.find((i) => i.id === one.id)
     expect(first?.created_by).toBe(ana.profileId)

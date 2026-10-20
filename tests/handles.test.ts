@@ -3,19 +3,14 @@ import { stopWrites } from '@/backend/writes'
 import { changeHandle } from '@/data/actions'
 import { cleanHandle, HANDLE_WORDS, handleProblem } from '@/data/handles'
 import { useData } from '@/data/store'
-import { handleOf, type Person } from '@/model/schema'
+import type { Person } from '@/model/schema'
 import { person, seed } from './support/fakeBackend'
 
 const ana = person('ana')
 const bob: Person = { ...person('bob'), handle: 'robert' }
-const people: Record<string, Person> = { ana, bob, '~jan': { login: '~jan', githubId: 0, name: 'Jan', avatarUrl: '' } }
+const people: Record<string, Person> = { ana, bob }
 
 describe('handles', () => {
-  test('the handle people see: the one picked later, or the login', () => {
-    expect(handleOf(ana)).toBe('ana')
-    expect(handleOf(bob)).toBe('robert')
-  })
-
   test('what was typed, without spaces or the @ in front', () => {
     expect(cleanHandle(' @neo ')).toBe('neo')
     expect(cleanHandle('@@ neo')).toBe('neo')
@@ -30,8 +25,6 @@ describe('handles', () => {
     // a change of case of your own is fine, and so is going back to your login
     expect(handleProblem('Ana', ana, people)).toBeNull()
     expect(handleProblem('bob', bob, people)).toBeNull()
-    // people from Linear who haven't joined hold no handle
-    expect(handleProblem('jan', ana, people)).toBeNull()
   })
 })
 

@@ -28,7 +28,7 @@ function MyName({ me }: { me: Person }) {
         onBlur={commit}
         onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
       />
-      <p className="mt-1.5 text-sm text-muted-foreground">@{me.login} · How teammates see you here.</p>
+      <p className="mt-1.5 text-sm text-muted-foreground">How teammates see you here.</p>
     </div>
   )
 }

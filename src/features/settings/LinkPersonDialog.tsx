@@ -73,12 +73,12 @@ export function LinkPersonDialog({ guest, onClose }: { guest: Person; onClose: (
           Pick the member they are. Their issues, comments and views move to them. Not here yet? Send them an invite instead: they become {guest.name}{' '}
           when they join.
         </DialogDescription>
-        <Command className="rounded-lg border" value={active ?? chosen ?? ''} onValueChange={setActive} filter={plainFilter}>
+        <Command className="rounded-lg border" value={active ?? chosen ?? ''} onValueChange={setActive} filter={(_login, search, words) => plainFilter('', search, words)}>
           <CommandInput placeholder="Search people…" />
           <CommandList className="max-h-72">
             <CommandEmpty>Nobody by that name.</CommandEmpty>
             {choices.map((c) => (
-              <CommandItem key={c.key} value={c.key} keywords={[c.person.name, c.key]} onSelect={() => setPicked(c.key)} className="gap-3 py-2">
+              <CommandItem key={c.key} value={c.key} keywords={[c.person.name, handleOf(c.person)]} onSelect={() => setPicked(c.key)} className="gap-3 py-2">
                 <PersonAvatar person={c.person} className="size-7 text-[10px]" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{c.person.name}</span>
@@ -91,7 +91,7 @@ export function LinkPersonDialog({ guest, onClose }: { guest: Person; onClose: (
         </Command>
         {choice && (
           <p className="text-sm text-muted-foreground">
-            {moved ? `${moved} ${/^1 \w+$/.test(moved) ? 'moves' : 'move'} to @${choice.key}.` : `${guest.name} becomes @${choice.key}.`} This can't be
+            {moved ? `${moved} ${/^1 \w+$/.test(moved) ? 'moves' : 'move'} to @${handleOf(choice.person)}.` : `${guest.name} becomes @${handleOf(choice.person)}.`} This can't be
             undone.
           </p>
         )}
@@ -100,7 +100,7 @@ export function LinkPersonDialog({ guest, onClose }: { guest: Person; onClose: (
             Cancel
           </Button>
           <Button disabled={!choice || busy} onClick={() => void link()}>
-            {busy && <Loader2 className="animate-spin" />} {choice ? `Link to @${choice.key}` : 'Link'}
+            {busy && <Loader2 className="animate-spin" />} {choice ? `Link to @${handleOf(choice.person)}` : 'Link'}
           </Button>
         </DialogFooter>
       </DialogContent>

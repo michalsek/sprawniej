@@ -3,19 +3,19 @@
  * Only the handles people in the workspace have now count, case aside: after someone changes theirs, text that says
  * their old one is plain text (and may mention whoever takes it next).
  */
-import { handleOf, isGuest, TEAM_KEY, type Person } from '@/model/schema'
+import { handleOf, TEAM_KEY, type Person } from '@/model/schema'
 
 export const MENTION = /(^|[^\w@/.])@([A-Za-z0-9](?:[A-Za-z0-9-]{0,38}))/g
 export const ISSUE_REF = new RegExp(`\\b(${TEAM_KEY}-\\d+)\\b`, 'g')
 
 const indexes = new WeakMap<Record<string, Person>, Map<string, string>>()
 
-/** each person's handle now (lower case) → their login; people from Linear who haven't joined have none */
+/** each person's handle now (lower case) → their login. A guest's `~` login can't be typed as a mention (MENTION) */
 function handleIndex(people: Record<string, Person>): Map<string, string> {
   let index = indexes.get(people)
   if (!index) {
     index = new Map()
-    for (const p of Object.values(people)) if (!isGuest(p.login)) index.set(handleOf(p).toLowerCase(), p.login)
+    for (const p of Object.values(people)) index.set(handleOf(p).toLowerCase(), p.login)
     indexes.set(people, index)
   }
   return index

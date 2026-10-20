@@ -15,7 +15,7 @@ export interface PickerItem<V> {
   value: V
   label: string
   icon?: ReactNode
-  /** extra words to match when searching (e.g. a login) */
+  /** extra words to match when searching (e.g. a handle) */
   keywords?: string[]
   hint?: string
 }
@@ -38,11 +38,14 @@ type Props<V> = Common<V> & ({ multiple?: false; value: V; onSelect: (v: V) => v
 
 const keyOf = (v: unknown) => JSON.stringify(v)
 
+/** an item's searched words, then (after SEP) its key, which keeps items apart but is never searched (a hidden login) */
+const SEP = '\u0000'
+
 /** cmdk's usual matching, except that typing an item's exact keyword ("ENG-1") puts it first, ahead of ENG-12 */
 const exactFirst = (value: string, search: string, keywords?: string[]) => {
   const q = plain(search.trim())
   if (q && keywords?.some((k) => plain(k) === q)) return 1
-  return plainFilter(value, search, keywords) * 0.99
+  return plainFilter(value.split(SEP)[0], search, keywords) * 0.99
 }
 
 export function Picker<V>(props: Props<V>) {
@@ -78,7 +81,7 @@ export function Picker<V>(props: Props<V>) {
             <CommandEmpty>{onCreate ? 'Nothing yet. Type a name to create it.' : 'Nothing found.'}</CommandEmpty>
             <CommandGroup>
               {items.map((i) => (
-                <CommandItem key={keyOf(i.value)} value={`${i.label} ${(i.keywords ?? []).join(' ')} ${keyOf(i.value)}`} keywords={i.keywords} onSelect={() => pick(i.value)}>
+                <CommandItem key={keyOf(i.value)} value={`${i.label} ${(i.keywords ?? []).join(' ')}${SEP}${keyOf(i.value)}`} keywords={i.keywords} onSelect={() => pick(i.value)}>
                   {i.icon}
                   <span className="truncate">{i.label}</span>
                   {i.hint && <span className="ml-auto truncate text-xs text-muted-foreground">{i.hint}</span>}

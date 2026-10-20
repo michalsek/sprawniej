@@ -3,7 +3,7 @@
  * the handle is what people see and mention. These checks run as you type, before anything is sent; the database
  * checks again (set_handle), also against people in other workspaces.
  */
-import { handleOf, isGuest, LOGIN_PATTERN, type Person } from '@/model/schema'
+import { handleOf, LOGIN_PATTERN, type Person } from '@/model/schema'
 
 export const HANDLE_WORDS = {
   invalid: 'Use up to 39 letters, digits and dashes, starting with a letter or a digit.',
@@ -21,6 +21,6 @@ export function handleProblem(handle: string, me: Pick<Person, 'login' | 'handle
   if (!LOGIN_PATTERN.test(handle)) return 'invalid'
   if (handle === handleOf(me)) return 'same'
   const wanted = handle.toLowerCase()
-  const holder = Object.values(people).find((p) => p.login !== me.login && !isGuest(p.login) && handleOf(p).toLowerCase() === wanted)
+  const holder = Object.values(people).find((p) => p.login !== me.login && handleOf(p).toLowerCase() === wanted)
   return holder ? 'taken' : null
 }
