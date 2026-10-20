@@ -43,12 +43,16 @@ Then install it (the App's page › Install App) on the repositories that should
 the function from the repo folder, without writing it to a file:
 
 ```bash
-GITHUB_WEBHOOK_SECRET=… bunx supabase secrets set GITHUB_WEBHOOK_SECRET --project-ref <project ref>
+read -rs GITHUB_WEBHOOK_SECRET          # paste the secret (it doesn't show), then Enter
+bunx supabase secrets set "GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET" --project-ref <ref>
+unset GITHUB_WEBHOOK_SECRET
+bunx supabase secrets list --project-ref <ref>   # its digest must not be e3b0c442…, the digest of nothing
 ```
 
-(`supabase secrets set NAME` with no `=value` reads it from the environment; if this CLI version doesn't, use
-`bunx supabase secrets set "GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET"`.) The function reads `SUPABASE_URL` and
-`SUPABASE_SERVICE_ROLE_KEY`, which Supabase gives every function.
+Not `GITHUB_WEBHOOK_SECRET=… bunx supabase secrets set "GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET"` on one line:
+the shell fills in `$GITHUB_WEBHOOK_SECRET` before the prefix applies, so the secret is set to nothing. The function
+then answers every pull request with 500. The function reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, which
+Supabase gives every function.
 
 ## 2. The database (one migration)
 

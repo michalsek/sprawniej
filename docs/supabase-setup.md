@@ -146,10 +146,15 @@ Optional. docs/github-app.md has the design; these are the steps for a project.
    - Repository permissions: **Pull requests: Read-only** (Metadata: Read-only comes with it). Nothing else.
    - Subscribe to events: **Pull request** (any others are answered at once and ignored). Where can it be installed:
      **Only on this account**.
-2. **Give the function the secret**, for this one command only, never in a file:
+2. **Give the function the same secret**, never in a file (`read -s` keeps it out of the screen and the history):
    ```sh
-   GITHUB_WEBHOOK_SECRET=... bunx supabase secrets set "GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET" --project-ref <ref>
+   read -rs GITHUB_WEBHOOK_SECRET          # paste the secret (it doesn't show), then Enter
+   bunx supabase secrets set "GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET" --project-ref <ref>
+   unset GITHUB_WEBHOOK_SECRET
+   bunx supabase secrets list --project-ref <ref>   # its digest must not be e3b0c442…, the digest of nothing
    ```
+   (On one line, `GITHUB_WEBHOOK_SECRET=... bunx supabase secrets set "GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET"`
+   sets it to nothing: the shell fills in the variable before the prefix applies.)
    The function also reads `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, which Supabase gives every function.
 3. **Deploy the function** (bundles `src/github` and deploys it without Docker; `config.toml` turns off the sign-in
    check for it, since GitHub signs its deliveries instead):
