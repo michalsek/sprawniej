@@ -1,12 +1,13 @@
 /**
  * Type / at the start of a line (or after a space) for a list of what you can add: a checklist, headings, lists, a
- * quote, code, a table, a divider. Keep typing to narrow it ("/tab" finds Table). Inside a table it also adds and
- * removes rows and columns. Not in the middle of a word ("and/or"), in a link or in code.
+ * quote, code, a table, a divider. Keep typing to narrow it ("/tab" finds Table, "/heading 2" Heading 2); words that
+ * match nothing close it. Inside a table it adds and removes lines and columns instead (never more than that line or
+ * column; the whole table only with "Remove the table"). Not in the middle of a word ("and/or"), in a link or in code.
  */
-import { Extension, type Editor, type Range } from '@tiptap/core'
-import { PluginKey } from '@tiptap/pm/state'
+import { Extension, type Editor } from '@tiptap/core'
+import { PluginKey, type EditorState } from '@tiptap/pm/state'
 import { ReactRenderer } from '@tiptap/react'
-import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
+import Suggestion, { exitSuggestion, type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
 import {
   BetweenHorizontalEnd,
   BetweenVerticalEnd,
@@ -35,36 +36,64 @@ export interface SlashItem {
   /** what you could type instead */
   hint?: string
   icon: LucideIcon
-  run: (editor: Editor, range: Range) => void
-  /** only inside a table */
-  inTable?: boolean
+  /** runs once the typed "/…" is gone */
+  run: (editor: Editor) => void
+  /** only inside a table, and only when it fits there */
+  inTable?: (t: TableHere) => boolean
 }
 
-const go = (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range)
+/** the table the cursor is in */
+interface TableHere {
+  columns: number
+  /** lines below the header */
+  lines: number
+  inHeader: boolean
+}
+
+const go = (editor: Editor) => editor.chain().focus()
+const always = () => true
 
 const ITEMS: SlashItem[] = [
-  { title: 'Checklist', also: 'todo task box tick', hint: '[]', icon: ListChecks, run: (e, r) => go(e, r).toggleTaskList().run() },
-  { title: 'Heading 1', also: 'h1 title big', hint: '#', icon: Heading1, run: (e, r) => go(e, r).setHeading({ level: 1 }).run() },
-  { title: 'Heading 2', also: 'h2 subtitle', hint: '##', icon: Heading2, run: (e, r) => go(e, r).setHeading({ level: 2 }).run() },
-  { title: 'Heading 3', also: 'h3 small', hint: '###', icon: Heading3, run: (e, r) => go(e, r).setHeading({ level: 3 }).run() },
-  { title: 'Bulleted list', also: 'bullets points', hint: '-', icon: List, run: (e, r) => go(e, r).toggleBulletList().run() },
-  { title: 'Numbered list', also: 'ordered steps', hint: '1.', icon: ListOrdered, run: (e, r) => go(e, r).toggleOrderedList().run() },
-  { title: 'Quote', also: 'citation', hint: '>', icon: Quote, run: (e, r) => go(e, r).toggleBlockquote().run() },
-  { title: 'Code block', also: 'snippet', hint: '```', icon: Code, run: (e, r) => go(e, r).toggleCodeBlock().run() },
-  { title: 'Table', also: 'grid columns rows', icon: Table, run: (e, r) => go(e, r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { title: 'Divider', also: 'line separator rule', hint: '---', icon: Minus, run: (e, r) => go(e, r).setHorizontalRule().run() },
-  { title: 'Add a row below', also: 'table', icon: BetweenHorizontalEnd, inTable: true, run: (e, r) => go(e, r).addRowAfter().run() },
-  { title: 'Add a column to the right', also: 'table', icon: BetweenVerticalEnd, inTable: true, run: (e, r) => go(e, r).addColumnAfter().run() },
-  { title: 'Remove this row', also: 'table delete', icon: Rows3, inTable: true, run: (e, r) => go(e, r).deleteRow().run() },
-  { title: 'Remove this column', also: 'table delete', icon: Columns3, inTable: true, run: (e, r) => go(e, r).deleteColumn().run() },
-  { title: 'Remove the table', also: 'delete', icon: Trash2, inTable: true, run: (e, r) => go(e, r).deleteTable().run() },
+  { title: 'Checklist', also: 'todo task box tick', hint: '[]', icon: ListChecks, run: (e) => go(e).toggleTaskList().run() },
+  { title: 'Heading 1', also: 'h1 title big', hint: '#', icon: Heading1, run: (e) => go(e).setHeading({ level: 1 }).run() },
+  { title: 'Heading 2', also: 'h2 subtitle', hint: '##', icon: Heading2, run: (e) => go(e).setHeading({ level: 2 }).run() },
+  { title: 'Heading 3', also: 'h3 small', hint: '###', icon: Heading3, run: (e) => go(e).setHeading({ level: 3 }).run() },
+  { title: 'Bulleted list', also: 'bullets points', hint: '-', icon: List, run: (e) => go(e).toggleBulletList().run() },
+  { title: 'Numbered list', also: 'ordered steps', hint: '1.', icon: ListOrdered, run: (e) => go(e).toggleOrderedList().run() },
+  { title: 'Quote', also: 'citation', hint: '>', icon: Quote, run: (e) => go(e).toggleBlockquote().run() },
+  { title: 'Code block', also: 'snippet', hint: '```', icon: Code, run: (e) => go(e).toggleCodeBlock().run() },
+  { title: 'Table', also: 'grid columns rows', icon: Table, run: (e) => go(e).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { title: 'Divider', also: 'line separator rule', hint: '---', icon: Minus, run: (e) => go(e).setHorizontalRule().run() },
+  { title: 'Add a line below', also: 'table row', icon: BetweenHorizontalEnd, inTable: always, run: (e) => go(e).addRowAfter().run() },
+  { title: 'Add a column to the right', also: 'table', icon: BetweenVerticalEnd, inTable: always, run: (e) => go(e).addColumnAfter().run() },
+  // the header line stays (a table needs one), and so do the last line and the last column
+  { title: 'Remove this line', also: 'table row delete', icon: Rows3, inTable: (t) => !t.inHeader && t.lines > 1, run: (e) => go(e).deleteRow().run() },
+  { title: 'Remove this column', also: 'table delete', icon: Columns3, inTable: (t) => t.columns > 1, run: (e) => go(e).deleteColumn().run() },
+  { title: 'Remove the table', also: 'delete', icon: Trash2, inTable: always, run: (e) => go(e).deleteTable().run() },
 ]
 
-/** what fits here, narrowed by what was typed after the / (any word's start: "/num", "/list") */
-export function slashItems(query: string, inTable: boolean): SlashItem[] {
-  const q = plain(query.trim())
+function tableHere(state: EditorState): TableHere | null {
+  const { $from } = state.selection
+  for (let d = $from.depth; d > 0; d--) {
+    const table = $from.node(d)
+    if (table.type.name !== 'table') continue
+    let headers = 0
+    table.forEach((line) => {
+      if (line.firstChild?.type.name === 'tableHeader') headers++
+    })
+    return { columns: table.firstChild?.childCount ?? 0, lines: table.childCount - headers, inHeader: $from.node(d + 2)?.type.name === 'tableHeader' }
+  }
+  return null
+}
+
+/** what fits here, narrowed by what was typed after the /: every word the start of one of its words ("/num", "/heading 2") */
+function slashItems(query: string, table: TableHere | null): SlashItem[] {
+  const words = plain(query).split(/\s+/).filter(Boolean)
   // a cell holds one line of text: in a table, only the table's own commands
-  return ITEMS.filter((i) => !!i.inTable === inTable && (!q || plain(`${i.title} ${i.also ?? ''}`).split(/\s+/).some((w) => w.startsWith(q))))
+  return ITEMS.filter((i) => (table ? !!i.inTable?.(table) : !i.inTable)).filter((i) => {
+    const own = plain(`${i.title} ${i.also ?? ''}`).split(/\s+/)
+    return words.every((q) => own.some((w) => w.startsWith(q)))
+  })
 }
 
 /** under the cursor, inside the screen (above the line when there's no room below) */
@@ -81,7 +110,7 @@ function place(el: HTMLElement, rect: DOMRect | null | undefined) {
   el.style.top = `${below + box.height > height - 8 && rect.top - box.height - 4 > 8 ? rect.top - box.height - 4 : below}px`
 }
 
-const inTable = (editor: Editor) => editor.isActive('table')
+const key = new PluginKey('slash-menu')
 
 export const SlashMenu = Extension.create({
   name: 'slashMenu',
@@ -89,16 +118,21 @@ export const SlashMenu = Extension.create({
     return [
       Suggestion<SlashItem, SlashItem>({
         editor: this.editor,
-        pluginKey: new PluginKey('slash-menu'),
+        pluginKey: key,
         char: '/',
+        allowSpaces: true,
         allow: ({ state, range }) => {
           const $from = state.doc.resolve(range.from)
           if ($from.parent.type.spec.code) return false
           const { link, code } = state.schema.marks
           return !state.doc.rangeHasMark(range.from, range.to, link) && !state.doc.rangeHasMark(range.from, range.to, code)
         },
-        items: ({ query, editor }) => slashItems(query, inTable(editor)),
-        command: ({ editor, range, props }) => props.run(editor, range),
+        items: ({ query, editor }) => slashItems(query, tableHere(editor.state)),
+        command: ({ editor, range, props }) => {
+          // on its own first, so the command acts on the line or table as it really is
+          editor.chain().focus().deleteRange(range).run()
+          props.run(editor)
+        },
         render: () => {
           let renderer: ReactRenderer<CommandListHandle> | null = null
           const close = () => {
@@ -110,15 +144,23 @@ export const SlashMenu = Extension.create({
             onStart: (props: SuggestionProps<SlashItem, SlashItem>) => {
               renderer = new ReactRenderer(CommandList, { props, editor: props.editor })
               document.body.appendChild(renderer.element)
-              place(renderer.element as HTMLElement, props.clientRect?.())
+              place(renderer.element, props.clientRect?.())
             },
             onUpdate: (props: SuggestionProps<SlashItem, SlashItem>) => {
+              // the list for what was just typed is still being worked out: keep showing the last one
+              if (props.loading) return
+              // more words that match nothing: it was just a / in the text
+              if (!props.items.length && /\s/.test(props.query)) {
+                setTimeout(() => !props.editor.isDestroyed && exitSuggestion(props.editor.view, key))
+                return
+              }
               renderer?.updateProps(props)
-              if (renderer) place(renderer.element as HTMLElement, props.clientRect?.())
+              if (renderer) place(renderer.element, props.clientRect?.())
             },
             onKeyDown: (props: SuggestionKeyDownProps) => {
               if (props.event.key === 'Escape' && renderer) {
                 close()
+                exitSuggestion(props.view, key)
                 return true
               }
               return renderer?.ref?.onKeyDown(props.event) ?? false

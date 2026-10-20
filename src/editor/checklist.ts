@@ -37,8 +37,8 @@ function tick(editor: Editor, pos: number, checked: boolean): boolean {
   return true
 }
 
-/** the box's name for screen readers: what the item says */
-const labelOf = (node: PMNode) => node.textContent.trim() || 'Empty checklist item'
+/** the box's name for screen readers: what the item itself says (its first paragraph, not the items under it) */
+const labelOf = (node: PMNode) => node.firstChild?.textContent.trim() || 'Empty checklist item'
 
 export const Checklist = TaskItem.extend({
   addKeyboardShortcuts() {

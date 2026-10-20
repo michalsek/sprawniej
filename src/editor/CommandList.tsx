@@ -42,7 +42,8 @@ export const CommandList = forwardRef<CommandListHandle, { items: SlashItem[]; c
             e.preventDefault()
             command(item)
           }}
-          onMouseEnter={() => setActive(i)}
+          // only a pointer that moves picks: one resting where the list opens doesn't
+          onMouseMove={() => i !== active && setActive(i)}
           className={cn('flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm', i === active && 'bg-accent')}
         >
           <item.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />

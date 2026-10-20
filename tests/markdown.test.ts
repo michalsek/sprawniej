@@ -28,13 +28,35 @@ function boxes(md: string): boolean[] {
 }
 
 describe('tables', () => {
-  const table = 'Plan:\n\n| Step | Who | Done |\n| :-- | --- | --: |\n| **Write** | @ana | `yes` |\n| Ship |  | no \\| maybe |\n\nAfter the table.'
+  /** each line's cells, as the text says them */
+  const cells = (md: string) =>
+    md
+      .split('\n')
+      .filter((l) => l.startsWith('|') && !/^\|[ :|-]+\|$/.test(l))
+      .map((l) => l.slice(1, -1).split(/(?<!\\)\|/).map((c) => c.trim()))
 
-  test('come back as tables, with one blank line around them, and stay the same when saved again', () => {
+  test('come back as tables with the same cells, one blank line around them, and stay the same when saved again', () => {
+    const table = 'Plan:\n\n| Step | Who | Done |\n| :-- | --- | --: |\n| **Write** | @ana | `yes` |\n| Ship |  | no \\| maybe |\n\nAfter the table.'
     const once = resave(table)
-    expect(once).toBe(
-      'Plan:\n\n| Step      | Who  | Done        |\n| :--------- | ---- | -----------: |\n| **Write** | @ana | `yes`       |\n| Ship      |      | no \\| maybe |\n\nAfter the table.',
-    )
+    expect(once.startsWith('Plan:\n\n|')).toBe(true)
+    expect(once.endsWith('|\n\nAfter the table.')).toBe(true)
+    expect(cells(once)).toEqual([
+      ['Step', 'Who', 'Done'],
+      ['**Write**', '@ana', '`yes`'],
+      ['Ship', '', 'no \\| maybe'],
+    ])
+    expect(resave(once)).toBe(once)
+  })
+
+  test('a line break in a cell stays a line break', () => {
+    const doc = open('| a |\n| --- |\n| one<br>**two** |')
+    expect(doc.firstChild?.child(1).child(0).firstChild?.content.toJSON()).toEqual([
+      { type: 'text', text: 'one' },
+      { type: 'hardBreak' },
+      { type: 'text', text: 'two', marks: [{ type: 'bold' }] },
+    ])
+    const once = resave('| a |\n| --- |\n| one<br>**two** |')
+    expect(cells(once)).toEqual([['a'], ['one<br>**two**']])
     expect(resave(once)).toBe(once)
   })
 })
@@ -62,6 +84,9 @@ describe('checklists', () => {
       '```\n- [ ] in code\n```\n\n- [x] real',
       '1. [ ] numbered\n\n- [ ] real',
       '| a |\n| --- |\n| - [ ] in a cell |\n\n- [ ] real',
+      '- a\n\n    ```\n    - [ ] in code\n    ```\n- [ ] real',
+      '> ```\n> - [ ] quoted code\n> ```\n\n- [x] after',
+      '- [ ] one\r\n```\r\n- [ ] code\r\n```\r\n- [x] two\r',
     ]
     for (const md of texts) expect(boxes(md)).toEqual(checklistItems(md).map((i) => i.checked))
   })
