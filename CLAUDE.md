@@ -89,10 +89,11 @@ Title line only, plain words. No AI attribution trailers.
   tests' so the same cleanup removes them; never sign in as a real person.
 - Two people: two browser profiles signed in as two test accounts. Also one person in two tabs, and a dropped
   connection (`context.setOffline(true)`, then back).
-- `window.sprawniej` has `data` (the store), `actions` (everything a person can do) and `backend` (`status`, the save
-  chip's store: `status.getState()`; `pending()`; `flush()`; `catchUp()`, to fetch what changed at once instead of waiting; `debug`,
-  `writes`, `history`, `pictures`, `saveCache` for checks) and `theme` (light or dark: `theme.getState()` gives `choice` and `resolved`), so a script can drive and check the app without clicking
-  through every screen.
+- `window.sprawniej` has `data` (the store), `actions` (everything a person can do), `backend` (`status`, the save
+  chip's store: `status.getState()`; `pending()`; `flush()`; `catchUp()`, to fetch what changed at once instead of
+  waiting; `debug`, `writes`, `history`, `pictures`, `saveCache` for checks) and `theme` (light or dark:
+  `theme.getState()` gives `choice` and `resolved`), so a script can drive and check the app without clicking through
+  every screen.
 - Never write a Supabase secret key, a database password, a GitHub OAuth secret or a Linear key into a file. Pass it as
   an environment variable for one command. The project URL and the publishable key are public: they may be in
   `.env.local` and in the build.
