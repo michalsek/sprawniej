@@ -37,8 +37,8 @@ export function useShortcuts() {
       }
       if (e.metaKey || e.ctrlKey || e.altKey || isBusy(e)) return
       const key = e.key.toLowerCase()
-      // during a keyboard drag the arrows move the issue
-      const dragging = !!document.querySelector('[aria-pressed="true"][data-issue-id]')
+      // during a keyboard drag the arrows move the issue (or the favourite, in the sidebar)
+      const dragging = !!document.querySelector('[aria-pressed="true"][data-issue-id], [aria-pressed="true"][data-favourite-id]')
       if (key === 'c') {
         e.preventDefault()
         openComposer()
