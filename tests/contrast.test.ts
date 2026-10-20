@@ -50,7 +50,8 @@ function failing(t: Record<string, string>, fronts: string[], backs: string[], m
   const out: string[] = []
   for (const f of fronts) {
     for (const b of backs) {
-      const [front, back] = [t[f], t[b] ?? b]
+      // a background is a token's name, or a colour worked out here (a code block)
+      const [front, back] = [t[f], b.startsWith('#') ? b : t[b]]
       expect(front).toBeDefined()
       expect(back).toBeDefined()
       const r = ratio(front, back)
