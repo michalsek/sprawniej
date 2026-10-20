@@ -262,7 +262,9 @@ One note for one person. `id`, `workspace_id`, `recipient_id`, `actor_id` (`acto
 `mentioned` in a comment), `status` (for `status`: the new status's category), `status_id` (`statusId`, for `status`:
 the new status; no foreign key, the `b_status` trigger puts it right), `at`, `read_at` (`readAt`, read one by one),
 `changed_at`, `extra`. Written by whoever caused it (`actor_id` must be you), read, marked and deleted only by its
-recipient. Deleting the issue or the comment deletes the note.
+recipient. Deleting the issue or the comment deletes the note. A note about an issue made from a Notion page has
+`"from": "notion"` in `extra` (the model's `from`), and no actor when the page's author isn't a member: the Inbox shows
+it as from Notion.
 
 ### read_state
 
@@ -281,6 +283,10 @@ was signed in, such as the nightly archive), `at`, `changes`:
 ```
 
 A change a pull request made also has `"via": {"pullRequest": {"repo": "acme/web", "number": 12, "url": "…"}}`.
+
+Creating an issue writes no event (its own fields say who and when), except one made through an integration: an issue
+made from a Notion page gets `{"created": true, "via": {"notion": {"url": "https://www.notion.so/…"}}}`, by its author
+or by nobody (docs/notion.md). Older apps show no line for it.
 
 Each changed field is `[before, after]` (`title`, `status`, `statusId`, `priority`, `assignee`, `project`, `parent`,
 `dueDate`, `estimate`). `statusId` is written whenever the status changes, `status` (the categories) only when the
@@ -312,6 +318,24 @@ trigger), `created_at`, `last_event_at` and `last_event` (what the latest pull r
 `{"number", "url", "title", "login", "to", "refs", "moved", "skipped": "author"}`), `changed_at`. Only admins and owners
 read, add and delete them; nobody updates one (only `github_apply` writes the rest). Never broadcast. Two workspaces
 may connect the same repository.
+
+### notion_connections
+
+The workspace's Notion connection, at most one (docs/notion.md): `id` (part of the address Notion sends pages to),
+`workspace_id` (unique), `team_id` (where pages become issues; set null when that team is deleted), `secret_hash` (the
+sha256 of the secret in the address; the secret itself is never kept), `secret_set_at` (when the address was made or
+replaced), `added_by` (set by a trigger), `created_at`, `last_event_at` and `last_event` (the latest page, for
+Settings: `{"title", "ref", "new": true, "author": login}`, `{"title", "ref", "new": false}`, `{"title", "problem":
+"team"}` or `{"problem": "busy"}`), `changed_at`. Only admins and owners read it, change its team and delete it;
+`notion_connect()` makes it and `notion_new_secret()` replaces the secret (no insert grant, and `team_id` is the one
+column people may update). Never broadcast.
+
+### private.notion_pages
+
+Which Notion page made which issue, so the same page sent again keeps its issue: `workspace_id`, `page_id` (Notion's
+id, 32 lower-case hex digits), `issue_id`, `connection_id` (set null when Notion is disconnected: the row stays, so
+connecting again still finds the page), `url`, `created_at`. One per workspace and page. Deleting the issue deletes it
+(the page may then be sent again); archiving keeps it. Never sent to browsers; only `notion_apply` writes it.
 
 ### private.guest_emails
 
@@ -413,6 +437,10 @@ are and puts everything else in our own words.
 | `import_rows(workspace, table, rows)` | admins | Up to 1000 rows of one table, inserted or updated quietly (below). |
 | `github_lookup(repository_id, repo, author, refs)` | the service role only (the Edge Function `github-webhook`) | For each workspace that connected the repository: the author's profile if they are a member there now (by `github_id`), the members' logins and @handles (`handle`, null when it is the login), and the issues the refs name (by number or an old number, not archived) with their followers and comments. |
 | `github_apply(connection, repository_id, repo, actor, via, moves, notes, event, pull)` | the service role only | Moves the issues as `actor` (a member now), only from the categories each move allows, to a category (so they land on its default status), adds the notes for the issues that moved, and records the repository's number, name and `last_event`. `pull` (`{"id", "repo", "number", "title", "url", "state", "updated_at", "issues": [ids]}`, optional) keeps the pull request on those issues in `issue_pull_requests` and takes it off the ones it no longer mentions. Without an `event` (a pull request event that moves nothing) `last_event` stays as it was. Without an actor it only records the repository. |
+| `notion_connect(workspace, team)` | admins | Connects the workspace to Notion: pages become issues in `team`. Gives `{"id", "secret"}`; the secret is shown once and only its sha256 is kept. `23505`: already connected. |
+| `notion_new_secret(connection)` | admins | A new secret (given back once); the old address stops working at its next delivery. |
+| `notion_lookup(connection, secret_hash, emails, team)` | the service role only (the Edge Function `notion-webhook`) | `{"state": "unknown"}` or `{"state": "wrong_key"}`, and nothing else, unless the hash matches. Then: the workspace, the team (the page's Team property by key or name, else the connection's) with the smallest `sort_order` of its open issues, the members, the members whose confirmed sign-in email is one of `emails` (at most 20), and the labels. |
+| `notion_apply(connection, secret_hash, page, actor, issue, notes)` | the service role only | Checks the hash again (`42501` when the address was replaced). A page that made an issue before gives `{"issue": ref, "new": false, "archived"}` and makes nothing. Otherwise makes the issue as `actor` (a member now, or null: nobody) with `sprawniej.via` set to the page, its labels (only this workspace's, at most 20), the page row and the notes (`assigned`, `mentioned`; `extra.from = "notion"`), and gives `{"issue": ref, "new": true}`. Tidies what doesn't fit (a blank title is Untitled, an unknown status Todo, a priority outside 0 to 4 none, a date that isn't one none, an assignee who isn't a member nobody; the title is cut at 500 characters and the description at 50,000). `{"problem": "team"}` without a team of this workspace, `{"problem": "busy"}` after 100 new pages in 10 minutes. Either way the connection's `last_event` says what happened. |
 
 `import_rows` takes `profiles` (guests), `teams`, `team_members`, `labels`, `projects`, `project_teams`, `issues`,
 `issue_labels`, `issue_followers`, `comments` and `views`, with the columns `private.import_spec` lists. Whatever the
@@ -441,8 +469,9 @@ for rows that will only be updated (Postgres checks the proposed row before it f
 - Four settings change what triggers do within one transaction: `sprawniej.importing` (imports and `move_person`:
   no history, no broadcast per row, keep the times and numbers that came), `sprawniej.trusted` (`accept_invite` and
   `leave_workspace`: skip the role guard) and `sprawniej.actor` (who the service role, the SQL editor or a job acts
-  for) and `sprawniej.via` (the pull request a change came through, copied into its history event; only
-  `github_apply` sets it, with `sprawniej.actor`). No function the browser calls puts its input into them.
+  for) and `sprawniej.via` (what a change came through, copied into its history event: the pull request, set by
+  `github_apply`, or the Notion page an issue is made from, set by `notion_apply`, which builds it itself; both set
+  `sprawniej.actor` with it). No function the browser calls puts its input into them.
 
 New functions are closed by default: nobody runs one unless a migration grants it by name.
 
@@ -471,6 +500,8 @@ New functions are closed by default: nobody runs one unless a migration grants i
 - `c_people` on team members, issues (assignee), followers and projects (lead): the person must belong to the
   workspace (a member now or before, or one of its guests).
 - `history` on issues and issue labels: writes `issue_events`.
+- `history_created` on issues (insert): the `created` event, only while `sprawniej.via` is set (an issue made from a
+  Notion page). Issues made in the app or by an import write none.
 - `forget` on every table marked in `private.wiring`: writes `deletions`.
 - `live` on every broadcast table: Realtime (below).
 - `a_guard` on workspace members: only an owner makes, unmakes or removes owners; nobody but an owner changes their
@@ -493,7 +524,7 @@ let them add, change and delete them, except:
 - read_state: yours only;
 - workspaces: admins and owners rename, owners delete; creating is `create_workspace()`;
 - workspace_members: admins and owners change roles and remove people;
-- invites and github_repos: admins and owners only;
+- invites, github_repos and notion_connections: admins and owners only;
 - invite_uses: admins and owners read them; nobody writes them (only `accept_invite`);
 - profiles: see the profiles table;
 - issue_events, issue_numbers, deletions, issue_pull_requests: read only.

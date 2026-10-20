@@ -325,7 +325,9 @@ gets a number there and keeps its old one in `former_refs`, so links and mention
 
 The database writes the history: `issue_events`, one row per saved change of an issue (every field that changed in
 it, labels added or removed, archived, restored, moved to another team), by the `history` triggers on `issues` and
-`issue_labels`. Creating an issue writes none; imports write none. `src/backend/history.ts` reads an issue's events
+`issue_labels`. Creating an issue writes none, except through an integration: an issue made from a Notion page gets
+one `created` event with the page's link (`history_created`), which the first line of its activity reads ("Ana
+created the issue from Notion", or "Created from Notion" when nobody did). Imports write none. `src/backend/history.ts` reads an issue's events
 when its page opens, and only the ones after those already known afterwards. `src/data/history.ts` turns them into
 lines ("moved it from Todo to In Progress"; a move within one category, "from Testing to In Progress", has only the
 statuses, an older event only the categories) and folds a few changes of the same thing by the same person close
@@ -383,6 +385,27 @@ The same call keeps the pull request itself on the issues it mentions (`issue_pu
 move nothing (a draft opened, closed without merging, renamed). Those rows come to browsers like any other shared
 row (broadcast on `ws:`, read with their issue, kept in the read cache), and the issue page lists them under the
 title (`src/features/issues/PullRequests.tsx`), with their state: Open, Draft, Merged or Closed.
+
+## Notion
+
+A page sent from Notion becomes an issue (docs/notion.md). In Notion a database button or an automation has a "Send
+webhook" action whose address is the Edge Function `notion-webhook`, with the connection and a secret in it
+(`?c=<id>&k=<secret>`; the header `X-Sprawniej-Secret` works too). Notion signs nothing, so the secret is the check.
+The function is the code in `src/notion` (bundled by `bun run deploy:notion`). It hashes the secret (sha256), reads
+the page's properties (title, status, priority, assignee, Created by, due date, labels, team, description), and calls
+two SQL functions only the service role may run. `notion_lookup` checks the hash and gives the team, the members, the
+members whose sign-in email the page names and the labels. The function works out the Inbox notes with
+`src/data/notify.ts`, and `notion_apply` checks the hash again under a lock and makes the issue in one transaction,
+with `sprawniej.actor` set to the page's author when they are a member (otherwise nobody) and `sprawniej.via` to the
+page, so the triggers fill in the number, the author, the times and the `created` event, the broadcast reaches open
+browsers and `c_check_note` checks the notes. `private.notion_pages` remembers which page made which issue, so the
+same page sent again (Notion may try twice, and a button can be pressed twice) answers with the issue it made and
+changes nothing.
+
+There is no Supabase secret for this function: each workspace's secret is in the database as its sha256 only, made by
+`notion_connect` (Settings › Notion, admins) and replaced by `notion_new_secret`. Notion pauses an automation that
+gets an error, so "nothing to do" answers 200 and what someone has to fix (an old address, no team, too many pages)
+doesn't.
 
 ## Archive
 
@@ -451,6 +474,7 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | `src/backend/apply/` | `applyRows` in parts: the copy of the database's rows, taking things in, working out the store |
 | `src/backend/writes/` | Sending saves: grouping requests, the transport, what a failure means |
 | `src/github` | The GitHub webhook (runs as the Edge Function `github-webhook`, never in the browser): signature, refs, moves, notes |
+| `src/notion` | The Notion webhook (runs as the Edge Function `notion-webhook`, never in the browser): the key, reading a page, rich text as Markdown, notes |
 | `src/editor` | TipTap editor for descriptions and comments, its Markdown, mentions, pictures and merging |
 | `src/features/onboarding` | Sign-in, picking your handle, choosing and creating workspaces, joining with an invite |
 | `src/features/*` | Screens, one folder per area (issues, views, projects, inbox, settings, import, help…) |
@@ -461,8 +485,8 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | `src/config.ts` | The app's public address (invite links) and where sign-in comes back to |
 | `src/version.ts` | The version and the What's new notes (`CHANGELOG`) |
 | `src/session.ts` | Which workspace is open and the ones you opened before (localStorage) |
-| `supabase/` | `config.toml` (sign-in and function settings), `migrations/` (the database), `functions/github-webhook` (where the bundle goes), `dev/cleanup-tests.sql` |
-| `tests` | `bun test` for the pure logic, with a pretend backend and database (`tests/support`) and test data (`tests/fixtures`: a sample workspace, pretend Linear answers) |
+| `supabase/` | `config.toml` (sign-in and function settings), `migrations/` (the database), `functions/github-webhook` and `functions/notion-webhook` (where the bundles go), `dev/cleanup-tests.sql` |
+| `tests` | `bun test` for the pure logic, with a pretend backend and database (`tests/support`) and test data (`tests/fixtures`: a sample workspace, pretend Linear answers, a page as Notion sends it) |
 | `tests/db` | Database tests against a real project (`bun run test:db`) |
 
 ## Keeping it fast and on the free tier

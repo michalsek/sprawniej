@@ -171,12 +171,67 @@ Optional. docs/github-app.md has the design; these are the steps for a project.
 Pull requests only move issues for their author's own workspaces, and only when the author added GitHub as a way to
 sign in, so GitHub sign-in (step 4 of "A new project") needs to be on.
 
+## Notion: pages become issues
+
+Optional. docs/notion.md has the design; these are the steps for a project. Notion needs no app of ours and the
+function needs no secret: each workspace's address carries its own key, and the database keeps only its sha256.
+
+1. **The migration** (`20261020160000_notion.sql`) goes in with `bunx supabase db push`, before the app that needs it.
+2. **Deploy the function** (bundles `src/notion` and deploys it without Docker; `config.toml` turns off the sign-in
+   check for it, since Notion sends no sign-in):
+   ```sh
+   bun run deploy:notion
+   ```
+   It reads only `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY`, which Supabase gives every function.
+3. **Connect a workspace** in the app: Settings › Notion › Connect Notion, then paste the address into a Notion
+   database button or automation ("Send webhook").
+4. **Check it**: Settings › Notion shows what the latest page did. The function's logs are in the dashboard (Edge
+   Functions, notion-webhook, Logs): one line per page, with the issue it became and whether it was new. They never
+   show the address, emails or titles.
+
+**Testing without Notion.** Notion's "Send webhook" needs a paid plan, but its request is easy to copy:
+`tests/fixtures/notion-page.json` is shaped exactly like one. On a development project, with the migration pushed and
+the function deployed, sign up a throwaway admin named like the database tests' (`dbtest-<run>-notion@…`), make a
+workspace `dbtest <run> notion` with teams ENG and DES, connect Notion and copy the address. Then, keeping the
+address in your shell only:
+
+```sh
+read -rs ADDR                                       # paste the address, then Enter
+curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @tests/fixtures/notion-page.json
+# the same page again: {"issue": "ENG-1", "new": false}
+curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @tests/fixtures/notion-page.json
+# a new page, in the trash, another team, the test accounts' emails
+jq --arg id "$(uuidgen | tr A-Z a-z)" '.data.id = $id' tests/fixtures/notion-page.json | curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @-
+jq '.data.in_trash = true' tests/fixtures/notion-page.json | curl -s -X POST "$ADDR" -H 'Content-Type: application/json' --data @-
+# the key in a header instead of the address
+curl -s -X POST "${ADDR%%&k=*}" -H "X-Sprawniej-Secret: ${ADDR##*&k=}" -H 'Content-Type: application/json' --data @tests/fixtures/notion-page.json
+unset ADDR
+```
+
+Expect 200 with the issue, 401 for a wrong or replaced key, 404 after Disconnect, 405 for anything but POST, 409 when
+the team is gone, 413 over 1 MB, 400 for something that isn't a page, 429 after 100 new pages in 10 minutes. Clean up
+with the usual SQL (below): deleting the workspaces takes their connections, issues and page rows with them.
+
+**For a developer with a paid Notion plan**, once it works with curl:
+
+1. Settings › Notion › Connect Notion, pick a team, copy the address.
+2. Optionally point a test button at webhook.site first and send us the captured request with the emails taken out,
+   to compare with `tests/fixtures/notion-page.json`.
+3. In the Notion database, add the properties you want: Status, Priority, Assignee, Due, Description, Labels, Team, and
+   **Created by**.
+4. Add a database button "Send to Sprawniej" with the action Send webhook and the address as its URL. Or an automation
+   (for example "Status is set to Ready") with the properties ticked.
+5. Press it on a test page and check the issue, its first activity line and the link back.
+6. Press it again: still one issue.
+7. Replace the address in Settings and press again: Notion shows "!". Paste the new one and resume.
+8. Try a page made by someone who isn't a member: "Created from Notion".
+
 ## Database tests
 
 For a development or throwaway project only. Once a team works in a project, the tests need a separate development
 project. `bun run test:db` runs `tests/db` against the project in `.env.local`. The tests sign up throwaway accounts
 (`dbtest-<run>-<name>@mailinator.com`), make their own workspaces (`dbtest <run> ...`) and check the rules, numbers,
-history, deletions, invites, imports, realtime and pictures through the same API the app uses.
+history, deletions, invites, imports, realtime, pictures, GitHub and Notion through the same API the app uses.
 
 - They need the **Supabase CLI linked to the same project** (`bunx supabase link`): sign-ups need a sign-up code, and
   a run makes its own (noted `dbtest <run> …`) with `bunx supabase db query --linked`.

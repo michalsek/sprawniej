@@ -393,6 +393,50 @@ GitHub** tells you whether yours count.
 it. Each repository shows what its latest pull request did, so you can check it works. **Remove** stops its pull
 requests moving issues; issues that already moved stay where they are.
 
+## Notion
+
+If your team keeps a database of tasks in Notion, a page there can become an issue here with one press. It needs a
+paid Notion plan (Plus, Business or Enterprise): the free plan has no "Send webhook".
+
+**Setting it up** (owners and admins): **Settings › Notion › Connect Notion**, pick the team new issues go to, and
+copy the address it shows. It's shown only once, so paste it straight into Notion: in your Notion database, add a
+**database button** (or an **automation**, for example "when Status is set to Ready") with the action **Send
+webhook**, and paste the address as its URL. In an automation, tick the properties to send.
+
+**What comes over.** Notion sends a page's properties, not its text. The issue gets the page's title (a page without
+one is "Untitled") and a link back to the page, plus whatever of these the page has:
+
+- **Status**: Not started, To do or Ready become Todo; In progress or Doing become In Progress; In review or QA
+  become In Review; Done, Complete or Shipped become Done; Canceled or Won't do become Canceled; Backlog or Later
+  become Backlog. Anything else is Todo.
+- **Priority**: Urgent (or P0), High (P1), Medium (P2), Low (P3). Anything else is No priority.
+- **Assignee** (or Assignees, Assigned to, Owner): the first person who is in this workspace with the same email.
+- **Due** (or Due date, Deadline): the due date.
+- **Labels** (or Tags): the labels with the same names that the workspace already has. New ones aren't made.
+- **Team**: a team's key or name (ENG or Engineering). Otherwise the team picked in Settings.
+- **Description** (or Details, Notes): the description, with its bold, italics, code and links.
+- **Created by**: who made the issue, when they're in this workspace with the same email.
+
+Names are matched without caring about capitals or spaces, so "due date" works as well as "Due date".
+
+**Who made it.** Add a **Created by** property to the Notion database: when the person who made the page is in this
+workspace with the same email, the issue is theirs ("Ana created the issue from Notion"). Otherwise it says
+"Created from Notion". The assignee and anyone @mentioned in the description get a note in their Inbox, shown as
+from Notion when nobody here made the issue.
+
+**Sending a page again** keeps the one issue it made, and changes nothing in it, so pressing the button twice is fine.
+After its issue is deleted, the page makes a new one. Pages in Notion's trash are skipped.
+
+**When Notion shows "!"** next to the button or automation, Notion paused it because Sprawniej said no. Settings ›
+Notion shows what the last page did:
+
+- "Last page wasn't added: pick a team": the team was deleted. Pick another, then resume it in Notion.
+- "Pages were coming too fast": more than 100 pages in 10 minutes. Wait a few minutes, then resume it.
+- The address was replaced or Notion was disconnected: paste the new address into Notion, then resume it.
+
+**Replace address** makes a new address and stops the old one at once (if you think someone else has it). Paste the
+new one into Notion. **Disconnect** stops pages becoming issues; issues already made stay.
+
 ## Moving over from Linear
 
 **Settings › Import from Linear** brings your teams, issues, comments, projects, labels and views over. Only admins and
