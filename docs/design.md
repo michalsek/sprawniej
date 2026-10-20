@@ -25,14 +25,16 @@ scrollbars, the date picker) are light in Light and dark in Dark.
 | Main button | `primary` | near-black with white text | white with dark text |
 
 The light page colour is also in `src/lib/theme.ts` (`THEME_COLORS`) and index.html's `theme-color`; change all three
-together (`tests/themeScript.test.ts` checks). `tests/contrast.test.ts` checks every text pair is 4.5:1 and every
-meaning colour 3:1 in both looks: when a colour fails, darken the colour, don't change the page.
+together (`tests/themeScript.test.ts` checks). `tests/contrast.test.ts` checks every text pair is 4.5:1 (Dark's red in
+menus excepted) and every meaning colour 3:1 in both looks: when a colour fails, darken the colour, don't change the
+page.
 
 Colour only means something. Status colours (`status-*`), the orange of Urgent, and label colours are the only
 bright colours on screen. Everything else is grey. In Light, In Progress is a deeper gold and Urgent a deeper orange,
 so they read on a light page; the check, cross and "!" inside the icons are `status-mark` and `urgent-mark`. Label
 dots (`LabelDot` in `src/components/LabelChip.tsx`) get a thin edge in Light, so yellow, pink and white labels still
-show. Code in descriptions uses the `code-*` colours.
+show. Code in descriptions uses the `code-*` colours. Due dates use `due-overdue` and `due-soon`; red words on a quiet
+button (Delete) use `text-destructive-text`.
 
 | Status | Icon |
 | --- | --- |
