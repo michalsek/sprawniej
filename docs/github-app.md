@@ -84,7 +84,8 @@ so a mention of someone's handle makes them a follower).
 
 **`github_apply(connection, actor, via, moves, notes, summary)`**, for the function only. In one transaction:
 checks the actor is a current member, sets `sprawniej.actor` (and the new `sprawniej.via`) for the transaction,
-updates each issue's status only if it still has a status it may move from (so two deliveries at once, or a
+updates each issue's category only if it still has a category it may move from (its status follows: the category's
+default) (so two deliveries at once, or a
 teammate's change in between, don't fight), adds the Inbox notes for the issues that really moved, and writes
 `last_event` on the connection. Everything the database fills in still comes from the triggers: `updated_at`,
 `completed_at`, `changed_at`, the history row with the actor, the broadcast to open browsers, `check_note` on the
@@ -123,7 +124,12 @@ advisors, docs/data-format.md.
    | `closed` and merged | Done | Backlog, Todo, In Progress, In Review |
    | `closed` without merging, drafts, anything else | nothing | |
 
-   Nothing moves backwards: a Done, Canceled or Duplicate issue stays as it is.
+   Nothing moves backwards: a Done, Canceled or Duplicate issue stays as it is. These are categories (docs/architecture.md,
+   "Categories and statuses"): an issue moves to the **default status** of In Review or Done (the first shown status
+   of that group), whatever the workspace calls it, and an issue in any status of the In Review group (say "QA") is
+   already in review, so it isn't moved again. The note names the status it landed on (the `b_status` trigger fills
+   it in), and Settings › GitHub says "moved ENG-12 to <that status's name>". There is no setting for where moves
+   land.
 4. **Refs.** From the branch name (any case: `eng-12-fix-login`), the title and the body (as written: `ENG-12`,
    skipping code). The pattern is the team key's (`src/model/schema.ts` `TEAM_KEY`), then `-` and a number, not
    inside a longer word. At most 50. A ref that is no issue in the workspace is ignored, so `UTF-8` is harmless unless

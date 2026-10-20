@@ -35,7 +35,12 @@ dots (`LabelDot` in `src/components/LabelChip.tsx`) get a thin edge in Light, so
 show. Code in descriptions uses the `code-*` colours. Due dates use `due-overdue` and `due-soon`; red words on a quiet
 button (Delete) use `text-destructive-text`.
 
-| Status | Icon |
+A status icon's **shape says its group** (its category, below), and its **colour is the status's own**: the workspace
+picks it from the same calm set as labels (`STATUS_COLORS`: two greys and the label colours). The statuses a workspace
+starts with have the colours below (`--status-*`, which pull request icons use too). Two statuses of one group look
+alike but for their colour and name; never invent a new shape for a status.
+
+| Group | Icon |
 | --- | --- |
 | Backlog | grey dashed ring |
 | Todo | light grey ring |

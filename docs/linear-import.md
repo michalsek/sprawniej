@@ -48,7 +48,7 @@ database.
 | Linear | Sprawniej |
 | --- | --- |
 | Team (key, name, icon emoji) | Team |
-| Workflow state | Status: by name first (`In Review`), then by Linear's state type (`started` is In Progress, `unstarted` Todo, `backlog` Backlog, `completed` Done, `canceled` Canceled). `Triage` becomes Backlog. |
+| Workflow state | Status group: by name first (`In Review`), then by Linear's state type (`started` is In Progress, `unstarted` Todo, `backlog` Backlog, `completed` Done, `canceled` Canceled). `Triage` becomes Backlog. A new issue gets the group's default status (its first shown one); an issue imported again keeps its status while its group stays. |
 | Priority 0 to 4 | Same numbers |
 | Issue number, title, description (Markdown) | Same |
 | Assignee, creator | The matched person, the person who hasn't joined, or no one |

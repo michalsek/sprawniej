@@ -249,6 +249,9 @@ people's changes rarely touch the same thing. Checked in the browser in phase 5 
 | One archives an issue, the other edits it | The edit lands; the issue stays archived |
 | Delete, archive or move issues away from one team | Numbers are never given out twice |
 | Drag issues around | Only the moved issue changes; the same issue: later drop wins |
+| Rename, recolour or reorder statuses | Field by field; the same field of the same status: later save wins |
+| Add statuses with the same name | The second is undone: "There's already a status with this name." |
+| Hide the last two shown statuses of a group | They wait for each other; the second is undone: "Each group needs at least one status that isn't hidden. …" |
 
 "Later save" means whichever change reaches the database second.
 
@@ -258,6 +261,52 @@ Each tab is on its own: its own channels, its own writer and its own queue. They
 reaches every tab) and the copies in `sprawniej-cache` (whichever tab keeps a copy last wins; a copy from a tab that
 was asleep never replaces a fresher one). A tab hears its own saves and the other tabs' saves through the channels,
 like a teammate's.
+
+## Categories and statuses
+
+Every issue has a **category** and a **status**. The seven categories are fixed (`src/model/status.ts`): Backlog,
+Todo, In Progress, In Review, Done, Canceled, Duplicate. Whatever decides something looks at the category: the Active,
+Backlog and All tabs, `completed_at`, the nightly archive, GitHub moves, the import. Statuses are the workspace's own
+(`statuses`, docs/data-format.md): a name and a colour within one category, in an order people choose. Every member may
+add, rename, recolour, reorder and hide them, like labels. They are never deleted: a status nobody wants is hidden, so
+it isn't offered any more, and the issues, history lines, inbox notes and saved views that have it keep its name. Each
+category always keeps at least one shown status. A workspace starts with one per category, named and coloured as the
+categories, so nothing looks different until someone adds one.
+
+The category stays where it always was, in `issues.status`; the status is a pointer next to it, `issues.status_id`. A
+trigger (`a_category`, `private.follow_status`) keeps the two in step both ways, so whoever writes only one of them
+gets the other right:
+
+| Who writes | What it sends | What happens |
+| --- | --- | --- |
+| This app, picking a status | `status_id` (and `status` when the category changes) | the category follows the status |
+| This app, a new issue | `status_id` and `status` | as sent (`status_id` wins if they ever disagree) |
+| An older version, picking a status | `status` | `status_id` goes to that category's default (its first shown status); picking the category it already has saves nothing |
+| An older version, a new issue | `status` | `status_id` is that category's default |
+| GitHub (`github_apply`) | `status` (In Review, Done) | the default In Review or Done status; an issue in any review status isn't moved to review again |
+| The import (`import_rows`) | `status` | a new issue gets the default; an updated one keeps its status while its category stays |
+| The nightly archive | `archived_at` | nothing to do: it reads the category |
+
+**Why per workspace, not per team.** Workspace views, ⌘K and boards span teams and need one set of columns; moving an
+issue to another team needs no mapping; there is one list to pick from, filter by and keep in Settings. A nullable
+`team_id` could be added later without breaking anything.
+
+**How older versions live with it.** They read rows with `select *` and keep only the columns they know, skip live
+messages for a table they don't know, compare their read cache with their own `SCHEMA_ID`, and write only the columns
+they changed (`status`, as always). So an older version keeps working: it shows an issue in "Testing" as In Progress
+(the category's name and colour), groups its board by category, puts an issue on the category's default status when
+someone picks a category there, shows no history line for a move within one category, and filters by categories only
+(so a view refined to some statuses shows a few more issues there). Nothing fails, and nothing it shows is lost.
+
+**In the app.** `src/data/statuses.ts` has the rules: the order, the default of a category, the status an issue
+shows (its own; while that isn't known, its category's default), and the Status filter. Filters keep categories in
+`statuses` (what older versions read) and, when only some statuses of a category are picked, those in `statusIds`;
+picking every shown status of a category keeps the whole category, so a status added later shows too. History lines
+name statuses as they are called now; lines from before statuses name the category as it was. An issue moved into a
+status that is still being saved waits for it (`PARENTS` in `src/backend/writes/requests.ts`).
+
+**Project statuses** will use the same table (`kind = 'project'`) and the same trigger function on `projects`, with
+the six project categories; the table already allows them.
 
 ## Issue numbers
 
@@ -277,7 +326,8 @@ The database writes the history: `issue_events`, one row per saved change of an 
 it, labels added or removed, archived, restored, moved to another team), by the `history` triggers on `issues` and
 `issue_labels`. Creating an issue writes none; imports write none. `src/backend/history.ts` reads an issue's events
 when its page opens, and only the ones after those already known afterwards. `src/data/history.ts` turns them into
-lines ("moved it from Todo to In Progress") and folds a few changes of the same thing by the same person close
+lines ("moved it from Todo to In Progress"; a move within one category, "from Testing to In Progress", has only the
+statuses, an older event only the categories) and folds a few changes of the same thing by the same person close
 together into one (15 minutes for the title and description, 2 for the rest); labels put on while creating an issue
 aren't a change. The nightly archive acts for nobody, so its line says "Archived automatically".
 
@@ -301,7 +351,8 @@ when someone's handle changes; typing @ suggests people by name and handle now a
 
 Who hears about what is worked out in the browser by pure functions (`src/data/notify.ts`): the new assignee, anyone
 newly @mentioned, and the issue's followers for comments and status changes (its creator, assignee, commenters and
-everyone mentioned, plus `following = true` rows, minus `following = false`). Nobody hears about their own changes.
+everyone mentioned, plus `following = true` rows, minus `following = false`); a status note names the status, also for
+a move within one category. Nobody hears about their own changes.
 The notes are inserted with the change that caused them (last in their batch) and never read back: you can't read
 other people's notes.
 
@@ -320,7 +371,8 @@ to the Edge Function `github-webhook` in the same Supabase project. The function
 Review; merged: Done) and which refs it mentions, and calls two SQL functions only the service role may run.
 `github_lookup` finds the workspaces that connected the repository (`github_repos`, Settings › GitHub), the author's
 profile there (by `github_id`, members only), the members' handles (for mentions) and the issues. The function works out the Inbox notes with
-`src/data/notify.ts`, the same rules the app uses, and `github_apply` moves the issues in one transaction with
+`src/data/notify.ts`, the same rules the app uses, and `github_apply` moves the issues (to a category, so they land
+on its default status) in one transaction with
 `sprawniej.actor` set to the author and `sprawniej.via` to the pull request, so the triggers write history in their
 name with a link, the broadcast reaches open browsers and `c_check_note` checks the notes. Nothing moves backwards,
 and nothing moves for authors who aren't members with GitHub linked. `ensure_profile` fills `github_id` from the
@@ -335,7 +387,7 @@ title (`src/features/issues/PullRequests.tsx`), with their state: Open, Draft, M
 
 Archiving sets `issues.archived_at` (and `archived_by`): the issue stays in the same table, with its comments.
 Archiving by hand takes the sub-issues along. Every night `private.auto_archive()` archives finished issues
-(Done, Canceled, Duplicate) untouched for longer than their team's `auto_archive` months (6 unless the team picks
+(any status of the Done, Canceled and Duplicate categories) untouched for longer than their team's `auto_archive` months (6 unless the team picks
 otherwise; 0 means never). Untouched is the later of `completed_at` and `updated_at`.
 
 Archived issues aren't read when a workspace opens. `loadArchive()` reads them, with their labels, followers and
@@ -392,8 +444,8 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | Folder | What's inside |
 | --- | --- |
 | `src/app` | The frame (sidebar, top bar), the way in (`Gate.tsx`), routes, the save chip, sign-out, new versions, light or dark as it runs (`theme.ts`) |
-| `src/model` | The app's shapes (zod), the fixed statuses and priorities, team keys |
-| `src/data` | The store, pure selectors (filter, group, sort), `actions.ts`, inbox rules, history lines, roles |
+| `src/model` | The app's shapes (zod), the fixed status categories and priorities, team keys |
+| `src/data` | The store, pure selectors (filter, group, sort), `actions.ts`, the workspace's statuses (`statuses.ts`), inbox rules, history lines, roles |
 | `src/backend` | Every call to Supabase: sign-in, profiles, workspaces and invites, opening, the copy in this browser, live changes, saving, pictures, history, saving imports |
 | `src/backend/apply/` | `applyRows` in parts: the copy of the database's rows, taking things in, working out the store |
 | `src/backend/writes/` | Sending saves: grouping requests, the transport, what a failure means |

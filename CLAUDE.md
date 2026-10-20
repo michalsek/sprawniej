@@ -36,9 +36,16 @@ Read before changing things:
   advisors, update docs/data-format.md (its first section lists every step). A change that older app versions can't
   live with is a MAJOR release, and the migration goes in before the app that needs it is published. The app's types
   come from zod schemas (`src/model/schema.ts`); nothing parses rows at runtime. Unknown fields survive a read and
-  write in each row's `extra` (`src/backend/rows.ts`, `KNOWN`).
-- **Statuses and priorities are fixed** (`src/model/status.ts`). Don't add custom workflows. The SQL checks copy its
-  lists, and `tests/statusLists.test.ts` compares them.
+  write in each row's `extra` (`src/backend/rows.ts`, `KNOWN`). A list people may extend keeps a fixed category
+  column that older apps go on writing, plus a pointer to the workspace's own row, kept in step by a trigger
+  (`private.follow_status`), so older versions keep working.
+- **Priorities and status categories are fixed; statuses are the workspace's own** (`src/model/status.ts`,
+  docs/architecture.md "Categories and statuses"). Every issue status belongs to one of seven categories (backlog,
+  todo, in progress, in review, done, canceled, duplicate) and every project status to one of six. Whatever decides
+  something (tabs, finished, the nightly archive, GitHub moves) looks at the category (`issues.status`,
+  `projects.status`), never at a status's name or id. People add, rename, recolour, reorder and hide statuses
+  within a category; they are never deleted. No new categories, no rules per status, no workflows per team. The
+  SQL checks copy the category lists, and `tests/statusLists.test.ts` compares them.
 - **Sign in through Supabase Auth only.** No server of our own besides the Supabase project: database rules, a few SQL
   functions, nightly jobs, and later Edge Functions for webhooks. No proxy, no second backend.
 - **No agents or AI features.**

@@ -22,7 +22,7 @@ wrote.
 5. A new shared table: a row in `private.wiring` and `call private.wire('the_table')` in the migration, its keys in
    `KEYS` and `LIVE_TABLES` (`src/backend/tables.ts`), its columns in `src/backend/rows.ts` and in the column grants
    (`src/backend/changes.ts` keeps a copy). `tests/wiringList.test.ts` and `tests/db/wiring.test.ts` check the lists.
-   A fixed list copied into SQL gets a marker comment (`-- @list …`) for `tests/statusLists.test.ts`.
+   A fixed list copied into SQL gets a marker comment (`-- @list …`, `-- @seed …`) for `tests/statusLists.test.ts`.
 6. `bun run test:db` on a development project (docs/supabase-setup.md), then the advisors (Dashboard, Advisors).
 7. Update this page.
 
@@ -144,6 +144,30 @@ must belong to the workspace.
 
 `id`, `workspace_id`, `name` (unique per workspace, case aside), `color`, `linear_id`, `changed_at`, `extra`.
 
+### statuses
+
+The workspace's own statuses: a name and a colour within one fixed **category** (docs/architecture.md, "Categories
+and statuses"). Shared by every kind of thing that has a status: `kind` says which (`issue`; `project` comes later).
+
+| Column | Meaning |
+| --- | --- |
+| `id` | text, 10 to 40 characters: a ULID from the app, a uuid for the ones a workspace starts with |
+| `kind` | `issue` or `project`; never changes |
+| `category` | one of the kind's fixed categories (issues: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `canceled`, `duplicate`; projects: as `projects.status`); never changes |
+| `name` | 1 to 40 characters, not blank; unique per workspace and kind, case aside (hidden ones too; an issue status and a project status may share one) |
+| `color` | `#rrggbb`, lower case (the app offers `STATUS_COLORS`: two greys and the label colours) |
+| `position` | its place within its category, a fractional index (compared byte by byte) |
+| `hidden` | not offered when picking; things that have it keep it and show it |
+| `changed_at`, `extra` | see Common columns |
+
+Statuses show in category order, then by `position`, then by `id`. The **default status** of a category is its first
+shown one: where an issue lands when only its category is known (an older version of the app, GitHub, the import).
+Every workspace starts with one per category, named and coloured as before (`private.status_defaults`, copied by the
+`seed_statuses` trigger when a workspace is made, also by an older app). Every member adds and changes them (`name`,
+`color`, `position`, `hidden`, `extra`); nobody deletes one, and each category keeps at least one shown status
+(`c_keep_a_status`, `23514`: "Each group needs at least one status that isn't hidden. Add or show another one
+first."). Broadcast on `ws:`.
+
 ### projects
 
 `id`, `workspace_id`, `name`, `emoji`, `description`, `status` (`backlog`, `planned`, `in_progress`, `paused`,
@@ -162,7 +186,8 @@ must belong to the workspace.
 | `team_id` (`team`) | its team; changed only by `move_issue_to_team()` |
 | `number` (`number`) | given out by the `b_number` trigger; unique per team; shown as `ENG-12` |
 | `title`, `description` | the description is Markdown |
-| `status` | `backlog`, `todo`, `in_progress`, `in_review`, `done`, `canceled`, `duplicate` (`src/model/status.ts`) |
+| `status` | its **category**: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `canceled`, `duplicate` (`src/model/status.ts`). Whatever decides something (tabs, `completed_at`, the nightly archive, GitHub) reads this |
+| `status_id` (`statusId`) | its status, one of the workspace's issue statuses of that category; never null. Kept in step with `status` by the `a_category` trigger (below) |
 | `priority` | `0` none, `1` urgent, `2` high, `3` medium, `4` low |
 | `assignee_id` (`assignee`) | a person of the workspace, or null |
 | `project_id`, `parent_id` (`project`, `parent`) | null when none; `parent` makes it a sub-issue |
@@ -171,12 +196,12 @@ must belong to the workspace.
 | `sort_order` (`sortOrder`) | its place in lists and boards, a fractional index (compared byte by byte) |
 | `duplicate_of` (`duplicateOf`) | for `duplicate` |
 | `former_refs` (`formerRefs`) | the numbers it had before moving teams (`{WEB-2}`); old links and mentions find it |
-| `created_by` (`createdBy`), `created_at`, `updated_at`, `completed_at` | set by the `a_stamp` trigger (`issue_times`); `completed_at` when it becomes Done |
+| `created_by` (`createdBy`), `created_at`, `updated_at`, `completed_at` | set by the `a_stamp` trigger (`issue_times`); `completed_at` when its category becomes Done (Done to another done status keeps it) |
 | `archived_at`, `archived_by` (`archivedAt`, `archivedBy`) | archived: the trigger sets the time and who; null brings it back |
 | `linear_id`, `changed_at`, `extra` | see Common columns |
 
 `updated_at` is "last changed" as people see it. The trigger moves it only when one of these changes: `title`,
-`description`, `status`, `priority`, `assignee_id`, `project_id`, `parent_id`, `due_date`, `estimate`, `sort_order`,
+`description`, `status`, `status_id`, `priority`, `assignee_id`, `project_id`, `parent_id`, `due_date`, `estimate`, `sort_order`,
 `duplicate_of`, `team_id` or `extra`, and on a restore. Archiving, `former_refs`, followers and labels don't touch it. Deleting an issue deletes its labels, followers, comments, pull requests, inbox notes and history; its sub-issues lose
 their parent.
 
@@ -216,12 +241,15 @@ everyone: any member changes it. `filters` and `display` hold logins and team ke
 
 ```json
 {
-  "filters": { "statuses": ["todo", "in_progress"], "labels": ["01J9…"], "assignees": ["ania-k", null] },
+  "filters": { "statuses": ["todo", "in_progress"], "statusIds": ["01JT…"], "labels": ["01J9…"], "assignees": ["ania-k", null] },
   "display": { "layout": "board", "grouping": "status", "ordering": "priority", "showCompleted": false, "showSubIssues": true }
 }
 ```
 
-Filters left out match everything. Filters: `statuses`, `assignees` (`null` = no one), `subscribers` (people
+Filters left out match everything. Filters: `statuses` (categories), `statusIds` (a refinement: within a category in
+`statuses` that one of these statuses belongs to, only those statuses; categories none of them belongs to keep all
+their statuses; without `statuses` it means nothing, so older versions, which read only `statuses`, show the same
+issues or more), `assignees` (`null` = no one), `subscribers` (people
 following the issue), `priorities`, `labels` (ids), `projects` (ids; `null` = none), `teams` (keys). Inside one filter
 any value matches; different filters must all match. `grouping`: `status`, `assignee`, `priority`, `project`, `none`.
 `ordering`: `manual`, `priority`, `due`, `updated`, `created`. `layout`: `list`, `board`. `move_person` swaps logins
@@ -231,7 +259,8 @@ inside `assignees` and `subscribers` when a guest is linked.
 
 One note for one person. `id`, `workspace_id`, `recipient_id`, `actor_id` (`actor`, set by a trigger), `type`
 (`assigned`, `mentioned`, `commented`, `status`), `issue_id` (`issue`), `comment_id` (`comment`: for `commented`, and
-`mentioned` in a comment), `status` (for `status`: the new status), `at`, `read_at` (`readAt`, read one by one),
+`mentioned` in a comment), `status` (for `status`: the new status's category), `status_id` (`statusId`, for `status`:
+the new status; no foreign key, the `b_status` trigger puts it right), `at`, `read_at` (`readAt`, read one by one),
 `changed_at`, `extra`. Written by whoever caused it (`actor_id` must be you), read, marked and deleted only by its
 recipient. Deleting the issue or the comment deletes the note.
 
@@ -247,14 +276,16 @@ The history, written only by triggers. `id` (a growing number), `workspace_id`, 
 was signed in, such as the nightly archive), `at`, `changes`:
 
 ```json
-{ "status": ["todo", "in_progress"], "assignee": [null, "<profile id>"], "title": ["Old", "New"],
+{ "status": ["todo", "in_progress"], "statusId": ["<status id>", "<status id>"], "assignee": [null, "<profile id>"], "title": ["Old", "New"],
   "description": true, "labels": { "added": ["01J…"] }, "team": ["WEB-2", "ENG-14"], "archived": true }
 ```
 
 A change a pull request made also has `"via": {"pullRequest": {"repo": "acme/web", "number": 12, "url": "…"}}`.
 
-Each changed field is `[before, after]` (`title`, `status`, `priority`, `assignee`, `project`, `parent`, `dueDate`,
-`estimate`); `description` only says it changed; `labels` is `{"added": [id]}` or `{"removed": [id]}`; `team` is the
+Each changed field is `[before, after]` (`title`, `status`, `statusId`, `priority`, `assignee`, `project`, `parent`,
+`dueDate`, `estimate`). `statusId` is written whenever the status changes, `status` (the categories) only when the
+category changes too, so a move within one category has only `statusId`; events from before statuses have only
+`status`; `description` only says it changed; `labels` is `{"added": [id]}` or `{"removed": [id]}`; `team` is the
 old and new reference; `archived` or `restored` is `true`. `src/data/history.ts` turns them into lines.
 
 ### issue_numbers
@@ -267,8 +298,8 @@ old and new reference; `archived` or `restored` is `true`. `src/data/history.ts`
 `id`, `workspace_id` (no foreign key: the rows outlive what they describe), `table_name`, `row_key` (the deleted row's
 keys: `{"id": "…"}` or `{"issue_id": "…", "label_id": "…"}`), `deleted_at`. Written by the `forget` trigger, cascades
 included, so a browser that catches up drops them too, but only for the tables `private.wiring` marks with
-`forget = true`: workspace members, teams, team members, labels, projects, project teams, issues, issue labels,
-followers, pull requests, comments and views, plus profiles of guests (a profile with an account belongs to no workspace, so it
+`forget = true`: workspace members, teams, team members, labels, statuses (which are never deleted, except with their
+workspace), projects, project teams, issues, issue labels, followers, pull requests, comments and views, plus profiles of guests (a profile with an account belongs to no workspace, so it
 leaves none). Workspaces, invites, invite uses, inbox notes and read marks leave none; a browser compares its inbox notes instead.
 Nothing is noted while the whole workspace is going. Kept 45 days.
 
@@ -381,7 +412,7 @@ are and puts everything else in our own words.
 | `guest_emails(workspace)` | admins | The workspace's guests' emails. |
 | `import_rows(workspace, table, rows)` | admins | Up to 1000 rows of one table, inserted or updated quietly (below). |
 | `github_lookup(repository_id, repo, author, refs)` | the service role only (the Edge Function `github-webhook`) | For each workspace that connected the repository: the author's profile if they are a member there now (by `github_id`), the members' logins and @handles (`handle`, null when it is the login), and the issues the refs name (by number or an old number, not archived) with their followers and comments. |
-| `github_apply(connection, repository_id, repo, actor, via, moves, notes, event, pull)` | the service role only | Moves the issues as `actor` (a member now), only from the statuses each move allows, adds the notes for the issues that moved, and records the repository's number, name and `last_event`. `pull` (`{"id", "repo", "number", "title", "url", "state", "updated_at", "issues": [ids]}`, optional) keeps the pull request on those issues in `issue_pull_requests` and takes it off the ones it no longer mentions. Without an `event` (a pull request event that moves nothing) `last_event` stays as it was. Without an actor it only records the repository. |
+| `github_apply(connection, repository_id, repo, actor, via, moves, notes, event, pull)` | the service role only | Moves the issues as `actor` (a member now), only from the categories each move allows, to a category (so they land on its default status), adds the notes for the issues that moved, and records the repository's number, name and `last_event`. `pull` (`{"id", "repo", "number", "title", "url", "state", "updated_at", "issues": [ids]}`, optional) keeps the pull request on those issues in `issue_pull_requests` and takes it off the ones it no longer mentions. Without an `event` (a pull request event that moves nothing) `last_event` stays as it was. Without an actor it only records the repository. |
 
 `import_rows` takes `profiles` (guests), `teams`, `team_members`, `labels`, `projects`, `project_teams`, `issues`,
 `issue_labels`, `issue_followers`, `comments` and `views`, with the columns `private.import_spec` lists. Whatever the
@@ -395,7 +426,12 @@ for rows that will only be updated (Postgres checks the proposed row before it f
 
 - `private.wiring`: the one list of shared tables, with their keys, workspace column, broadcast topic, standard
   policies, stamp trigger and whether deleting leaves a note. `private.wire(table)` sets a table up from it.
-- `private.import_spec`: what `import_rows` may write per table.
+- `private.import_spec`: what `import_rows` may write per table. Issues go in with their category (`status`) only:
+  a new one gets the category's default status, an updated one keeps its status while the category stays.
+- Statuses: `private.status_defaults` (what every workspace starts with, per kind and category), `seed_statuses(ws,
+  kind)` (copies them; every kind when null), `seed_new_workspace` (the trigger), `default_status(ws, kind, category)`
+  (the first shown status of a category), `follow_status` (the trigger that keeps a category and a status in step),
+  `keep_a_status` and `note_status` (the triggers below).
 - Who is asking: `my_profile_id()`, `my_workspaces()` (now, not the ones left), `my_admin_workspaces()`,
   `my_owner_workspaces()`, `my_people()`, `belongs(person, workspace)`, `actor_id()`.
 - `valid_login`, `is_completed`, `take_number`, `swap_login`, `move_person`, and the nightly jobs.
@@ -416,10 +452,22 @@ New functions are closed by default: nobody runs one unless a migration grants i
 
 - `a_stamp` on every table `private.wiring` gives a stamp (all but invites, invite uses, history, used numbers and deletions): `changed_at` (`touch`); on issues also authors, times and who archived
   (`issue_times`); on comments the author and `edited_at` (`comment_times`). Imports keep the times they bring.
+- `a_category` on issues (before `a_stamp`, so the times see the final category; `follow_status('issue')`): a new
+  `status_id` sets `status` to its category (a status of another workspace or kind: `22023` "That status isn't in this
+  workspace."; hidden ones are allowed); `status` changed alone (an older app, GitHub, the import) moves `status_id` to
+  that category's default; an insert without `status_id` gets its category's default. Both sent: `status_id` wins.
 - `a_author` on views (`owner_id`), inbox (`actor_id`), invites (`invited_by`) and github_repos (`added_by`): whoever is signed in.
 - `b_number` on issues: the next number of the team (Issue numbers in docs/architecture.md).
+- `b_status` on inbox (`note_status`): a status note sent with `status_id` gets that status's category (an id that
+  isn't one of the workspace's issue statuses is dropped); one sent with only `status` (an older app, `github_apply`)
+  gets the issue's own `status_id` when the issue is of that category. Other notes get no `status_id`.
 - `c_check_note` on inbox: drops a note for someone who isn't a member now or for yourself, and a repeat of the same
-  note about the same issue from the same person within ten minutes (notes about a comment always go).
+  note (same status too) about the same issue from the same person within ten minutes (notes about a comment always
+  go).
+- `seed_statuses` on workspaces (after insert): the new workspace's statuses.
+- `c_keep_a_status` on statuses (after insert or a change of `hidden`): each category keeps a shown status; two people
+  hiding the last two at once wait for each other on a lock per workspace, kind and category, and the second is
+  refused.
 - `c_people` on team members, issues (assignee), followers and projects (lead): the person must belong to the
   workspace (a member now or before, or one of its guests).
 - `history` on issues and issue labels: writes `issue_events`.
@@ -439,6 +487,7 @@ call `invite_info`. Signed-in people read a workspace's rows while they are a me
 let them add, change and delete them, except:
 
 - teams: only admins and owners delete;
+- statuses: nobody deletes them (no delete grant either; they are hidden);
 - comments: only the author edits and deletes, while a member;
 - inbox: you read, mark and delete your own notes; you add notes only as their actor;
 - read_state: yours only;
@@ -451,9 +500,10 @@ let them add, change and delete them, except:
 
 On top of that, **column grants** list what people may write; everything else is filled in by the database
 (`changed_at`, numbers, authors, times, `linear_id`). For example, issues take `title`, `description`, `status`,
-`priority`, `assignee_id`, `project_id`, `parent_id`, `due_date`, `estimate`, `sort_order`, `duplicate_of`,
-`archived_at` and `extra` on update, but not `team_id` or `number`. The full list is in
-`supabase/migrations/20261019000005_rls.sql`, with a copy in `src/backend/changes.ts`.
+`status_id`, `priority`, `assignee_id`, `project_id`, `parent_id`, `due_date`, `estimate`, `sort_order`, `duplicate_of`,
+`archived_at` and `extra` on update, but not `team_id` or `number`. The list is in
+`supabase/migrations/20261019000005_rls.sql` and the migrations that add tables or columns since (GitHub, statuses),
+with a copy in `src/backend/changes.ts`.
 
 ## Realtime
 
@@ -484,7 +534,7 @@ files.
 
 | When (UTC) | Job | What it does |
 | --- | --- | --- |
-| 02:17 | `sprawniej-auto-archive` | Archives Done, Canceled and Duplicate issues untouched (the later of `completed_at` and `updated_at`) for longer than their team's `auto_archive` months |
+| 02:17 | `sprawniej-auto-archive` | Archives issues of the Done, Canceled and Duplicate categories (whatever their status) untouched (the later of `completed_at` and `updated_at`) for longer than their team's `auto_archive` months |
 | 02:27 | `sprawniej-tidy-inboxes` | Deletes read notes older than 30 days and unread ones older than 90. Read means `read_at` is set, or the note is no newer than the person's `read_until` ("Mark all as read") |
 | 02:37 | `sprawniej-forget-deletions` | Deletes `deletions` rows older than 45 days |
 | 02:47 | `sprawniej-forget-strangers` | Deletes accounts older than 7 days that were never let in and have no profile (a GitHub sign-up that never gave a sign-up code) |
