@@ -7,10 +7,60 @@ alter table public.profiles add column handle text
   check (handle is null or (guest_of is null and private.valid_login(handle)));
 
 -- What people see is unique among people with accounts, case aside, so nobody can take a handle someone uses now
--- (or the login of someone who never changed it). Logins stay unique too (profiles_login): a new sign-up can't pick
--- anyone's login, even one its owner moved off. ensure_profile's "on conflict do nothing" covers this index as well,
--- so a GitHub login that is someone's handle means "pick a name", not an error.
+-- (or the login of someone who never changed it). Logins stay unique too (profiles_login), so create_profile gives a
+-- newcomer who picks someone's old login a hidden login of their own (below). ensure_profile's "on conflict do
+-- nothing" covers this index as well, so a GitHub login that is anyone's login or handle means "pick a name".
 create unique index profiles_handle on public.profiles (lower(coalesce(handle, login))) where guest_of is null;
+
+-- Picks your name here, once: as in 20261019000006_functions.sql, except that a handle nobody shows now but someone
+-- has as their hidden login (they moved off it) is yours too. You then get a hidden login of your own (the handle and a
+-- short random ending) and the handle you picked. 23505: someone shows as @handle now.
+create or replace function public.create_profile(p_login text, p_name text) returns setof public.profiles rows 1
+language plpgsql security definer set search_path = '' as $$
+declare
+  uid uuid := (select auth.uid());
+  wanted text := trim(coalesce(p_login, ''));
+  key text;
+  p public.profiles;
+  gid bigint;
+  gavatar text;
+  tries integer := 0;
+begin
+  if uid is null then raise exception 'Please sign in first.' using errcode = '42501'; end if;
+  if exists (select 1 from public.profiles where user_id = uid) then
+    raise exception 'You already have a name here.' using errcode = 'SP001';
+  end if;
+  if not private.valid_login(wanted) then
+    raise exception 'Use up to 39 letters, digits and dashes, starting with a letter or a digit.' using errcode = '22023';
+  end if;
+  select case when i.provider_id ~ '^\d{1,18}$' then i.provider_id::bigint end, coalesce(i.identity_data ->> 'avatar_url', '')
+    into gid, gavatar
+    from auth.identities i where i.user_id = uid and i.provider = 'github' order by i.created_at limit 1;
+  if gid is not null and exists (select 1 from public.profiles where github_id = gid) then gid := null; end if;
+  key := wanted;
+  loop
+    if exists (select 1 from public.profiles where guest_of is null and lower(coalesce(handle, login)) = lower(wanted)) then
+      raise exception 'Someone already uses @%. Pick another one.', wanted using errcode = '23505';
+    end if;
+    if key = wanted and exists (select 1 from public.profiles where guest_of is null and lower(login) = lower(wanted)) then
+      key := left(wanted, 34) || '-' || substr(md5(random()::text), 1, 4);
+    end if;
+    begin
+      insert into public.profiles (user_id, login, handle, name, github_id, avatar_url)
+      values (uid, key, case when key <> wanted then wanted end, trim(coalesce(p_name, '')), gid, coalesce(gavatar, ''))
+      returning * into p;
+      return next p;
+      return;
+    exception when unique_violation then
+      -- taken at the same moment: looked at again above; a hidden login that clashed gets another ending
+      tries := tries + 1;
+      if tries >= 5 then
+        raise exception 'Someone already uses @%. Pick another one.', wanted using errcode = '23505';
+      end if;
+      if key <> wanted then key := left(wanted, 34) || '-' || substr(md5(random()::text), 1, 4); end if;
+    end;
+  end loop;
+end $$;
 
 -- Changes your @handle. Your own login stores null; a change of case only is allowed. 22023: not a handle; 23505:
 -- someone else uses it now.

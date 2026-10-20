@@ -75,7 +75,7 @@ A person, one of three kinds:
 | --- | --- |
 | `id` | uuid |
 | `user_id` | the sign-in account (`auth.users`); null for a guest |
-| `login` (`login`) | the hidden key everything points at (filters, history, assignees, the app's `people`): letters, digits and dashes, up to 39, not starting with a dash (`private.valid_login`). Unique among people with accounts, case aside. A guest's starts with `~` and is unique within its workspace. Never changes. It is also the @handle until the person picks another. |
+| `login` (`login`) | the hidden key everything points at (filters, history, assignees, the app's `people`): letters, digits and dashes, up to 39, not starting with a dash (`private.valid_login`). Unique among people with accounts, case aside. A guest's starts with `~` and is unique within its workspace. Never changes. It is also the @handle until the person picks another; someone who signs up with a handle that is only another person's login (they moved off it) gets a login of their own instead, the handle with a short random ending (`create_profile()`). |
 | `handle` (`handle`) | the @handle the person changed to (`set_handle()`); null: the same as `login`. Same rule as a login; a guest has none. What people see, `coalesce(handle, login)`, is unique among people with accounts, case aside (`profiles_handle`). Nothing is kept for anyone: once someone moves off a handle (or off their login), anyone may take it as their handle. The app reads it only when it isn't the login. |
 | `github_id` (`githubId`) | set when the profile was made from (or waits for) a GitHub sign-in; unique |
 | `name`, `avatar_url` (`name`, `avatarUrl`) | what teammates see |
@@ -104,12 +104,11 @@ remembers where to send it), `for_profile` (a guest: whoever accepts becomes the
 invite for a guest must name a guest of that workspace. Never broadcast.
 
 What someone holding the link sees comes from `invite_info(token)`, one row (none for an unknown token):
-`workspace_id` (only to someone already in it), `workspace_name`, `invited_by_name`, `invited_by_login` (their @handle
-now),
-`invited_by_avatar`, `for_login` and `for_name` (the guest's name, for an invite made for one), `role`, `state`
-(`member`: you're already in, `used`, `expired` or `open`) and `people` (up to 8 names and pictures of members, as
-`[{"name", "avatarUrl"}]`). A used or expired link gives no `people`, `for_login` or `for_name`. Never the token,
-never an email.
+`workspace_id` (only to someone already in it), `workspace_name`, `invited_by_name`, `invited_by_login` (their
+@handle now), `invited_by_avatar`, `for_login` and `for_name` (the guest's name, for an invite made for one), `role`,
+`state` (`member`: you're already in, `used`, `expired` or `open`) and `people` (up to 8 names and pictures of
+members, as `[{"name", "avatarUrl"}]`). A used or expired link gives no `people`, `for_login` or `for_name`. Never
+the token, never an email.
 
 ### teams
 
@@ -340,7 +339,7 @@ are and puts everything else in our own words.
 | Function | Who | What it does |
 | --- | --- | --- |
 | `ensure_profile()` | signed in | Your profile (given your GitHub id if it had none and you added GitHub as a way to sign in); or a profile with your GitHub id that nobody has claimed; or a new one with your GitHub login when it's free (nobody's login or @handle now). No rows: pick a name. `SP004`: not let in yet (give a sign-up code first). |
-| `create_profile(login, name)` | signed in, once, let in | Your profile with the @handle you picked (`23505` when it is anyone's login, or anyone's @handle now). |
+| `create_profile(login, name)` | signed in, once, let in | Your profile with the @handle you picked; `23505` when someone shows as that @handle now, case aside. When it is only someone's login (they moved off it), your login is the handle with a short random ending and `handle` is what you picked. |
 | `set_handle(handle)` | with a profile | Changes your @handle and returns your profile; your login stays. Your own login stores null, and a change of case only is allowed. `22023`: not a handle; `23505`: someone else has it now, case aside. Your old one is free for anyone from then on. |
 | `signup_code_needed()` | signed in | True while you have no profile and weren't let in (a GitHub sign-up without a code). |
 | `use_signup_code(code, invite)` | signed in | Lets your account in with a sign-up code or an open invite link's token (`SP005` with the reason when it can't). Nothing to do if you're in already. |

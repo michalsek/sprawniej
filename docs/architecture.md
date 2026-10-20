@@ -258,7 +258,9 @@ aren't a change. The nightly archive acts for nobody, so its line says "Archived
 ## Handles
 
 What you pick at the start is your login (`profiles.login`): the hidden key that filters, history, assignees,
-followers and the app's `people` use, and it never changes. People see and mention your @handle, `handle ?? login`
+followers and the app's `people` use, and it never changes. (If what you pick is only someone else's login, because
+they moved off it, `create_profile()` gives you a login of your own with a short random ending, and what you picked
+as your handle.) People see and mention your @handle, `handle ?? login`
 (`handleOf` in `src/model/schema.ts`). You change it in Settings › Your account (`MyHandle.tsx`, `changeHandle` in
 `src/data/actions.ts`, `set_handle()`), on Enter or when you leave the field, so a half-typed handle never goes out.
 The change reaches teammates like any profile change (the `ws:` broadcast and catching up).

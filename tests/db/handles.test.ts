@@ -72,11 +72,17 @@ describe.skipIf(!enabled)('handles', () => {
     await expectError(bare.db.rpc('set_handle', { p_handle: h('bare') }), '42501')
   })
 
-  test('a new account can’t pick anyone’s login or handle now', async () => {
+  test('a new account can’t pick a handle someone shows now, but may pick a login its owner moved off', async () => {
     await ok(set(bob, h('bobby')))
     const one = await signUpBare('hnew')
-    await expectError(one.db.rpc('create_profile', { p_login: h('bobby'), p_name: 'New' }), '23505')
-    await expectError(one.db.rpc('create_profile', { p_login: bob.login, p_name: 'New' }), '23505')
+    await expectError(one.db.rpc('create_profile', { p_login: h('BOBBY'), p_name: 'New' }), '23505')
+    await expectError(one.db.rpc('create_profile', { p_login: ana.login, p_name: 'New' }), '23505')
+    // Bob's login is his hidden key still: the newcomer gets one of their own, and shows as @<Bob's old login>
+    const made = await ok(one.db.rpc('create_profile', { p_login: bob.login, p_name: 'New' }).single())
+    expect(made.handle).toBe(bob.login)
+    expect(made.login).not.toBe(bob.login)
+    expect(made.login.startsWith(`${bob.login}-`)).toBe(true)
+    await expectError(set(bob, bob.login), '23505')
   })
 
   test('a GitHub sign-up whose GitHub login is someone’s handle picks a name instead', async () => {
