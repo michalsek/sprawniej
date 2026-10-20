@@ -372,9 +372,9 @@ starts one. On its page you can change its emoji, name and description in place,
 a target date and which teams work on it. The bar shows how many of its issues are done. In the list of projects,
 click an emoji to change it, or use **⋯** to rename or delete a project.
 
-Add issues to a project from the project's page, or pick the project on any issue. Deleting a project
-(**⋯ › Delete project**) keeps its issues; they just no longer belong to a project. Press the star (☆) on a project
-to keep it in your sidebar (see Favourites).
+Add issues to a project from the project's page, or pick the project on any issue. Deleting a project (**⋯ › Delete
+project**) keeps its issues; they just no longer belong to a project. Press the star (☆) on a project to keep it in your
+sidebar (see Favourites).
 
 ## Favourites
 

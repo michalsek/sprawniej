@@ -164,12 +164,12 @@ ends with one "catch up" message.
 
 **Catching up** asks for every row whose `changed_at` is after the mark (minus 10 seconds, so nothing that was being
 saved at that moment slips through), archived rows too, plus the `deletions` since then, plus the labels, followers and
-comments of issues that are new to this browser. Your favourites leave nothing behind when they go (nobody else may
-know what you unstarred), so each catch-up also reads their keys and drops the ones that went; opening from a copy
-does the same for inbox notes. It runs after the connection or the channels come back, after the
-tab was hidden for more than a minute, after "catch up" messages (an import sends one per batch; they are gathered for
-up to 10 seconds), and a few seconds after a team or project is deleted. When this browser last had everything more
-than 44 days ago (deletions are kept 45 days), it reads everything again instead.
+comments of issues that are new to this browser. Your favourites leave nothing behind when they go (nobody else may know
+what you unstarred), so each catch-up also reads their keys and drops the ones that went; opening from a copy does the
+same for inbox notes. It runs after the connection or the channels come back, after the tab was hidden for more than a
+minute, after "catch up" messages (an import sends one per batch; they are gathered for up to 10 seconds), and a few
+seconds after a team or project is deleted. When this browser last had everything more than 44 days ago (deletions are
+kept 45 days), it reads everything again instead.
 
 The **archive**, an issue's history and the comments of archived issues are read only when something needs them
 (below).
@@ -190,12 +190,11 @@ whole database. A browser that won't keep anything (a private window, full disk)
 
 Every shared table has a `live` trigger (`private.broadcast`, `supabase/migrations/20261019000004_realtime.sql`) that
 sends each change to `ws:<workspace id>` (shared rows) or `me:<profile id>` (your inbox notes, read marks and
-favourites; they come from all your workspaces, and the app keeps only the open one's). Both
-channels are private: the database checks you may listen when you join (`realtime.messages` policy), so the app hands
-over the sign-in first. An update sends only the columns that changed, plus the keys and `changed_at`; a delete sends
-the keys. A row over 200 kB sends a nudge without its text (`partial`), and the app fetches the row. Imports and
-`move_person` send one "catch up" message instead of one per row. Invites, who joined with them, history, used numbers
-and deletions are not broadcast.
+favourites; they come from all your workspaces, and the app keeps only the open one's). Both channels are private: the
+database checks you may listen when you join (`realtime.messages` policy), so the app hands over the sign-in first. An
+update sends only the columns that changed, plus the keys and `changed_at`; a delete sends the keys. A row over 200 kB
+sends a nudge without its text (`partial`), and the app fetches the row. Imports and `move_person` send one "catch up"
+message instead of one per row. Invites, who joined with them, history, used numbers and deletions are not broadcast.
 
 `applyRows` (`src/backend/apply.ts`, rules in `apply/state.ts`) takes in loads, fetched rows, messages, deletions and
 your own changes. Newer wins, column by column (`changed_at`, compared to the microsecond). Your own changes still on

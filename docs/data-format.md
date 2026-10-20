@@ -571,8 +571,8 @@ with a copy in `src/backend/changes.ts`.
 ## Realtime
 
 Two private channels per open workspace: `ws:<workspace id>` for every shared table, and `me:<profile id>` for your
-inbox notes, read marks and favourites (from all your workspaces: the app keeps the open one's). You may listen to `ws:` while you are a member, and to your own `me:`; browsers can't send
-on either. Each message has the event `change` and
+inbox notes, read marks and favourites (from all your workspaces: the app keeps the open one's). You may listen to `ws:`
+while you are a member, and to your own `me:`; browsers can't send on either. Each message has the event `change` and
 
 ```json
 { "table": "issues", "op": "UPDATE", "row": { "id": "01J…", "status": "done", "changed_at": "…" } }
