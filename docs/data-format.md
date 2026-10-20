@@ -317,8 +317,9 @@ new account's metadata (`signUp(..., { data })`), or to `use_signup_code(code, i
   does one that got into the workspace another way. A sign-up with the same email as a waiting one is that person
   trying again (after Auth failed), so it doesn't count against itself. So a link for one person makes one account,
   as before, and the link still has to be accepted with `accept_invite` afterwards. Joining counts only who joined,
-  so an account that never joins can't keep a real person out. An open link whose places are all held this way
-  refuses with its own sentence ("no places left right now"). The invite's row lock makes two sign-ups at once wait
+  so an account that never joins can't keep a real person out. An open link for several people whose places are all
+  held this way refuses with its own sentence ("no places left right now"); a link for one person keeps the old one,
+  which older apps know. The invite's row lock makes two sign-ups at once wait
   for each other; or
 - `signup_code` matches a code that is not switched off, not expired and not used up. Case, spaces and dashes don't
   matter (`k7qx m2pa 9rtd` is `K7QX-M2PA-9RTD`). Using it adds one to `uses`, under a row lock, so two sign-ups at once

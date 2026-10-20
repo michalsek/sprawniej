@@ -160,8 +160,9 @@ end $$;
 -- was deleted no longer counts; one made in the last ten minutes always does, since the hook runs before the account
 -- is written; one with the same email is this person trying again, after Auth failed). Joining counts only who
 -- joined, so an account that never joins can't keep a real person out. A link for anyone makes accounts until it ends
--- or expires. A link that can't be used refuses with the same sentence as before, which older apps know; one whose
--- places are all held by accounts still being made says so.
+-- or expires. A link that can't be used refuses with the same sentence as before, which older apps know, and so does
+-- a link for one person whose place is held; a link for several whose places are all held by accounts still being
+-- made says so.
 create or replace function private.let_in(p_user uuid, p_email text, p_provider text, p_code text, p_invite text) returns text
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -180,7 +181,7 @@ begin
         select (select count(*) from public.invite_uses u where u.invite_id = inv.id)
              + (select count(*) from private.signups s
                  where s.invite_id = inv.id
-                   and s.email is distinct from p_email
+                   and (s.email is null or p_email is null or s.email <> p_email)
                    and (s.at > now() - interval '10 minutes' or exists (select 1 from auth.users a where a.id = s.user_id))
                    and not exists (select 1 from public.workspace_members m join public.profiles p on p.id = m.profile_id
                                     where m.workspace_id = inv.workspace_id and p.user_id = s.user_id))
@@ -191,7 +192,7 @@ begin
         return null;
       end if;
     end if;
-    if wanted = '' and st = 'open' then
+    if wanted = '' and st = 'open' and inv.max_uses > 1 then
       -- @message signup
       return 'This invite link has no places left right now. Ask for a new one.';
     end if;

@@ -71,7 +71,7 @@ describe.skipIf(!enabled)('sign-up codes', () => {
     expect(await trySignUp('invite-expired', { invite: expiredToken })).toBe(BAD_INVITE)
     const { db } = await signUpBare('invited', { invite: token })
     // the same link can't make a second account, even before it is accepted
-    expect(await trySignUp('invite-again', { invite: token })).toBe(NO_PLACES)
+    expect(await trySignUp('invite-again', { invite: token })).toBe(BAD_INVITE)
     await ok(db.rpc('create_profile', { p_login: `dbt-${RUN}-invited`, p_name: 'Invited' }).single())
     expect(await ok(db.rpc('accept_invite', { p_token: token }))).toBe(ws)
   }, SLOW)
@@ -172,7 +172,7 @@ describe.skipIf(!enabled)('sign-up codes', () => {
     const { token } = await link(ws, 1)
     const both = await Promise.all([trySignUp('race-a', { invite: token }), trySignUp('race-b', { invite: token })])
     expect(both.filter((r) => r === null)).toHaveLength(1)
-    expect(both.filter((r) => r === NO_PLACES)).toHaveLength(1)
+    expect(both.filter((r) => r === BAD_INVITE)).toHaveLength(1)
   }, SLOW)
 
   test('accounts never let in are removed after 7 days; the rest stay', async () => {

@@ -95,7 +95,7 @@ const MESSAGES: Record<string, string> = {
  * how it stands and says exactly why.
  */
 export const INVITE_REFUSED = 'This invite link was already used or has expired. Ask for a new one.'
-/** the link is open, but every place is held by an account that is still being made */
+/** a link for several people is open, but every place is held by an account that is still being made */
 export const INVITE_NO_PLACES = 'This invite link has no places left right now. Ask for a new one.'
 
 /**
