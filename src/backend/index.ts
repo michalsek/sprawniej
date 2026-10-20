@@ -19,8 +19,9 @@ import { browserCopy, lastCopyMiss } from './keep'
 import { pictures, usePictures } from './pictures'
 import { Channels, type ChannelStatus, type Topic } from './live'
 import { Loader } from './load'
-import type { MyProfile } from './profiles'
+import { setHandle, type MyProfile } from './profiles'
 import { registry } from './registry'
+import { rowToPerson } from './rows'
 import { useSaveStatus } from './status'
 import { DELAYS, Lifecycle, LiveWorkspace, type BackendState, type WritesHooks } from './workspace'
 import { leaveWorkspace } from './workspaces'
@@ -179,6 +180,12 @@ export const backend = {
     const db = getClient()
     if (!ws || ws.closed || !db) return Promise.reject(new Error('No workspace is open.'))
     return fetchIssueEvents(db, ws.workspaceId, issueId, afterId)
+  },
+  /** changes your @handle (profiles.ts); the open workspace shows it at once, before its live change comes back */
+  setHandle: async (handle: string): Promise<MyProfile> => {
+    const row = await setHandle(handle)
+    life.current?.apply([{ from: 'fetch', table: 'profiles', rows: [row] }])
+    return { id: row.id, person: rowToPerson(row) }
   },
   /** for scripted checks */
   debug: () => {

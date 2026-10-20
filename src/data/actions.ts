@@ -33,7 +33,6 @@ import {
   type InviteRole,
   type Role,
 } from '@/backend/workspaces'
-import { setHandle } from '@/backend/profiles'
 import { useSession } from '@/session'
 import { canLeave, myWho, ruleFor, whoIs } from './roles'
 import type { Comment, Display, Filters, Issue, Label, Project, Team, View } from '@/model/schema'
@@ -897,10 +896,9 @@ export async function changeHandle(typed: string): Promise<void> {
   if (problem === 'same') return
   if (problem === 'invalid') throw new Error(HANDLE_WORDS.invalid)
   if (problem === 'taken') throw new Error(HANDLE_WORDS.taken(handle))
-  const mine = await setHandle(handle)
+  // shown here at once; teammates get it from the live change
+  const mine = await backend.setHandle(handle)
   session.setProfile(mine.id, mine.person)
-  // everyone here sees it from the live change; this tab doesn't wait for it
-  void backend.catchUp()
 }
 
 // ---------- members, roles and invites ----------

@@ -6,7 +6,7 @@
  * What you type is never lost: a change from elsewhere (your other tab, or your own save coming back) shows only while
  * you haven't changed the field, and leaving the field while a save is on its way saves again afterwards.
  */
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { HandleInput } from '@/components/HandleInput'
 import { changeHandle } from '@/data/actions'
 import { cleanHandle, HANDLE_WORDS, handleProblem } from '@/data/handles'
@@ -18,7 +18,7 @@ export function MyHandle() {
   const user = useSession((s) => s.user)
   const mine = useData((s) => (user ? s.people[user.login] : undefined))
   const me = mine ?? user
-  return me ? <HandleField me={me} /> : null
+  return me ? <HandleField key={me.login} me={me} /> : null
 }
 
 function HandleField({ me }: { me: Person }) {
@@ -29,10 +29,10 @@ function HandleField({ me }: { me: Person }) {
   /** what the last try to save said */
   const [refused, setRefused] = useState<string>()
   // the latest of each, for a save that finishes after more typing
-  const latest = useRef({ draft, current })
-  useEffect(() => {
-    latest.current = { draft, current }
-  }, [draft, current])
+  const latest = useRef({ draft, current, me })
+  useLayoutEffect(() => {
+    latest.current = { draft, current, me }
+  }, [draft, current, me])
   const sending = useRef(false)
   const again = useRef(false)
 
@@ -61,6 +61,12 @@ function HandleField({ me }: { me: Person }) {
     // left empty: as it was
     if (!sent) {
       setDraft(latest.current.current)
+      setRefused(undefined)
+      return
+    }
+    // nothing to change (a stray @ or spaces): no need to say Saving…
+    if (handleProblem(sent, latest.current.me, useData.getState().people) === 'same') {
+      setDraft(sent)
       setRefused(undefined)
       return
     }

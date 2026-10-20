@@ -7,6 +7,7 @@ import { plain } from '@/lib/plain'
 import { requireClient } from './client'
 import { friendlyDbError } from './problem'
 import { rowToPerson } from './rows'
+import type { Row } from './tables'
 
 /** the same rule as private.valid_login (supabase/migrations/20261019000001_tables.sql) */
 export { LOGIN_PATTERN } from '@/model/schema'
@@ -47,11 +48,14 @@ export async function createProfile(login: string, name: string): Promise<MyProf
   return { id: data.id, person: rowToPerson(data) }
 }
 
-/** Changes your @handle (Settings › Your account); throws a ProfileProblem worded to show (taken, not a handle) */
-export async function setHandle(handle: string): Promise<MyProfile> {
+/**
+ * Changes your @handle (Settings › Your account) and gives back your profile's row (backend.setHandle shows it at
+ * once). Throws a ProfileProblem worded to show (taken, not a handle).
+ */
+export async function setHandle(handle: string): Promise<Row<'profiles'>> {
   const { data, error } = await requireClient().rpc('set_handle', { p_handle: handle }).maybeSingle()
   if (error || !data) throw new ProfileProblem(friendlyDbError(error, "We couldn't change your handle. Try again in a moment."), error?.code)
-  return { id: data.id, person: rowToPerson(data) }
+  return data
 }
 
 /** a handle to start from: "ania.kowalska+work@x.pl" → "ania-kowalska" */

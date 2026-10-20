@@ -62,8 +62,8 @@ and history stay yours. What changes:
   highlight, and you don't hear about it. Nothing already written is changed.
 - **You stop hearing about issues you were only mentioned in** (by your old handle). Issues you made, are assigned
   to, commented on or follow keep telling you what happens.
-- **Someone else may take your old handle.** Then old text that says it mentions them: it's highlighted as them, and
-  they hear about those issues (new comments and status changes), just as if they had been mentioned there.
+- **Someone else may take your old handle.** Then old text with that handle mentions them: it's highlighted as them,
+  and they hear about those issues (new comments and status changes), just as if they had been mentioned there.
 - Signing in doesn't change: your email, password and GitHub work as before.
 
 ### Ways to sign in
