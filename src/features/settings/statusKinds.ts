@@ -24,6 +24,8 @@ export interface KindText {
   count: (n: number) => string
   /** what Default means, in a tooltip */
   defaultHint: string
+  /** what Hidden means, in a tooltip */
+  hiddenHint: string
 }
 
 const ISSUE_EXAMPLES: Record<string, string> = {
@@ -49,11 +51,13 @@ export const KIND_TEXT: Record<StatusKind, KindText> = {
     uses: (s) => tally(Object.values(s.issues).map((i) => i.statusId)),
     count: (n) => (n === 1 ? '1 issue' : `${n} issues`),
     defaultHint: 'Issues that come into this group without a status of their own (from GitHub or the import) get this one',
+    hiddenHint: 'Not offered when picking a status. Issues that have it keep it.',
   },
   // project statuses: their descriptions, examples and count come with them
   project: {
     groups: PROJECT_CATEGORIES.map((id) => ({ id, name: PROJECT_STATUS_NAMES[id], description: '', example: '' })),
     count: (n) => (n === 1 ? '1 project' : `${n} projects`),
     defaultHint: 'Projects that come into this group without a status of their own get this one',
+    hiddenHint: 'Not offered when picking a status. Projects that have it keep it.',
   },
 }

@@ -226,7 +226,7 @@ group by group. Everything saves as you go:
 - The first status of a group that isn't hidden is where an issue lands when only its group is known: GitHub, the
   Linear import, and teammates on an older version of Sprawniej put issues there. When a group has more than one,
   that one is marked **Default**.
-- Hover **Hidden** or **Default** to read what they mean.
+- On a computer, hover **Hidden** or **Default** to read what they mean.
 - **Hide** (on a phone, the eye) takes a status out of the menus. Issues that have it keep it and still show it,
   and so do their history and the filters; **Show** brings it back. Statuses are never deleted. Each group keeps at
   least one status that isn't hidden, so the last one can't be hidden.

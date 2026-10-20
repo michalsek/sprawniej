@@ -28,7 +28,6 @@ import { KIND_TEXT, type GroupInfo, type KindText } from './statusKinds'
 
 const MAX_NAME = 40
 const CANT_HIDE = 'Each group needs at least one status that isn’t hidden. Add or show another one first.'
-const HIDDEN = 'Not offered when picking a status. Issues that have it keep it.'
 
 /** "New status", or "New status 2" when that's taken: names are unique */
 function freshName(statuses: Record<string, Status>, kind: StatusKind): string {
@@ -120,7 +119,7 @@ function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, belo
               className="h-8 min-w-0 text-[15px]"
             />
           </span>
-          {status.hidden && <Hint text={HIDDEN}>Hidden</Hint>}
+          {status.hidden && <Hint text={text.hiddenHint}>Hidden</Hint>}
           {isDefault && <Hint text={text.defaultHint}>Default</Hint>}
         </span>
         {uses !== undefined && <span className={cn('w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums sm:w-20', dim)}>{text.count(uses)}</span>}
