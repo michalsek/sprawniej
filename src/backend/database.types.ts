@@ -95,6 +95,57 @@ export type Database = {
         }
         Relationships: []
       }
+      github_repos: {
+        Row: {
+          added_by: string | null
+          changed_at: string
+          created_at: string
+          id: string
+          last_event: Json | null
+          last_event_at: string | null
+          repo: string
+          repository_id: number | null
+          workspace_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          changed_at?: string
+          created_at?: string
+          id?: string
+          last_event?: Json | null
+          last_event_at?: string | null
+          repo: string
+          repository_id?: number | null
+          workspace_id: string
+        }
+        Update: {
+          added_by?: string | null
+          changed_at?: string
+          created_at?: string
+          id?: string
+          last_event?: Json | null
+          last_event_at?: string | null
+          repo?: string
+          repository_id?: number | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "github_repos_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "github_repos_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inbox: {
         Row: {
           actor_id: string | null
@@ -1046,6 +1097,28 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: true
         }
+      }
+      github_apply: {
+        Args: {
+          p_actor: string
+          p_connection: string
+          p_event: Json
+          p_moves: Json
+          p_notes: Json
+          p_repo: string
+          p_repository_id: number
+          p_via: Json
+        }
+        Returns: Json
+      }
+      github_lookup: {
+        Args: {
+          p_author: number
+          p_refs: string[]
+          p_repo: string
+          p_repository_id: number
+        }
+        Returns: Json
       }
       guest_emails: {
         Args: { p_ws: string }

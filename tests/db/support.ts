@@ -60,7 +60,7 @@ export function client(): Db {
 }
 
 /**
- * The same client without table types, for the few tests that loop over every table by name (a union of 19 tables
+ * The same client without table types, for the few tests that loop over every table by name (a union of 20 tables
  * has no single row type to check against).
  */
 export const anyTable = (db: Db, table: TableName) => (db as SupabaseClient).from(table)
@@ -306,9 +306,17 @@ export const TABLES = [
   'issue_events',
   'issue_numbers',
   'deletions',
+  'github_repos',
 ] as const satisfies readonly TableName[]
 
 /** the column that says which workspace a row belongs to */
 export const wsColumn = (t: TableName) => (t === 'workspaces' ? 'id' : t === 'profiles' ? 'guest_of' : 'workspace_id')
 
 export const DISPLAY = { layout: 'list', grouping: 'status', ordering: 'manual', showCompleted: true, showSubIssues: true }
+
+/** SQL as the service role (what an Edge Function is): for the functions only Edge Functions may call */
+export const asService = <T = Record<string, unknown>>(query: string) =>
+  ownerSql<T>(`begin; set local role service_role; ${query}; commit;`)
+
+/** a quoted SQL literal */
+export const lit = (v: unknown) => `'${(typeof v === 'string' ? v : JSON.stringify(v)).replaceAll("'", "''")}'`

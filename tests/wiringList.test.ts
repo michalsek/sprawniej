@@ -8,9 +8,13 @@ import { TABLES, wsColumn } from './db/support'
 // LIVE_TABLES in src/backend/tables.ts) and the database tests keep their own copies; this reads the list from the SQL
 // and checks that they agree.
 
+// the helpers migration starts the list; later migrations add their tables to it the same way
 const dir = join(import.meta.dir, '..', 'supabase', 'migrations')
-const helpers = readdirSync(dir).find((f) => f.endsWith('_helpers.sql'))
-const sql = readFileSync(join(dir, helpers ?? ''), 'utf8')
+const sql = readdirSync(dir)
+  .filter((f) => f.endsWith('.sql'))
+  .sort()
+  .map((f) => readFileSync(join(dir, f), 'utf8'))
+  .join('\n')
 
 interface Wired {
   name: string
@@ -30,7 +34,7 @@ const wiringTest = readFileSync(join(import.meta.dir, 'db', 'wiring.test.ts'), '
 
 describe('private.wiring matches its copies', () => {
   test('the list is read', () => {
-    expect(wiring.length).toBe(19)
+    expect(wiring.length).toBe(20)
   })
 
   test('the database tests know every table and its workspace column', () => {
