@@ -46,7 +46,7 @@ import {
 } from '@/backend/workspaces'
 import { useSession } from '@/session'
 import { canLeave, myWho, ruleFor, whoIs } from './roles'
-import type { Comment, Display, Filters, Issue, Label, Project, Status, Team, View } from '@/model/schema'
+import type { Comment, Display, FavouriteKind, Filters, Issue, Label, Project, Status, Team, View } from '@/model/schema'
 import { AUTO_ARCHIVE_MONTHS, handleOf } from '@/model/schema'
 import { LABEL_COLORS } from '@/model/colors'
 import { categoryOf, KIND_CATEGORIES, seedColor, type StatusKind } from '@/model/status'
@@ -54,6 +54,7 @@ import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
 import { clearUnsent, makeThemeSaver, markUnsent, readUnsent, showTheme, useTheme, writeDevice, type ThemeChoice } from '@/lib/theme'
 import { IMAGE_TYPES, MAX_IMAGE_MB, openWorkspaceId, pictureName, picturePath } from './assets'
+import { endKey, isFavourite, kindOf, placeAt, visibleFavourites } from './favourites'
 import { cleanHandle, HANDLE_WORDS, handleProblem } from './handles'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
@@ -553,6 +554,47 @@ const DAY = 86_400_000
 /** how long inbox notes are kept: read ones and unread ones (the database's nightly job removes older ones) */
 export const INBOX_KEEP = { read: 30 * DAY, unread: 90 * DAY }
 
+// ---------- your favourites ----------
+
+/** your favourites of these projects or views, deleted (the database does it when they go) */
+function favouritesOf(s: Pick<ReturnType<typeof useData.getState>, 'favourites'>, c: Pick<WriteContext, 'meId'>, ids: readonly string[]): AnyChange[] {
+  return ids.filter((id) => isFavourite(s, id)).map((id) => del('favourites', { profile_id: c.meId, item_id: id }))
+}
+
+/** Star a project or view: it goes to the bottom of your favourites. */
+export function addFavourite(kind: FavouriteKind, id: string) {
+  const c = context()
+  const s = useData.getState()
+  if (!c || isFavourite(s, id) || kindOf(s, id) !== kind) return
+  const key = { profile_id: c.meId, item_id: id }
+  write({ changes: [ins('favourites', key, { ...key, workspace_id: c.workspaceId, kind, sort_order: endKey(s.favourites) }, { extra: {} })] })
+}
+
+export function removeFavourite(id: string) {
+  const c = context()
+  const s = useData.getState()
+  if (c && isFavourite(s, id)) write({ changes: favouritesOf(s, c, [id]) })
+}
+
+export function toggleFavourite(kind: FavouriteKind, id: string) {
+  if (isFavourite(useData.getState(), id)) removeFavourite(id)
+  else addFavourite(kind, id)
+}
+
+/** Move a favourite to `toIndex` of the list as shown: only its order changes. */
+export function moveFavourite(id: string, toIndex: number) {
+  const c = context()
+  const sort_order = placeAt(visibleFavourites(useData.getState()), id, toIndex)
+  if (c && sort_order !== null) write({ changes: [upd('favourites', { profile_id: c.meId, item_id: id }, { sort_order })] })
+}
+
+/** "Move up" (-1) and "Move down" (1) */
+export function moveFavouriteBy(id: string, step: -1 | 1) {
+  const list = visibleFavourites(useData.getState())
+  const at = list.findIndex((f) => f.id === id)
+  if (at >= 0 && at + step >= 0 && at + step < list.length) moveFavourite(id, at + step)
+}
+
 // ---------- labels ----------
 
 /** two labels with one name can't be told apart in pickers and filters */
@@ -750,7 +792,9 @@ export function updateView(id: string, patch: ViewPatch) {
 
 export function deleteView(id: string) {
   const c = context()
-  if (c && useData.getState().views[id]) write({ changes: [del('views', { id })] })
+  const s = useData.getState()
+  // the database deletes your favourite of it along with it
+  if (c && s.views[id]) write({ changes: [del('views', { id })], cascade: favouritesOf(s, c, [id]) })
 }
 
 // ---------- projects ----------
@@ -835,10 +879,13 @@ export function deleteProject(id: string) {
   write({
     changes: [del('projects', { id })],
     after: viewsWithout(s.views, 'projects', id),
-    cascade: project.teams.flatMap((key) => {
-      const team_id = tid(c, key)
-      return team_id ? [del('project_teams', { project_id: id, team_id })] : []
-    }),
+    cascade: [
+      ...project.teams.flatMap((key) => {
+        const team_id = tid(c, key)
+        return team_id ? [del('project_teams', { project_id: id, team_id })] : []
+      }),
+      ...favouritesOf(s, c, [id]),
+    ],
     untilEcho: allIssues(s).filter((i) => i.project === id).map((i) => upd('issues', { id: i.id }, { project_id: null })),
   })
 }
@@ -924,6 +971,7 @@ export function deleteTeam(key: string): boolean {
     cascade: [
       ...[...gone].map((i) => del('issues', { id: i })),
       ...[...views].map((v) => del('views', { id: v })),
+      ...favouritesOf(s, c, [...views]),
       ...Object.values(s.projects)
         .filter((p) => p.teams.includes(key))
         .map((p) => del('project_teams', { project_id: p.id, team_id: id })),
