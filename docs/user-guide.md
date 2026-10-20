@@ -577,8 +577,8 @@ While writing a description or a comment:
 
 Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar; in Settings, the
 same button opens the settings menu. Press and hold an issue to drag it, or a favourite in the sidebar to change their
-order. In the lists of projects and views, the star always shows on a phone. Tap a checklist box to tick it (the keyboard stays away). A wide
-table scrolls sideways.
+order. In the lists of projects and views, the star always shows on a phone. Tap a checklist box to tick it (the
+keyboard stays away). A wide table scrolls sideways.
 
 ## Pictures
 
