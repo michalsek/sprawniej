@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.12.0'
+export const APP_VERSION = '2.13.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,17 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.13.0',
+    date: '2026-10-21',
+    title: 'A contact email teammates can see',
+    notes: [
+      'Add a few contact emails in Settings › Profile and pick the one teammates see, or none. How you sign in stays the same',
+      'Teammates see it next to your name in Settings › Members, with a link to write to you and a button to copy it',
+      'Add your sign-in email with one tap if you want teammates to see that one',
+      'Sprawniej doesn\'t check these addresses or send anything to them, so make sure they\'re right',
+    ],
+  },
   {
     version: '2.12.0',
     date: '2026-10-21',

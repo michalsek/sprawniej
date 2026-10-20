@@ -4,6 +4,14 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.13.0: A contact email teammates can see
+*2026-10-21*
+
+- Add a few contact emails in Settings › Profile and pick the one teammates see, or none. How you sign in stays the same
+- Teammates see it next to your name in Settings › Members, with a link to write to you and a button to copy it
+- Add your sign-in email with one tap if you want teammates to see that one
+- Sprawniej doesn't check these addresses or send anything to them, so make sure they're right
+
 ## 2.12.0: Projects on a board, with your own project statuses
 *2026-10-21*
 
