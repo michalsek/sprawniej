@@ -8,13 +8,14 @@ import { useData } from '@/data/store'
 import { statusOfIssue } from '@/data/statuses'
 import type { Issue, PullRequest, Status } from '@/model/schema'
 import { pullStateName } from './format'
-import type { IssueCategory, Priority } from '@/model/status'
+import { paintColor, type IssueCategory, type Priority } from '@/model/status'
 import { cn } from '@/lib/utils'
 
 const PIE: Partial<Record<IssueCategory, number>> = { in_progress: 0.5, in_review: 0.75 }
 
-export function StatusIcon({ status, className }: { status: Pick<Status, 'category' | 'color' | 'name'>; className?: string }) {
-  const { color, name } = status
+export function StatusIcon({ status, className }: { status: Pick<Status, 'category' | 'color' | 'name'> & Partial<Pick<Status, 'kind'>>; className?: string }) {
+  const { name } = status
+  const color = paintColor(status)
   const category = status.category as IssueCategory
   const box = cn('size-3.5 shrink-0', className)
   if (category === 'done') {

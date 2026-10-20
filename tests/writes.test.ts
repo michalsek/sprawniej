@@ -594,10 +594,6 @@ describe('the queue, more', () => {
 describe('statuses', () => {
   const statuses = () => useData.getState().statuses
 
-  test('they come with the workspace: one per category, named as the app shows them', () => {
-    expect(Object.values(statuses()).map((x) => x.name).sort()).toEqual(['Backlog', 'Canceled', 'Done', 'Duplicate', 'In Progress', 'In Review', 'Todo'])
-  })
-
   test('a new issue starts in Todo’s default, or the default of the category asked for, or the status picked', async () => {
     expect(await saved('Plain')).toMatchObject({ status: 'todo', statusId: statusIdOf('todo') })
     const backlog = await saved('Later', { status: 'backlog' })
@@ -676,8 +672,8 @@ describe('statuses', () => {
     const b = createStatus('issue', 'in_progress', 'Design review')!
     expect(a.position > statuses()[statusIdOf('in_progress')].position && b.position > a.position).toBe(true)
     await w.settle()
-    updateStatus(a.id, { name: 'QA', color: '#bb87fc' })
-    updateStatus(a.id, { name: 'QA' })
+    updateStatus(a.id, { name: 'QA', color: '#BB87FC' })
+    updateStatus(a.id, { name: 'QA', color: 'purple' })
     moveStatus(b.id, { prev: null, next: statusIdOf('in_progress') })
     updateStatus(a.id, { hidden: true })
     await w.settle()

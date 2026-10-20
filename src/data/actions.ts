@@ -42,8 +42,8 @@ import { useSession } from '@/session'
 import { canLeave, myWho, ruleFor, whoIs } from './roles'
 import type { Comment, Display, Filters, Issue, Label, Project, Status, Team, View } from '@/model/schema'
 import { AUTO_ARCHIVE_MONTHS, handleOf } from '@/model/schema'
-import { LABEL_COLORS, STATUS_COLORS } from '@/model/colors'
-import { categoryOf, CATEGORIES, isIssueCategory, ISSUE_CATEGORIES, type StatusKind } from '@/model/status'
+import { LABEL_COLORS } from '@/model/colors'
+import { categoryOf, KIND_CATEGORIES, seedColor, type StatusKind } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
 import { clearUnsent, makeThemeSaver, markUnsent, readUnsent, showTheme, useTheme, writeDevice, type ThemeChoice } from '@/lib/theme'
@@ -314,7 +314,7 @@ export function createIssue(input: NewIssue): Issue {
   const first = inTeam.reduce<string | null>((min, i) => (min === null || i.sortOrder < min ? i.sortOrder : min), null)
   const parent = input.parent ? s.issues[input.parent] : undefined
   const at = now()
-  const picked = pickStatus(input.statusId ?? input.status ?? 'todo', s.statuses) ?? pickStatus(input.status ?? 'todo', s.statuses) ?? { status: 'todo' as const }
+  const picked = (input.statusId && pickStatus(input.statusId, s.statuses)) || pickStatus(input.status ?? 'todo', s.statuses) || { status: 'todo' as const }
   const completed = categoryOf(picked.status).group === 'completed'
   const issue: Issue = {
     id: ulid(),
@@ -549,7 +549,6 @@ export const INBOX_KEEP = { read: 30 * DAY, unread: 90 * DAY }
 
 // ---------- labels ----------
 
-export { LABEL_COLORS } from '@/model/colors'
 
 /** two labels with one name can't be told apart in pickers and filters */
 const labelNamed = (labels: Record<string, Label>, name: string, but?: string) =>
@@ -615,12 +614,6 @@ export function deleteLabel(id: string) {
 // deleted: hiding keeps them on the things that have them, and each category keeps at least one shown status (the
 // database refuses otherwise, also when two people hide the last two at once).
 
-/** the categories each kind of status belongs to */
-const KIND_CATEGORIES: Record<StatusKind, readonly string[]> = { issue: ISSUE_CATEGORIES, project: [] }
-
-/** a category's colour for its new statuses: the colour its first status started with */
-const seedColor = (kind: StatusKind, category: string) => (kind === 'issue' && isIssueCategory(category) ? CATEGORIES.find((c) => c.id === category)!.seed : STATUS_COLORS[0])
-
 /**
  * A new status at the end of its category, in the category's colour. A name another status of this kind has (case
  * aside) gives that one back instead (two can't be told apart in pickers and filters). Returns undefined for a
@@ -657,7 +650,9 @@ export function updateStatus(id: string, patch: Partial<Pick<Status, 'name' | 'c
     if (!name || name.length > 40 || statusNamed(statuses, status.kind, name, id)) return
     fields.name = name
   }
-  if (patch.color !== undefined && patch.color !== status.color) fields.color = patch.color
+  // the database keeps "#rrggbb" in lower case; anything else changes nothing
+  const color = patch.color?.toLowerCase()
+  if (color !== undefined && /^#[0-9a-f]{6}$/.test(color) && color !== status.color) fields.color = color
   if (patch.hidden !== undefined && patch.hidden !== status.hidden) {
     if (patch.hidden && !canHide(status, statuses)) return
     fields.hidden = patch.hidden

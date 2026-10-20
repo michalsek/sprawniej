@@ -301,9 +301,10 @@ someone picks a category there, shows no history line for a move within one cate
 **In the app.** `src/data/statuses.ts` has the rules: the order, the default of a category, the status an issue
 shows (its own; while that isn't known, its category's default), and the Status filter. Filters keep categories in
 `statuses` (what older versions read) and, when only some statuses of a category are picked, those in `statusIds`;
-picking every shown status of a category keeps the whole category, so a status added later shows too. History lines
-name statuses as they are called now; lines from before statuses name the category as it was. An issue moved into a
-status that is still being saved waits for it (`PARENTS` in `src/backend/writes/requests.ts`).
+picking every status of a category (hidden ones too) keeps the whole category, so a status added later shows too.
+History lines name statuses as they are called now; lines from before statuses name the category as it was. An issue
+moved into a status that is still being saved waits for it (`PARENTS` in `src/backend/writes/requests.ts`). A status
+that still has its category's starting colour is painted in the theme's colour for that category (`paintColor`).
 
 **Project statuses** will use the same table (`kind = 'project'`) and the same trigger function on `projects`, with
 the six project categories; the table already allows them.

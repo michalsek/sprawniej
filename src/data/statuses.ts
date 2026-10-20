@@ -9,17 +9,14 @@
  * - Each category keeps at least one shown status; statuses are never deleted, only hidden.
  * - Whatever decides something looks at the category (`issue.status`), never at a status.
  */
-import { PROJECT_STATUSES, type Filters, type Issue, type Status } from '@/model/schema'
-import { CATEGORIES, categoryOf, ISSUE_CATEGORIES, isIssueCategory, type IssueCategory, type StatusKind } from '@/model/status'
+import type { Filters, Issue, Status } from '@/model/schema'
+import { CATEGORIES, categoryOf, ISSUE_CATEGORIES, isIssueCategory, KIND_CATEGORIES, type IssueCategory, type StatusKind } from '@/model/status'
 
 type Statuses = Readonly<Record<string, Status>>
 
-/** each kind's categories, in the order they show */
-const ORDER: Record<StatusKind, readonly string[]> = { issue: ISSUE_CATEGORIES, project: PROJECT_STATUSES }
-
 const rank = (kind: StatusKind, category: string) => {
-  const n = ORDER[kind].indexOf(category)
-  return n < 0 ? ORDER[kind].length : n
+  const n = KIND_CATEGORIES[kind].indexOf(category)
+  return n < 0 ? KIND_CATEGORIES[kind].length : n
 }
 
 /** positions and ids compare byte by byte (fractional-indexing relies on it), not with localeCompare */
@@ -121,8 +118,9 @@ export function pickedStatusIds(f: Pick<Filters, 'statuses' | 'statusIds'>, stat
 }
 
 /**
- * The filter for these picked statuses. A category whose shown statuses are all picked is stored whole (so a status
- * added to it later shows too); one with only some picked is stored with those statuses.
+ * The filter for these picked statuses. A category whose statuses are all picked (hidden ones too: the filter lists
+ * them, ticked) is stored whole, so a status added to it later shows too; one with only some picked is stored with
+ * those statuses, so what is ticked is what is kept.
  */
 export function statusFilter(ids: readonly string[], statuses: Statuses): Pick<Filters, 'statuses' | 'statusIds'> {
   const picked = new Set(ids)
@@ -134,7 +132,7 @@ export function statusFilter(ids: readonly string[], statuses: Statuses): Pick<F
     const chosen = mine.filter((s) => picked.has(s.id))
     if (!chosen.length) continue
     categories.push(c)
-    if (mine.some((s) => !s.hidden && !picked.has(s.id))) only.push(...chosen.map((s) => s.id))
+    if (chosen.length < mine.length) only.push(...chosen.map((s) => s.id))
   }
   return { statuses: categories.length ? categories : undefined, statusIds: only.length ? only : undefined }
 }

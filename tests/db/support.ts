@@ -204,7 +204,7 @@ export const ulid = () => makeUlid()
 
 type IssueInsert = Database['public']['Tables']['issues']['Insert']
 /** an issue as an older version sends it: without status_id, which the database fills in (the category's default) */
-export type IssueWithout = Omit<IssueInsert, 'status_id'> & Partial<Pick<IssueInsert, 'status_id'>>
+type IssueWithout = Omit<IssueInsert, 'status_id'> & Partial<Pick<IssueInsert, 'status_id'>>
 /** the generated types say status_id is needed (it is never null); the database fills it in when it's left out */
 export const issueInsert = (row: IssueWithout): IssueInsert => row as IssueInsert
 

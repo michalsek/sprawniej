@@ -81,7 +81,7 @@ function Composer() {
   // the editor keeps its own text; a new key empties it after "create more"
   const [round, setRound] = useState(0)
   const statusItems = useStatusItems({ current: [draft.statusId] })
-  const status = useData((s) => s.statuses[draft.statusId]) ?? CATEGORY_STATUSES.find((c) => c.id === draft.statusId) ?? CATEGORY_STATUSES[1]
+  const status = useData((s) => s.statuses[draft.statusId]) ?? CATEGORY_STATUSES.find((c) => c.id === draft.statusId) ?? CATEGORY_STATUSES.find((c) => c.category === 'todo')!
   const peopleItems = usePeopleItems()
   const labelItems = useLabelItems()
   const projectItems = useProjectItems(draft.team)

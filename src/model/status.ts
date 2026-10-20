@@ -6,15 +6,23 @@
  * Each category belongs to a group; the groups decide which issues the Active, Backlog and All tabs show.
  */
 
+import { STATUS_COLORS } from './colors'
+
 export type StatusGroup = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 
 export const ISSUE_CATEGORIES = ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'canceled', 'duplicate'] as const
 export type IssueCategory = (typeof ISSUE_CATEGORIES)[number]
 export const isIssueCategory = (x: unknown): x is IssueCategory => ISSUE_CATEGORIES.some((c) => c === x)
 
+/** a project's fixed categories (projects.status) */
+export const PROJECT_CATEGORIES = ['backlog', 'planned', 'in_progress', 'paused', 'completed', 'canceled'] as const
+
 /** what a status can be for: issues, or (later) projects */
 export const STATUS_KINDS = ['issue', 'project'] as const
 export type StatusKind = (typeof STATUS_KINDS)[number]
+
+/** each kind's categories, in the order they show (the database checks the same lists) */
+export const KIND_CATEGORIES: Record<StatusKind, readonly string[]> = { issue: ISSUE_CATEGORIES, project: PROJECT_CATEGORIES }
 
 export interface Category {
   id: IssueCategory
@@ -33,8 +41,8 @@ export const CATEGORIES: Category[] = [
   { id: 'backlog', name: 'Backlog', group: 'backlog', color: 'var(--status-backlog)', seed: '#8a8f98', description: 'Shows on the Backlog tab: ideas and work nobody planned yet.' },
   { id: 'todo', name: 'Todo', group: 'unstarted', color: 'var(--status-todo)', seed: '#c4c6cc', description: 'Shows on the Active tab: planned, not started.' },
   { id: 'in_progress', name: 'In Progress', group: 'started', color: 'var(--status-progress)', seed: '#f2c94c', description: 'Shows on the Active tab: someone is working on it.' },
-  { id: 'in_review', name: 'In Review', group: 'started', color: 'var(--status-review)', seed: '#4cb782', description: 'Shows on the Active tab: waiting for a look. Pull requests move issues here.' },
-  { id: 'done', name: 'Done', group: 'completed', color: 'var(--status-done)', seed: '#5e6ad2', description: 'Counts as finished, and is archived after a while. Merged pull requests move issues here.' },
+  { id: 'in_review', name: 'In Review', group: 'started', color: 'var(--status-review)', seed: '#4cb782', description: 'Shows on the Active tab: waiting for a look. GitHub moves issues here when work is ready for one.' },
+  { id: 'done', name: 'Done', group: 'completed', color: 'var(--status-done)', seed: '#5e6ad2', description: 'Counts as finished, and is archived after a while. GitHub moves issues here when the work is finished.' },
   { id: 'canceled', name: 'Canceled', group: 'canceled', color: 'var(--status-canceled)', seed: '#8a8f98', description: "Won't be done, and is archived after a while." },
   { id: 'duplicate', name: 'Duplicate', group: 'canceled', color: 'var(--status-canceled)', seed: '#8a8f98', description: 'The same as another issue, and is archived after a while.' },
 ]
@@ -43,7 +51,20 @@ const byId = new Map(CATEGORIES.map((s) => [s.id, s]))
 /** a category this app doesn't know (written by a newer one, or by hand) reads as Backlog instead of breaking the screen */
 export const categoryOf = (id: IssueCategory): Category => byId.get(id) ?? CATEGORIES[0]
 
-export { STATUS_COLORS } from './colors'
+/** the category a status of this kind belongs to, when it is one of the kind's (issue categories only, for now) */
+const categoryFor = (kind: StatusKind, category: string): Category | undefined => (kind === 'issue' && isIssueCategory(category) ? categoryOf(category) : undefined)
+
+/** the colour a category's new statuses start with: the colour its first status started with */
+export const seedColor = (kind: StatusKind, category: string): string => categoryFor(kind, category)?.seed ?? STATUS_COLORS[0]
+
+/**
+ * The colour to paint a status in: a status that still has its category's starting colour follows the theme (the
+ * category's `--status-*`), so a light theme can give it a lighter or darker shade; any other colour is the status's own.
+ */
+export function paintColor(status: { kind?: StatusKind; category: string; color: string }): string {
+  const c = categoryFor(status.kind ?? 'issue', status.category)
+  return c && status.color === c.seed ? c.color : status.color
+}
 
 /** The tabs on a team's Issues page. */
 export type IssueTab = 'active' | 'backlog' | 'all'

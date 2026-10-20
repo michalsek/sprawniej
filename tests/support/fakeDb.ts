@@ -27,8 +27,7 @@ type Loose = Record<string, unknown>
 export const WS = 'ws-1'
 export const profileIdOf = (login: string) => `p-${login}`
 export const teamIdOf = (key: string) => `t-${key.toLowerCase()}`
-/** the status a workspace starts with for a category (the database seeds one per category) */
-export const statusIdOf = (category: string) => `status-${category}`
+export { statusIdOf } from '../fixtures/sample'
 
 // ---------- time ----------
 

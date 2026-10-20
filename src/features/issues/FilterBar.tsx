@@ -2,7 +2,7 @@
  * Filters for a list of issues: "Filter" adds one (status, assignee, subscribers, priority, labels, project, team), and each
  * active filter shows as a chip you can change or remove. Inside one filter, any chosen value matches
  * (Todo or In Progress); different filters must all match (Todo and assigned to Ana). The Status filter keeps whole
- * categories where every shown status of one is picked, so a status added later shows too (src/data/statuses.ts).
+ * categories where every status of one is picked, so a status added later shows too (src/data/statuses.ts).
  */
 import { useMemo, type ReactNode } from 'react'
 import { Bell, Box, CircleDot, ListFilter, SignalHigh, Tag, UserRound, Users, X } from 'lucide-react'

@@ -6,7 +6,7 @@
  * deletes what a newer one wrote.
  */
 import { z } from 'zod'
-import { ISSUE_CATEGORIES, PRIORITY_IDS, STATUS_KINDS } from './status'
+import { ISSUE_CATEGORIES, PRIORITY_IDS, PROJECT_CATEGORIES, STATUS_KINDS } from './status'
 
 const iso = z.string() // ISO 8601 date-time
 const login = z.string() // a person's hidden key (Person.login)
@@ -197,7 +197,8 @@ export interface ArchivedIssue extends Issue {
   comments: Comment[]
 }
 
-export const PROJECT_STATUSES = ['backlog', 'planned', 'in_progress', 'paused', 'completed', 'canceled'] as const
+/** a project's categories (src/model/status.ts) */
+export const PROJECT_STATUSES = PROJECT_CATEGORIES
 
 /** a project (the projects table; `teams` from project_teams) */
 export const projectSchema = z

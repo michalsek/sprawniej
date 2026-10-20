@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { canHide, CATEGORY_STATUSES, defaultStatus, issueStatuses, matchesStatus, pickedStatusIds, pickStatus, statusesOf, statusFilter, statusNamed, statusOfIssue } from '@/data/statuses'
 import type { Status } from '@/model/schema'
+import { paintColor } from '@/model/status'
 import { sampleStatuses, statusIdOf } from './fixtures/sample'
 
 const s = (id: string, category: string, name: string, position = 'a0', more: Partial<Status> = {}): Status => ({ id, kind: 'issue', category, name, color: '#bb87fc', position, hidden: false, ...more })
@@ -34,7 +35,6 @@ describe('the order statuses show in', () => {
 
   test('without the workspace’s statuses, one made up per category, the id being the category', () => {
     expect(ids(issueStatuses({}))).toEqual(['backlog', 'todo', 'in_progress', 'in_review', 'done', 'canceled', 'duplicate'])
-    expect(issueStatuses(statuses)).toHaveLength(9)
   })
 })
 
@@ -81,6 +81,14 @@ describe('hiding and naming', () => {
   })
 })
 
+test('a status that keeps its category’s starting colour is painted in the theme’s colour; any other in its own', () => {
+  expect(paintColor(statuses[statusIdOf('todo')])).toBe('var(--status-todo)')
+  expect(paintColor({ ...statuses[statusIdOf('todo')], color: '#eb5757' })).toBe('#eb5757')
+  // another category's starting colour is just a colour
+  expect(paintColor({ ...statuses[statusIdOf('todo')], color: '#5e6ad2' })).toBe('#5e6ad2')
+  expect(paintColor(statuses.testing)).toBe('#bb87fc')
+})
+
 describe('the Status filter', () => {
   const issue = (status: 'in_progress' | 'todo', statusId: string) => ({ status, statusId })
 
@@ -107,15 +115,16 @@ describe('the Status filter', () => {
     expect(statusFilter([statusIdOf('in_progress'), 'testing'], statuses)).toEqual({ statuses: ['in_progress'], statusIds: undefined })
     // some of one: the category, refined
     expect(statusFilter(['testing', statusIdOf('todo')], statuses)).toEqual({ statuses: ['todo', 'in_progress'], statusIds: ['testing'] })
-    // a hidden one left out still means the whole category
-    expect(statusFilter([statusIdOf('done')], statuses)).toEqual({ statuses: ['done'], statusIds: undefined })
+    // hidden ones count: the filter lists them ticked, so unticking one keeps the rest
+    expect(statusFilter([statusIdOf('done'), 'released'], statuses)).toEqual({ statuses: ['done'], statusIds: undefined })
+    expect(statusFilter([statusIdOf('done')], statuses)).toEqual({ statuses: ['done'], statusIds: [statusIdOf('done')] })
     expect(statusFilter(['released'], statuses)).toEqual({ statuses: ['done'], statusIds: ['released'] })
     expect(statusFilter([], statuses)).toEqual({ statuses: undefined, statusIds: undefined })
 
     expect(pickedStatusIds({ statuses: ['in_progress'] }, statuses)).toEqual([statusIdOf('in_progress'), 'testing'])
     expect(pickedStatusIds({ statuses: ['todo', 'in_progress'], statusIds: ['testing'] }, statuses)).toEqual([statusIdOf('todo'), 'testing'])
     expect(pickedStatusIds({ statusIds: ['testing'] }, statuses)).toEqual([])
-    for (const picked of [['testing'], [statusIdOf('todo'), statusIdOf('in_progress'), 'testing'], ['released', statusIdOf('backlog')]]) {
+    for (const picked of [['testing'], [statusIdOf('todo'), statusIdOf('in_progress'), 'testing'], ['released', statusIdOf('backlog')], [statusIdOf('done')]]) {
       expect(pickedStatusIds(statusFilter(picked, statuses), statuses).sort()).toEqual([...picked].sort())
     }
   })

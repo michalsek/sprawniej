@@ -11,13 +11,13 @@ import { PRIORITY_NAMES, PRIORITY_ORDER, TAB_GROUPS, categoryOf, type IssueTab, 
  * For the Subscribers filter: who follows an issue depends on its comments and on who is in the workspace. For the
  * Status filter: which category each status belongs to (without them, only the categories count).
  */
-export interface FollowContext {
+export interface MatchContext {
   comments: Record<string, Comment[]>
   people: Record<string, Person>
   statuses?: Record<string, Status>
 }
 
-export function matches(issue: Issue, f: Filters, ctx?: FollowContext): boolean {
+export function matches(issue: Issue, f: Filters, ctx?: MatchContext): boolean {
   if (f.teams?.length && !f.teams.includes(issue.team)) return false
   if (!matchesStatus(issue, f, ctx?.statuses ?? {})) return false
   if (f.assignees?.length && !f.assignees.includes(issue.assignee)) return false
@@ -134,7 +134,9 @@ export function groupIssues(issues: Issue[], display: Display, ctx: GroupCtx, ta
       const by = new Map<string, Issue[]>()
       for (const i of sorted) {
         const id = statusOfIssue(i, statuses).id
-        by.set(id, [...(by.get(id) ?? []), i])
+        const list = by.get(id)
+        if (list) list.push(i)
+        else by.set(id, [i])
       }
       return issueStatuses(statuses)
         .filter((s) => (s.hidden ? by.has(s.id) : everyGroup || shown(s)))

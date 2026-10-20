@@ -110,7 +110,7 @@ declare s text;
 begin
   select id into s from public.statuses
    where workspace_id = p_ws and kind = p_kind and category = p_category and not hidden
-   order by position, id limit 1;
+   order by position, id collate "C" limit 1;
   if s is null then
     raise exception 'This workspace has no status for that.' using errcode = '22023';
   end if;

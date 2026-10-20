@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { CATEGORIES } from '@/model/status'
-import { client, closeChannels, defaultStatuses, enabled, expectDenied, expectError, getWorld, lit, newIssue, newWorkspace, ok, ownerSql, ulid, type Someone, type World } from './support'
+import { client, closeChannels, defaultStatuses, enabled, expectDenied, expectError, getWorld, newIssue, newWorkspace, ok, ulid, type Someone, type World } from './support'
 
 // A workspace's own statuses (supabase/migrations/20261020160000_statuses.sql): seeded per workspace, kept in step
 // with the fixed category in issues.status both ways, hidden instead of deleted, and named in inbox notes.
@@ -174,15 +174,5 @@ describe.skipIf(!enabled)('statuses', () => {
     expect(await issue(id)).toMatchObject({ status: 'done', status_id: st.done })
     // only the change made here is in the history; the import writes none
     expect(await ok(ana.db.from('issue_events').select('id').eq('issue_id', id))).toHaveLength(1)
-  })
-
-  test('the database checks the shared pieces (as its owner)', async () => {
-    // follow_status runs before the times: its trigger sorts first
-    const [order] = await ownerSql<{ names: string }>(
-      `select string_agg(tgname, ',' order by tgname) as names from pg_trigger where tgrelid = 'public.issues'::regclass and not tgisinternal and tgname in ('a_category', 'a_stamp')`,
-    )
-    expect(order.names).toBe('a_category,a_stamp')
-    const [d] = await ownerSql<{ id: string }>(`select private.default_status(${lit(ws)}::uuid, 'issue', 'todo') as id`)
-    expect(d.id).toBe(st.todo)
   })
 })

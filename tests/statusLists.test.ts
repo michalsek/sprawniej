@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { INBOX_KEEP } from '@/data/actions'
+import { STATUS_COLORS } from '@/model/colors'
 import { AUTO_ARCHIVE_MONTHS, inboxItemSchema, PROJECT_STATUSES, TEAM_KEY_PATTERN } from '@/model/schema'
 import { PRIORITY_IDS, ISSUE_CATEGORIES, CATEGORIES } from '@/model/status'
 
@@ -46,13 +47,8 @@ describe('database lists match src/model', () => {
     const [line] = marked('seed', 'issue-statuses')
     const triples = [...line.matchAll(/\('([^']*)', '([^']*)', '([^']*)'\)/g)].map((m) => [m[1], m[2], m[3]])
     expect(triples).toEqual(CATEGORIES.map((c) => [c.id, c.name, c.seed]))
-    // and the seed colours are the theme's status colours, so nothing looks different
-    const css = readFileSync(join(import.meta.dir, '..', 'src', 'index.css'), 'utf8')
-    for (const c of CATEGORIES) {
-      const name = /var\((--[\w-]+)\)/.exec(c.color)?.[1]
-      const value = new RegExp(`${name}:\\s*(#[0-9a-f]{6})`).exec(css)?.[1]
-      expect({ c: c.id, value }).toEqual({ c: c.id, value: c.seed })
-    }
+    // people can pick them again (a status with its seed colour is painted in the theme's --status-*: paintColor)
+    for (const c of CATEGORIES) expect({ c: c.id, pickable: STATUS_COLORS.includes(c.seed) }).toEqual({ c: c.id, pickable: true })
   })
 
   test('project statuses', () => {
