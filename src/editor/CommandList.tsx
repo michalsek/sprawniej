@@ -5,6 +5,8 @@ import type { SlashItem } from './SlashMenu'
 
 export interface CommandListHandle {
   onKeyDown: (e: KeyboardEvent) => boolean
+  /** the highlighted item */
+  current: () => SlashItem | undefined
 }
 
 export const CommandList = forwardRef<CommandListHandle, { items: SlashItem[]; command: (item: SlashItem) => void }>(function CommandList({ items, command }, ref) {
@@ -19,6 +21,7 @@ export const CommandList = forwardRef<CommandListHandle, { items: SlashItem[]; c
     list.current?.children[active]?.scrollIntoView({ block: 'nearest' })
   }, [active])
   useImperativeHandle(ref, () => ({
+    current: () => items[active],
     onKeyDown: (e) => {
       if (!items.length) return false
       if (e.key === 'ArrowDown') setActive((a) => (a + 1) % items.length)
