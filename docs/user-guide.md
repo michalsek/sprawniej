@@ -70,12 +70,12 @@ and history stay yours. What changes:
 
 ### Light or dark
 
-Sprawniej comes in a light look and a dark one. At first it follows your device: light by day, dark at night, if
-your device switches. To pick one yourself, open **Settings › Your account › Profile** and choose under
-**Appearance**: **Light** or **Dark** keep that look whatever your device does, and **System** goes back to following
-it. It's quicker from anywhere: press `⌘` `K` (or `Ctrl` `K`) and type **appearance** (or **light** / **dark**) to
-find **Use light appearance**, **Use dark appearance** and **Follow your device's appearance**; the one in use has a
-check. Your choice saves by itself and follows you to every device you sign in on. Only you see it.
+Sprawniej comes in a light look and a dark one. At first it follows your device: light by day, dark at night, if your
+device switches. To pick one yourself, open **Settings › Profile** and choose under **Appearance**: **Light** or
+**Dark** keep that look whatever your device does, and **System** goes back to following it. It's quicker from
+anywhere: press `⌘` `K` (or `Ctrl` `K`) and type **appearance** (or **light** / **dark**) to find **Use light
+appearance**, **Use dark appearance** and **Follow your device's appearance**; the one in use has a check. Your choice
+saves by itself and follows you to every device you sign in on. Only you see it.
 
 ### Ways to sign in
 

@@ -1,9 +1,8 @@
 # Design
 
 Sprawniej looks like our internal tools (Punchcard): calm, neutral grey, with roomy controls, in a light and a dark
-look (each person picks System, Light or Dark). Inside that
-frame the issue screens are dense and quick: compact rows, clear status and priority icons, keyboard shortcuts for
-everything common.
+look (each person picks System, Light or Dark). Inside that frame the issue screens are dense and quick: compact rows,
+clear status and priority icons, keyboard shortcuts for everything common.
 
 ## Colours
 
