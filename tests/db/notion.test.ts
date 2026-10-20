@@ -229,7 +229,8 @@ describe.skipIf(!enabled)('Notion', () => {
     // a teammate's next change says nothing about Notion
     await ok(bob.db.from('issues').update({ status: 'done' }).eq('id', id))
     const later = await ok(ana.db.from('issue_events').select('actor_id, changes').eq('issue_id', id).order('id'))
-    expect(later.at(-1)).toEqual({ actor_id: bob.profileId, changes: { status: ['in_progress', 'done'] } })
+    expect(later.at(-1)).toMatchObject({ actor_id: bob.profileId, changes: { status: ['in_progress', 'done'] } })
+    expect(later.at(-1)?.changes).not.toHaveProperty('via')
   })
 
   test('without a member as its author, nobody made it', async () => {
