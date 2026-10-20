@@ -2,10 +2,11 @@ import { describe, expect, test } from 'bun:test'
 import { generateNKeysBetween } from 'fractional-indexing'
 import { linearIdsOf } from '@/model/schema'
 import { EMPTY } from '@/data/store'
-import { buildImport, existingFrom, guestLogins, emojiFor, freeKey, guessPerson, involvedUsers, mapStatus, rewriteLinks, type Existing, type ImportChoices, type ImportExtras, type ImportResult, type IssueRow } from '@/features/import/linearMap'
-import type { Issue, Project, Team, View } from '@/model/schema'
+import { buildImport, existingFrom, guestLogins, emojiFor, freeKey, guessPerson, involvedUsers, mapProjectStatus, mapStatus, rewriteLinks, type Existing, type ImportChoices, type ImportExtras, type ImportResult, type IssueRow } from '@/features/import/linearMap'
+import type { Issue, Project, Status, Team, View } from '@/model/schema'
 import { ImportProblem } from '@/backend/importRows'
 import { prepareImport } from '@/features/import/prepareImport'
+import { projectStatusIdOf, sampleProjectStatuses } from './fixtures/sample'
 import { linearFixture as data } from './fixtures/linear'
 
 const person = (login: string, name: string) => ({ login, githubId: 1, name, avatarUrl: '' })
@@ -738,5 +739,33 @@ describe('getting an import ready', () => {
     const left = { ...store, members: { ...store.members, bstone: { role: 'member' as const, removedAt: NOW } } }
     expect(() => prepareImport(left, extras, data, choices, o)).toThrow("Robert isn't in this workspace any more. Go back to Who's who and pick someone else.")
     expect(() => prepareImport({ ...store, me: null }, extras, data, choices, o)).toThrow(ImportProblem)
+  })
+})
+
+describe('project statuses', () => {
+  const st = (id: string, category: string, name: string, hidden = false): Status => ({ id, kind: 'project', category, name, color: '#bb87fc', position: 'a1', hidden })
+  const statuses = { ...sampleProjectStatuses(), hold: st('hold', 'paused', 'On hold'), building: st('building', 'in_progress', 'Building'), someday: st('someday', 'planned', 'Someday', true) }
+
+  test('matched by name first, then by Linear’s kind; hidden ones are skipped; none are made', () => {
+    expect(mapProjectStatus({ name: 'On Hold', type: 'started' }, statuses)).toEqual({ status: 'paused', statusId: 'hold' })
+    expect(mapProjectStatus({ name: 'Cancelled', type: 'canceled' }, statuses)).toEqual({ status: 'canceled', statusId: projectStatusIdOf('canceled') })
+    expect(mapProjectStatus({ name: 'Someday', type: 'backlog' }, statuses)).toEqual({ status: 'backlog', statusId: projectStatusIdOf('backlog') })
+    expect(mapProjectStatus({ name: 'Shipping', type: 'started' }, statuses)).toEqual({ status: 'in_progress', statusId: projectStatusIdOf('in_progress') })
+    // an older Linear workspace: only the kind; one Sprawniej doesn't know is Planned
+    expect(mapProjectStatus({ type: 'paused' }, statuses)).toEqual({ status: 'paused', statusId: projectStatusIdOf('paused') })
+    expect(mapProjectStatus({ type: 'something new' }, {})).toEqual({ status: 'planned', statusId: '' })
+  })
+
+  test('a project imported before keeps its status here while Linear’s kind stays in that group', () => {
+    const here = { status: 'in_progress' as const, statusId: 'building' }
+    expect(mapProjectStatus({ name: 'Shipping', type: 'started' }, statuses, here)).toEqual(here)
+    expect(mapProjectStatus({ name: 'Done', type: 'completed' }, statuses, here)).toEqual({ status: 'completed', statusId: projectStatusIdOf('completed') })
+  })
+
+  test('a new project gets the workspace’s status and goes to the bottom of its column', () => {
+    const mine: Project = { id: 'mine', name: 'Made here', emoji: '📦', description: '', status: 'in_progress', statusId: projectStatusIdOf('in_progress'), sortOrder: 'a5', lead: null, teams: [], targetDate: null, createdAt: NOW }
+    const r = run(data, choices, { ...empty(), statuses, projects: { mine } })
+    expect(r.projects[0]).toMatchObject({ name: 'Launch', status: 'in_progress', statusId: projectStatusIdOf('in_progress') })
+    expect(r.projects[0].sortOrder! > mine.sortOrder!).toBe(true)
   })
 })

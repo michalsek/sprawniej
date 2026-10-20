@@ -5,7 +5,7 @@ import { INBOX_KEEP } from '@/data/actions'
 import { STATUS_COLORS } from '@/model/colors'
 import { AUTO_ARCHIVE_MONTHS, FAVOURITE_KINDS, inboxItemSchema, PROJECT_STATUSES, TEAM_KEY_PATTERN } from '@/model/schema'
 import { NOTION_URL_PATTERN, PAGE_ID_PATTERN, UUID_PATTERN } from '@/model/notion'
-import { PRIORITY_IDS, ISSUE_CATEGORIES, CATEGORIES } from '@/model/status'
+import { PRIORITY_IDS, ISSUE_CATEGORIES, CATEGORIES, PROJECT_CATEGORIES, PROJECT_CATEGORY_INFO } from '@/model/status'
 
 // The database checks copy the fixed lists from src/model. Each copy has a marker comment ("-- @list issue-statuses")
 // on the line above it; this test reads the line after every marker and compares.
@@ -52,8 +52,18 @@ describe('database lists match src/model', () => {
     for (const c of CATEGORIES) expect({ c: c.id, pickable: STATUS_COLORS.includes(c.seed) }).toEqual({ c: c.id, pickable: true })
   })
 
-  test('project statuses', () => {
-    for (const list of lists('project-statuses')) expect(list).toEqual([...PROJECT_STATUSES])
+  test('project categories (projects and the statuses table)', () => {
+    const found = lists('project-statuses')
+    expect(found.length).toBe(2)
+    for (const list of found) expect(list).toEqual([...PROJECT_STATUSES])
+    expect(PROJECT_CATEGORY_INFO.map((c) => c.id)).toEqual([...PROJECT_CATEGORIES])
+  })
+
+  test('the project statuses every workspace starts with: one per category, named and coloured as the app shows them', () => {
+    const [line] = marked('seed', 'project-statuses')
+    const triples = [...line.matchAll(/\('([^']*)', '([^']*)', '([^']*)'\)/g)].map((m) => [m[1], m[2], m[3]])
+    expect(triples).toEqual(PROJECT_CATEGORY_INFO.map((c) => [c.id, c.name, c.seed]))
+    for (const c of PROJECT_CATEGORY_INFO) expect({ c: c.id, pickable: STATUS_COLORS.includes(c.seed) }).toEqual({ c: c.id, pickable: true })
   })
 
   test('inbox note types', () => {

@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
-import { sampleData, statusIdOf } from './fixtures/sample'
-import { childIndex, compareIssues, dueForArchive, myTeamKeys, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
+import { projectStatusIdOf, sampleData, sampleProjectStatuses, statusIdOf } from './fixtures/sample'
+import { childIndex, compareIssues, dueForArchive, myTeamKeys, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectColumns, projectProgress } from '@/data/select'
 import { findByRef, issueRef } from '@/data/store'
 import { DEFAULT_DISPLAY } from '@/data/displays'
-import type { Issue } from '@/model/schema'
+import type { Issue, Project, Status } from '@/model/schema'
 import { issueFieldsSchema } from '@/model/schema'
 
 const data = sampleData()
@@ -230,4 +230,41 @@ test('your teams, oldest first, whatever order they were loaded in', () => {
   const ana = { login: 'ana', githubId: 0, name: 'Ana', avatarUrl: '' }
   expect(myTeamKeys({ teams, me: ana })).toEqual(['APP', 'ENG', 'WEB'])
   expect(myTeamKeys({ teams, me: null })).toEqual(['OPS', 'APP', 'ENG', 'WEB'])
+})
+
+describe('the project board', () => {
+  const st = (id: string, category: string, position: string, hidden = false): Status => ({ id, kind: 'project', category, name: id, color: '#bb87fc', position, hidden })
+  const statuses = {
+    ...sampleProjectStatuses(),
+    building: st('building', 'in_progress', 'a1'),
+    'on-hold': st('on-hold', 'paused', 'a1', true),
+    shelved: st('shelved', 'completed', 'a1', true),
+  }
+  const p = (id: string, status: Project['status'], statusId: string, sortOrder: string | null = null): Project =>
+    ({ id, name: id, emoji: '', description: '', status, statusId, sortOrder, lead: null, teams: [], targetDate: null, createdAt: '2026-01-01T00:00:00.000Z' })
+
+  test('a column per shown status in their order, then hidden ones that still have projects; inside, by place, then by name', () => {
+    const columns = projectColumns(
+      [
+        p('second', 'planned', projectStatusIdOf('planned'), 'a1'),
+        p('first', 'planned', projectStatusIdOf('planned'), 'a0'),
+        p('Zed (older version)', 'planned', projectStatusIdOf('planned')),
+        p('Alpha (older version)', 'planned', projectStatusIdOf('planned')),
+        p('waiting', 'paused', 'on-hold', 'a0'),
+        p('not known yet', 'in_progress', 'st-from-a-newer-copy', 'a0'),
+        p('built', 'in_progress', 'building', 'a0'),
+      ],
+      statuses,
+    )
+    expect(columns.map((c) => [c.status.id, c.projects.map((x) => x.id)])).toEqual([
+      [projectStatusIdOf('backlog'), []],
+      [projectStatusIdOf('planned'), ['first', 'second', 'Alpha (older version)', 'Zed (older version)']],
+      [projectStatusIdOf('in_progress'), ['not known yet']],
+      ['building', ['built']],
+      [projectStatusIdOf('paused'), []],
+      [projectStatusIdOf('completed'), []],
+      [projectStatusIdOf('canceled'), []],
+      ['on-hold', ['waiting']],
+    ])
+  })
 })

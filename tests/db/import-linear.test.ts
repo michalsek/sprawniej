@@ -8,7 +8,7 @@ import type { LinearData } from '@/features/import/linearApi'
 import type { ImportChoices, ImportResult } from '@/features/import/linearMap'
 import { prepareImport } from '@/features/import/prepareImport'
 import { linearFixture } from '../fixtures/linear'
-import { anyTable, closeChannels, enabled, getWorld, newIssue, newWorkspace, ok, ulid, type Someone, type World } from './support'
+import { anyTable, closeChannels, defaultStatuses, enabled, getWorld, newIssue, newWorkspace, ok, ulid, type Someone, type World } from './support'
 
 // The Linear import end to end against the real database: the fixture goes in through import_rows, the way the
 // wizard sends it, and comes back out through the loader. Running it again changes nothing.
@@ -99,8 +99,11 @@ describe.skipIf(!enabled)('importing from Linear', () => {
     const name = (id: string) => labels.find((l) => l.id === id)?.name
     const onCharts = await ok(w.ana.db.from('issue_labels').select('label_id').eq('issue_id', byLinear['i-1'].id).order('changed_at'))
     expect(onCharts.map((l) => name(l.label_id))).toEqual(['Bug', 'Area: Charts'])
-    const projects = await ok(w.ana.db.from('projects').select('id, name').eq('workspace_id', ws))
+    const projects = await ok(w.ana.db.from('projects').select('id, name, status, status_id, sort_order').eq('workspace_id', ws))
     expect(projects.map((p) => p.name)).toEqual(['Launch'])
+    // Linear's "started" is the In progress group: its first status, at the bottom of that column
+    expect(projects[0]).toMatchObject({ status: 'in_progress', status_id: (await defaultStatuses(w.ana, ws, 'project')).in_progress })
+    expect(projects[0].sort_order).not.toBeNull()
     expect(await ok(w.ana.db.from('project_teams').select('team_id').eq('project_id', projects[0].id))).toEqual([{ team_id: eng }])
     const comments = await ok(w.ana.db.from('comments').select('linear_id, issue_id').eq('workspace_id', ws).order('linear_id'))
     expect(comments.map((c) => c.linear_id)).toEqual(['c-1', 'c-2', 'c-4'])

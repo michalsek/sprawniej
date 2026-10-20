@@ -90,6 +90,8 @@ test('a status that keeps its category’s starting colour is painted in the the
   expect(paintColor(statuses.testing)).toBe(shaded('#bb87fc'))
   // a theme colour stays as it is
   expect(paintColor({ category: 'todo', color: 'var(--status-todo)' })).toBe('var(--status-todo)')
+  // project statuses too: Paused starts in the grey Canceled has
+  expect(paintColor({ kind: 'project', category: 'paused', color: '#8a8f98' })).toBe('var(--status-canceled)')
 })
 
 describe('the Status filter', () => {

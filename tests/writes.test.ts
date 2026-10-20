@@ -18,14 +18,16 @@ import {
   deleteTeam,
   markRead,
   moveIssueToTeam,
+  moveProject,
   moveStatus,
   setChecklistItem,
   updateComment,
   updateIssue,
+  updateProject,
   updateStatus,
 } from '@/data/actions'
 import { EMPTY, useData } from '@/data/store'
-import { drain, FakeTarget, person, profileIdOf, seed, statusIdOf, teamIdOf, WS, type World } from './support/fakeBackend'
+import { drain, FakeTarget, person, profileIdOf, projectStatusIdOf, seed, statusIdOf, teamIdOf, WS, type World } from './support/fakeBackend'
 import { TICK_REFUSED } from './support/fakeDb'
 
 let w: World
@@ -753,5 +755,74 @@ describe('checklist ticks', () => {
     expect(stored(i.id)).toBe('- [ ] oat milk')
     expect(w.told).toEqual([TICK_REFUSED])
     nothingLeft(i.id)
+  })
+})
+
+describe('project statuses and places', () => {
+  const project = (id: string) => useData.getState().projects[id]
+  const made = async (name: string, statusId?: string) => {
+    const p = createProject({ name, emoji: '📦', ...(statusId && { statusId }) })
+    await w.settle()
+    return p
+  }
+
+  test('a new project goes to the bottom of its column, sending its status and not the category', async () => {
+    const sent = w.since()
+    const first = await made('First')
+    const second = await made('Second')
+    const started = await made('Started', projectStatusIdOf('in_progress'))
+    const rows = sent('projects').map(fieldsOf).flat() as Record<string, unknown>[]
+    expect(rows.map((r) => [r.name, r.status_id, 'status' in r])).toEqual([
+      ['First', projectStatusIdOf('planned'), false],
+      ['Second', projectStatusIdOf('planned'), false],
+      ['Started', projectStatusIdOf('in_progress'), false],
+    ])
+    expect(project(second.id).sortOrder! > project(first.id).sortOrder!).toBe(true)
+    // the database fills in the category
+    expect(project(started.id)).toMatchObject({ status: 'in_progress', statusId: projectStatusIdOf('in_progress') })
+    expect(w.db.get('projects', { id: started.id })).toMatchObject({ status: 'in_progress' })
+  })
+
+  test('picking a status sends only status_id; the category shows at once', async () => {
+    const building = createStatus('project', 'in_progress', 'Building')!
+    const p = await made('Launch')
+    const sent = w.since()
+    updateProject(p.id, { statusId: building.id })
+    expect(project(p.id)).toMatchObject({ status: 'in_progress', statusId: building.id })
+    updateProject(p.id, { statusId: building.id })
+    await w.settle()
+    expect(sent('projects').map(fieldsOf)).toEqual([{ status_id: building.id }])
+    expect(w.db.get('projects', { id: p.id })).toMatchObject({ status: 'in_progress', status_id: building.id })
+  })
+
+  test('a drop within a column sends only the place; into another column, the status too', async () => {
+    const a = await made('A')
+    const b = await made('B')
+    const waiting = await made('Waiting', projectStatusIdOf('paused'))
+    const sent = w.since()
+    moveProject(b.id, { place: { prev: null, next: a.id } })
+    await w.settle()
+    expect(sent('projects').map(fieldsOf)).toEqual([{ sort_order: project(b.id).sortOrder }])
+    expect(project(b.id).sortOrder! < project(a.id).sortOrder!).toBe(true)
+    moveProject(a.id, { statusId: projectStatusIdOf('paused'), place: { prev: waiting.id, next: null } })
+    await w.settle()
+    expect(Object.keys(sent('projects').map(fieldsOf)[1] as object).sort()).toEqual(['sort_order', 'status_id'])
+    expect(w.db.get('projects', { id: a.id })).toMatchObject({ status: 'paused', status_id: projectStatusIdOf('paused') })
+  })
+
+  test('a drop next to projects an older version made gives them places first, so it lands where it was let go', async () => {
+    const mine = await made('Mine')
+    // made by an older version: a category, no place (the database gave it Planned's default status)
+    for (const name of ['Old one', 'Old two']) {
+      const row = { id: name, workspace_id: WS, name, emoji: '', description: '', status: 'planned', status_id: projectStatusIdOf('planned'), sort_order: null, lead_id: null, target_date: null, linear_id: null, created_at: '2026-01-01T00:00:00.000Z', extra: {} }
+      w.db.put('projects', row)
+      w.target.apply([{ from: 'message', message: { table: 'projects', op: 'INSERT', row: w.db.get('projects', { id: name })! } }])
+    }
+    const sent = w.since()
+    moveProject(mine.id, { place: { prev: 'Old one', next: 'Old two' } })
+    await w.settle()
+    expect(sent('projects').map(fieldsOf).flat().map((f) => Object.keys(f as object))).toEqual([['sort_order'], ['sort_order'], ['sort_order']])
+    const order = ['Old one', mine.id, 'Old two'].map((id) => project(id).sortOrder!)
+    expect([...order].sort()).toEqual(order)
   })
 })

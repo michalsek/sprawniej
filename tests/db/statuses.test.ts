@@ -35,7 +35,7 @@ describe.skipIf(!enabled)('statuses', () => {
     (await ok(ana.db.from('issue_events').select('changes').eq('issue_id', id).order('id', { ascending: false }).limit(1).single())).changes as Record<string, unknown>
 
   test('a new workspace starts with one status per category, named and coloured as the app shows them', async () => {
-    const rows = await ok(ana.db.from('statuses').select('kind, category, name, color, position, hidden').eq('workspace_id', ws).order('category'))
+    const rows = await ok(ana.db.from('statuses').select('kind, category, name, color, position, hidden').eq('workspace_id', ws).eq('kind', 'issue').order('category'))
     expect(rows.sort((a, b) => a.category.localeCompare(b.category))).toEqual(
       CATEGORIES.map((c) => ({ kind: 'issue', category: c.id, name: c.name, color: c.seed, position: 'a0', hidden: false })).sort((a, b) => a.category.localeCompare(b.category)),
     )
