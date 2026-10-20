@@ -33,6 +33,7 @@ import {
   type InviteRole,
   type Role,
 } from '@/backend/workspaces'
+import { setHandle } from '@/backend/profiles'
 import { useSession } from '@/session'
 import { canLeave, myWho, ruleFor, whoIs } from './roles'
 import type { Comment, Display, Filters, Issue, Label, Project, Team, View } from '@/model/schema'
@@ -41,6 +42,7 @@ import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
 import { IMAGE_TYPES, MAX_IMAGE_MB, openWorkspaceId, pictureName, picturePath } from './assets'
+import { cleanHandle, HANDLE_WORDS, handleProblem } from './handles'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
 import { isAdmin, isUnread, ownerCount } from './select'
@@ -878,6 +880,27 @@ export function renameMe(name: string) {
   const typed = name.trim().replace(/\s+/g, ' ')
   if (!typed || typed === mine.name) return
   write({ changes: [upd('profiles', { id: c.meId }, { name: typed, name_set_here: true })] })
+}
+
+/**
+ * Your @handle, everywhere you are (Settings › Your account). Awaited like the member actions below: the database
+ * says whether someone else has it. Throws an Error whose message can be shown as it is. Mentions of your old handle
+ * become plain text, and anyone may take it.
+ */
+export async function changeHandle(typed: string): Promise<void> {
+  const s = useData.getState()
+  const session = useSession.getState()
+  const me = (s.me && s.people[s.me.login]) ?? session.user
+  if (!me) throw new Error('Pick your name first.')
+  const handle = cleanHandle(typed)
+  const problem = handleProblem(handle, me, s.people)
+  if (problem === 'same') return
+  if (problem === 'invalid') throw new Error(HANDLE_WORDS.invalid)
+  if (problem === 'taken') throw new Error(HANDLE_WORDS.taken(handle))
+  const mine = await setHandle(handle)
+  session.setProfile(mine.id, mine.person)
+  // everyone here sees it from the live change; this tab doesn't wait for it
+  void backend.catchUp()
 }
 
 // ---------- members, roles and invites ----------

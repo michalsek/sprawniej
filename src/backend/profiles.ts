@@ -1,6 +1,6 @@
 /**
  * Your profile: the name and @handle teammates see. Signing in finds it (or, for a GitHub sign-in, makes it from
- * your GitHub login); otherwise you pick a handle once (PickLogin).
+ * your GitHub login); otherwise you pick a handle when you start (PickLogin), and you can change it later (setHandle).
  */
 import type { Person } from '@/model/schema'
 import { plain } from '@/lib/plain'
@@ -44,6 +44,13 @@ export async function createProfile(login: string, name: string): Promise<MyProf
   }
   // the database words a taken handle (23505) and one that isn't a handle (22023) for people already
   if (error || !data) throw new ProfileProblem(friendlyDbError(error, "We couldn't save your name. Try again in a moment."), error?.code)
+  return { id: data.id, person: rowToPerson(data) }
+}
+
+/** Changes your @handle (Settings › Your account); throws a ProfileProblem worded to show (taken, not a handle) */
+export async function setHandle(handle: string): Promise<MyProfile> {
+  const { data, error } = await requireClient().rpc('set_handle', { p_handle: handle }).maybeSingle()
+  if (error || !data) throw new ProfileProblem(friendlyDbError(error, "We couldn't change your handle. Try again in a moment."), error?.code)
   return { id: data.id, person: rowToPerson(data) }
 }
 

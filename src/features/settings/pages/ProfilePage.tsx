@@ -1,4 +1,4 @@
-/** Settings › Profile: your picture and name as teammates see them, switching workspace and signing out. */
+/** Settings › Profile: your picture, name and @handle as teammates see them, switching workspace and signing out. */
 import { useState } from 'react'
 import { Loader2, LogOut, Repeat } from 'lucide-react'
 import { PersonAvatar } from '@/components/Avatar'
@@ -9,6 +9,7 @@ import type { Person } from '@/model/schema'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
+import { MyHandle } from '../MyHandle'
 
 /** your name as teammates see it */
 function MyName({ me }: { me: Person }) {
@@ -46,6 +47,7 @@ export function ProfilePage() {
         {/* remount when the name changes elsewhere (another tab) */}
         {me && <MyName key={me.name} me={me} />}
       </div>
+      <MyHandle />
       <div>
         <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="lg" disabled={switching.busy} onClick={switching.switchWorkspace}>

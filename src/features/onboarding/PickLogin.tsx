@@ -120,7 +120,7 @@ export function PickLogin({ onDone, initialName, invite }: { onDone: (p: MyProfi
               }}
             />
           </div>
-          <p className="mt-1.5 text-sm text-muted-foreground">Letters, digits and dashes. It can't be changed later.</p>
+          <p className="mt-1.5 text-sm text-muted-foreground">Letters, digits and dashes. You can change it later in Settings.</p>
           <Problem>{bad ? BAD_HANDLE : askCode ? undefined : problem}</Problem>
         </div>
         {askCode && (
