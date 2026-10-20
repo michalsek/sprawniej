@@ -581,7 +581,7 @@ export function toggleFavourite(kind: FavouriteKind, id: string) {
   else addFavourite(kind, id)
 }
 
-/** Move a favourite to `toIndex` of the list as shown: only its order changes (and, rarely, that of one it ties with). */
+/** Move a favourite to `toIndex` of the list as shown: only its order changes (and, rarely, those after it that share its key). */
 export function moveFavourite(id: string, toIndex: number) {
   const c = context()
   const placed = placeAt(visibleFavourites(useData.getState()), id, toIndex)

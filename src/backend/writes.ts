@@ -30,7 +30,7 @@ import { localKey } from './apply/take'
 import type { AnyChange, Call } from './changes'
 import type { Registry } from './registry'
 import type { LiveTable } from './tables'
-import { MESSAGES } from './writes/problems'
+import { MESSAGES, QUIET_GONE } from './writes/problems'
 import { answerKey, parentsOf, plan } from './writes/requests'
 import type { NoteRow, Outcome, Request, Transport, Answer } from './writes/send'
 import { equal } from '@/lib/equal'
@@ -460,8 +460,8 @@ export class Writer {
       }
       return
     }
-    // deleted by you (or with something you deleted), or gone with nothing to say: no need to say it wasn't saved
-    const quiet = outcome.why === 'gone' && (!outcome.message || [item.ks, ...parentsOf(item)].some((k) => this.goneByMe.has(k)))
+    // deleted by you (or with something you deleted), or a change to your own row that went: no need to say it wasn't saved
+    const quiet = outcome.why === 'gone' && ((item.op !== 'insert' && QUIET_GONE.has(item.table)) || [item.ks, ...parentsOf(item)].some((k) => this.goneByMe.has(k)))
     // your delete was refused: the row is still there, and a later "deleted meanwhile" about it is news
     if (item.op === 'delete') this.goneByMe.delete(item.ks)
     for (const change of item.changes) settles.push({ from: 'settled', change, ok: false })

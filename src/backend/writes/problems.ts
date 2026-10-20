@@ -64,7 +64,7 @@ export function refusedMessage(what: What): string {
   return MESSAGES.refused
 }
 
-/** what a row of each table is about, when it's gone ('': nothing to say) */
+/** what a row of each table is about, when it's gone */
 const GONE: Record<string, string> = {
   issues: MESSAGES.goneIssue,
   issue_followers: MESSAGES.goneIssue,
@@ -76,9 +76,13 @@ const GONE: Record<string, string> = {
   views: MESSAGES.goneView,
   teams: MESSAGES.goneTeam,
   team_members: MESSAGES.goneTeam,
-  // your own favourite went (unstarred in another tab, or what it stars was deleted): it just drops
-  favourites: '',
 }
+
+/**
+ * Tables whose rows are only yours, so a change to one that went meanwhile (a favourite unstarred in another tab, or
+ * whose project went) just drops, with nothing to say. Adding one still says what it pointed at went.
+ */
+export const QUIET_GONE = new Set(['favourites'])
 
 /** the column a foreign key error names ("issue_labels_workspace_id_label_id_fkey"), as the thing that went */
 const POINTS_AT: [RegExp, string][] = [

@@ -445,8 +445,9 @@ Reordering only means something in Manual order; under another ordering a drop c
 otherwise we explain where to switch to Manual.
 
 Favourites in the sidebar use the same kind of keys: each person's own `sortOrder` per favourite, so a drop (or Move
-up, Move down) saves only the moved one (`src/data/favourites.ts`, `src/app/Favourites.tsx`). Space picks one up from
-the keyboard, as with issues, and the arrow keys then move it rather than the focus in the issue list.
+up, Move down) saves only the moved one, plus any after it that share its key (`src/data/favourites.ts`,
+`src/app/Favourites.tsx`). Space picks one up from the keyboard, as with issues, and the arrow keys then move it rather
+than the focus in the issue list.
 
 How a built-in page looks (grouping, ordering, what's hidden) is personal: it's kept in this browser per page
 (`src/data/displays.ts`), never in the workspace. Filters set on a built-in page are personal too and last until you

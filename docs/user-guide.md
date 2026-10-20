@@ -381,9 +381,9 @@ sidebar (see Favourites).
 Keep the projects and views you open often in your sidebar: they show in the **Workspace** section, under
 **Projects** and **Views**.
 
-- **Add one:** press the star (☆) next to **⋯** at the top of a project's or view's page, or on its row in the list of
-  projects or views (it shows when you point at the row). Or open ⌘K on its page and pick **Add to favourites**. A new
-  favourite goes to the bottom.
+- **Add one:** press the star (☆) next to **⋯** at the top of a project's or view's page, or next to its name in the
+  list of projects or views (it shows when you point at it). Or open ⌘K on its page and pick **Add to favourites**. A
+  new favourite goes to the bottom.
 - **Open one:** click it in the sidebar.
 - **Change the order:** drag it up or down. With the keyboard, move to it with `Tab`, press `Space` to pick it up, use
   the arrow keys, and press `Space` again to put it down (`Esc` puts it back). Or use its **⋯ › Move up** or
@@ -540,7 +540,7 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
 
 Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar; in Settings, the
 same button opens the settings menu. Press and hold an issue to drag it, or a favourite in the sidebar to change their
-order. The star on a list row always shows on a phone.
+order. In the lists of projects and views, the star always shows on a phone.
 
 ## Pictures
 

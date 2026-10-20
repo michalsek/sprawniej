@@ -4,7 +4,8 @@
  * pick it up from the keyboard with Space, move it with the arrows and drop it with Space (Esc puts it back). Its ⋯
  * menu moves it up or down, or removes it. With none yet, one quiet hint says how to add some and opens Projects.
  *
- * Only the moved favourite changes on a drop: it gets an order key between its new neighbours (moveFavourite).
+ * Only the moved favourite changes on a drop: it gets an order key between its new neighbours (moveFavourite), and
+ * when keys tie, the ones after it that share the key get fresh ones too.
  */
 import { useRef } from 'react'
 import { Link, useLocation } from 'wouter'
@@ -38,7 +39,7 @@ function FavouriteRow({ id, first, last }: { id: string; first: boolean; last: b
     <li
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform), transition }}
-      className={cn('group/fav relative flex items-center rounded-lg hover:bg-sidebar-accent/60', active && 'bg-sidebar-accent', isDragging && 'z-10 bg-sidebar-accent shadow-sm')}
+      className={cn('group/fav relative flex items-center rounded-lg transition-colors hover:bg-sidebar-accent/60', active && 'bg-sidebar-accent', isDragging && 'z-10 bg-sidebar-accent shadow-sm')}
     >
       <Link
         href={href}
