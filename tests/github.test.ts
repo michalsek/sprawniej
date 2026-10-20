@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { handle, MAX_BODY, type Env } from '@/github/handler'
-import { findRefs, MAX_REFS, moveFor, movesFor, notesFor, signatureOk, TO_DONE, TO_REVIEW, type Lookup, type LookupIssue } from '@/github/webhook'
+import { findRefs, MAX_REFS, moveFor, movesFor, notesFor, pullState, signatureOk, TO_DONE, TO_REVIEW, type Lookup, type LookupIssue } from '@/github/webhook'
 
 const SECRET = "It's a Secret to Everybody"
 
@@ -84,6 +84,13 @@ describe('what an event does', () => {
     expect(moveFor({ action: 'closed', state: 'closed', merged: true })).toEqual(TO_DONE)
   })
 
+  test('how it shows on the issue page', () => {
+    expect(pullState({ state: 'open', draft: false })).toBe('open')
+    expect(pullState({ state: 'open', draft: true })).toBe('draft')
+    expect(pullState({ state: 'closed', merged: true, draft: false })).toBe('merged')
+    expect(pullState({ state: 'closed', merged: false, draft: true })).toBe('closed')
+  })
+
   test('nothing goes backwards', () => {
     expect(TO_REVIEW.from).toEqual(['backlog', 'todo', 'in_progress'])
     expect(TO_DONE.from).toEqual(['backlog', 'todo', 'in_progress', 'in_review'])
@@ -148,6 +155,7 @@ describe('the handler', () => {
   const pr = (more: Record<string, unknown> = {}) => ({
     action: 'opened',
     pull_request: {
+      id: 2_000_000_012,
       number: 12,
       html_url: 'https://github.com/acme/web/pull/12',
       title: 'Fix login',
@@ -155,6 +163,7 @@ describe('the handler', () => {
       draft: false,
       merged: false,
       state: 'open',
+      updated_at: '2026-10-20T10:00:00Z',
       user: { id: 42, login: 'bob-gh' },
       head: { ref: 'eng-2-login' },
     },
@@ -244,6 +253,37 @@ describe('the handler', () => {
       to: 'in_review',
       refs: ['ENG-2', 'ENG-1'],
     })
+    expect(apply.args.p_pull).toEqual({
+      id: '2000000012',
+      repo: 'acme/web',
+      number: 12,
+      title: 'Fix login',
+      url: 'https://github.com/acme/web/pull/12',
+      state: 'open',
+      updated_at: '2026-10-20T10:00:00Z',
+      issues: ['i1', 'i2'],
+    })
+  })
+
+  test('a draft, or closing without merging, moves nothing but shows on the issues', async () => {
+    const draft = await deliver(pr({ pull_request: { ...pr().pull_request, draft: true } }), { lookup: [found] })
+    expect(draft.body).toEqual({ workspaces: 1, moved: [] })
+    const apply = draft.calls[1].args
+    expect(apply.p_moves).toEqual([])
+    expect(apply.p_notes).toEqual([])
+    // Settings keeps showing the last move
+    expect(apply.p_event).toBeNull()
+    expect(apply.p_pull).toMatchObject({ state: 'draft', issues: ['i1', 'i2'] })
+
+    const closed = await deliver(pr({ action: 'closed', pull_request: { ...pr().pull_request, state: 'closed' } }), { lookup: [found] })
+    expect(closed.calls[1].args.p_pull).toMatchObject({ state: 'closed' })
+    const back = await deliver(pr({ action: 'converted_to_draft', pull_request: { ...pr().pull_request, draft: true } }), { lookup: [found] })
+    expect(back.calls[1].args.p_pull).toMatchObject({ state: 'draft' })
+  })
+
+  test('for an author who isn’t a member, an event that moves nothing writes nothing', async () => {
+    const r = await deliver(pr({ action: 'edited', changes: { base: {} } }), { lookup: [{ ...found, actor: null }] })
+    expect(r.calls.map((c) => c.fn)).toEqual(['github_lookup'])
   })
 
   test('an author who isn’t a member moves nothing, and the workspace hears why', async () => {
@@ -256,6 +296,7 @@ describe('the handler', () => {
     expect(apply.p_moves).toEqual([])
     expect(apply.p_notes).toEqual([])
     expect(apply.p_event).toMatchObject({ to: 'done', skipped: 'author' })
+    expect(apply.p_pull).toBeNull()
   })
 
   test('the older service key goes as a bearer too', async () => {

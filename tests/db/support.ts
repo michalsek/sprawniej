@@ -307,6 +307,7 @@ export const TABLES = [
   'issue_numbers',
   'deletions',
   'github_repos',
+  'issue_pull_requests',
 ] as const satisfies readonly TableName[]
 
 /** the column that says which workspace a row belongs to */

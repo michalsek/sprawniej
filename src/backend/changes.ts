@@ -31,6 +31,8 @@ interface Grants {
   issue_labels: { insert: 'workspace_id' | 'issue_id' | 'label_id'; update: never }
   issue_followers: { insert: 'workspace_id' | 'issue_id' | 'profile_id' | 'following'; update: 'following' }
   comments: { insert: 'id' | 'workspace_id' | 'issue_id' | 'body' | 'extra'; update: 'body' | 'extra' }
+  /** written only by the GitHub webhook */
+  issue_pull_requests: { insert: never; update: never }
   views: {
     insert: 'id' | 'workspace_id' | 'team_id' | 'name' | 'emoji' | 'description' | 'filters' | 'display' | 'extra'
     update: 'name' | 'emoji' | 'description' | 'filters' | 'display' | 'extra'

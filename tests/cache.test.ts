@@ -164,6 +164,14 @@ describe('what a copy holds', () => {
     expect(encode(live, { id: ID, mark: T(16), caughtUpAt: 1, archive: true, now: 2, max: 10 })).toBeNull()
   })
 
+  test('without the archive, archived issues’ pull requests go too', () => {
+    const rows = shrink({
+      issues: [{ id: 'i-old', archived_at: T(1) }, { id: 'i-new', archived_at: null }],
+      issue_pull_requests: [{ issue_id: 'i-old', pull_request_id: '1' }, { issue_id: 'i-new', pull_request_id: '1' }],
+    })
+    expect(rows.issue_pull_requests?.map((r) => r.issue_id)).toEqual(['i-new'])
+  })
+
   test('a body that isn’t one reads as nothing', () => {
     expect(decode('{')).toBeNull()
     expect(decode(JSON.stringify({ v: CACHE_FORMAT + 1, rows: {} }))).toBeNull()

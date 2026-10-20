@@ -159,7 +159,7 @@ must belong to the workspace.
 
 `updated_at` is "last changed" as people see it. The trigger moves it only when one of these changes: `title`,
 `description`, `status`, `priority`, `assignee_id`, `project_id`, `parent_id`, `due_date`, `estimate`, `sort_order`,
-`duplicate_of`, `team_id` or `extra`, and on a restore. Archiving, `former_refs`, followers and labels don't touch it. Deleting an issue deletes its labels, followers, comments, inbox notes and history; its sub-issues lose
+`duplicate_of`, `team_id` or `extra`, and on a restore. Archiving, `former_refs`, followers and labels don't touch it. Deleting an issue deletes its labels, followers, comments, pull requests, inbox notes and history; its sub-issues lose
 their parent.
 
 ### issue_labels
@@ -171,6 +171,18 @@ their parent.
 `workspace_id`, `issue_id`, `profile_id`, `following`, `changed_at`. `following = true` is someone who asked to follow
 the issue (`subscribers`), `false` someone who asked not to (`unsubscribed`). People also follow without a row: the
 creator, the assignee, commenters and everyone mentioned (`src/data/notify.ts`).
+
+### issue_pull_requests
+
+The GitHub pull requests that mention an issue, shown under its title (model: `pullRequests`, by issue id, in the
+store; docs/github-app.md): `workspace_id`, `issue_id`, `pull_request_id` (GitHub's number for the pull request, as
+text), `repo` (`owner/name`), `number`, `title` (up to 300 characters), `url`, `state` (`open`, `draft`, `merged` or
+`closed`), `author_id` (the member who opened it; set null if their profile goes), `github_updated_at` (GitHub's time
+for this state), `created_at`, `changed_at`. Key: `issue_id` and `pull_request_id`. Members read them; **only
+`github_apply` writes them**, so there is no write grant and no other policy. A row is kept only when the pull
+request's author is a member with GitHub (the same rule as moving issues). An older delivery never replaces a newer
+state, and a pull request that no longer mentions an issue (a ref taken out of its title) leaves it, unless the issue
+is archived. Broadcast on `ws:`, leaves deletion notes, read with the issue (open or archived) it belongs to.
 
 ### comments
 
@@ -238,7 +250,7 @@ old and new reference; `archived` or `restored` is `true`. `src/data/history.ts`
 keys: `{"id": "…"}` or `{"issue_id": "…", "label_id": "…"}`), `deleted_at`. Written by the `forget` trigger, cascades
 included, so a browser that catches up drops them too, but only for the tables `private.wiring` marks with
 `forget = true`: workspace members, teams, team members, labels, projects, project teams, issues, issue labels,
-followers, comments and views, plus profiles of guests (a profile with an account belongs to no workspace, so it
+followers, pull requests, comments and views, plus profiles of guests (a profile with an account belongs to no workspace, so it
 leaves none). Workspaces, invites, inbox notes and read marks leave none; a browser compares its inbox notes instead.
 Nothing is noted while the whole workspace is going. Kept 45 days.
 
@@ -339,7 +351,7 @@ are and puts everything else in our own words.
 | `guest_emails(workspace)` | admins | The workspace's guests' emails. |
 | `import_rows(workspace, table, rows)` | admins | Up to 1000 rows of one table, inserted or updated quietly (below). |
 | `github_lookup(repository_id, repo, author, refs)` | the service role only (the Edge Function `github-webhook`) | For each workspace that connected the repository: the author's profile if they are a member there now (by `github_id`), the members' logins, and the issues the refs name (by number or an old number, not archived) with their followers and comments. |
-| `github_apply(connection, repository_id, repo, actor, via, moves, notes, event)` | the service role only | Moves the issues as `actor` (a member now), only from the statuses each move allows, adds the notes for the issues that moved, and records the repository's number, name and `last_event`. Without an actor it only records. |
+| `github_apply(connection, repository_id, repo, actor, via, moves, notes, event, pull)` | the service role only | Moves the issues as `actor` (a member now), only from the statuses each move allows, adds the notes for the issues that moved, and records the repository's number, name and `last_event`. `pull` (`{"id", "repo", "number", "title", "url", "state", "updated_at", "issues": [ids]}`, optional) keeps the pull request on those issues in `issue_pull_requests` and takes it off the ones it no longer mentions. Without an `event` (a pull request event that moves nothing) `last_event` stays as it was. Without an actor it only records the repository. |
 
 `import_rows` takes `profiles` (guests), `teams`, `team_members`, `labels`, `projects`, `project_teams`, `issues`,
 `issue_labels`, `issue_followers`, `comments` and `views`, with the columns `private.import_spec` lists. Whatever the
@@ -403,7 +415,7 @@ let them add, change and delete them, except:
 - workspace_members: admins and owners change roles and remove people;
 - invites and github_repos: admins and owners only;
 - profiles: see the profiles table;
-- issue_events, issue_numbers, deletions: read only.
+- issue_events, issue_numbers, deletions, issue_pull_requests: read only.
 
 On top of that, **column grants** list what people may write; everything else is filled in by the database
 (`changed_at`, numbers, authors, times, `linear_id`). For example, issues take `title`, `description`, `status`,

@@ -283,6 +283,11 @@ name with a link, the broadcast reaches open browsers and `c_check_note` checks 
 and nothing moves for authors who aren't members with GitHub linked. `ensure_profile` fills `github_id` from the
 GitHub sign-in way when someone adds GitHub later.
 
+The same call keeps the pull request itself on the issues it mentions (`issue_pull_requests`), also for events that
+move nothing (a draft opened, closed without merging, renamed). Those rows come to browsers like any other shared
+row (broadcast on `ws:`, read with their issue, kept in the read cache), and the issue page lists them under the
+title (`src/features/issues/PullRequests.tsx`), with their state: Open, Draft, Merged or Closed.
+
 ## Archive
 
 Archiving sets `issues.archived_at` (and `archived_by`): the issue stays in the same table, with its comments.

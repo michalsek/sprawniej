@@ -319,10 +319,15 @@ title or its description. One pull request can move several issues. An issue tha
 its old number as well. Nothing moves backwards: an issue that is already Done, Canceled or a Duplicate stays as it
 is, and so does an archived one. A pull request closed without merging, or still a draft, moves nothing.
 
+The issue also lists its pull requests under its title, each with how it stands: **Open**, **Draft**, **Merged** or
+**Closed**. Click one to open it on GitHub. The list changes as soon as something happens on GitHub, including for
+drafts and pull requests closed without merging, which don't move the issue. Taking the issue's number out of a pull
+request's title or description takes it off the list.
+
 The change is made as the person who opened the pull request, so the issue's history says who and links to the pull
 request ("Ana moved it from In Progress to In Review · pull request #12"), and everyone following the issue gets a
 note in their Inbox. This only works for **people in the workspace who added GitHub as a way to sign in**
-(Settings › Your account): pull requests by anyone else move nothing. **Settings › GitHub** tells you whether yours
+(Settings › Your account): pull requests by anyone else move nothing and don't show on the issue. **Settings › GitHub** tells you whether yours
 count.
 
 **Connecting a repository** (owners and admins): **Settings › GitHub › Connect a repository**, then type it as

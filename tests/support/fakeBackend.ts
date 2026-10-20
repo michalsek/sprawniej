@@ -28,6 +28,7 @@ const slice = (s: DataState): StoreSlice => ({
   projects: s.projects,
   views: s.views,
   comments: s.comments,
+  pullRequests: s.pullRequests,
   inbox: s.inbox,
   readState: s.readState,
 })

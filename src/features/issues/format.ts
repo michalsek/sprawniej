@@ -44,3 +44,7 @@ export function timeAgo(iso: string, now = new Date()): string {
   if (toDay(new Date(iso)) === addDays(-1, now)) return 'yesterday'
   return shortDate(iso, now)
 }
+
+/** what each state of a pull request is called on the issue page */
+export const pullStateName = (state: 'open' | 'draft' | 'merged' | 'closed'): string =>
+  ({ open: 'Open', draft: 'Draft', merged: 'Merged', closed: 'Closed' })[state]

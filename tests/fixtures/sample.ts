@@ -167,6 +167,7 @@ export function sampleData(): DataState {
         { id: 'c2', issue: issues[0].id, author: 'ania-k', createdAt: at(2), body: 'Thanks! Using them now.' },
       ],
     },
+    pullRequests: {},
     inbox: [
       { id: 'n1', type: 'assigned', issue: issues[6].id, actor: 'ania-k', at: at(1) },
       { id: 'n2', type: 'mentioned', issue: issues[0].id, actor: 'zosia', at: at(3), comment: 'c1' },

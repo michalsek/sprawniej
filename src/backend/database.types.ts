@@ -437,6 +437,66 @@ export type Database = {
           },
         ]
       }
+      issue_pull_requests: {
+        Row: {
+          author_id: string | null
+          changed_at: string
+          created_at: string
+          github_updated_at: string
+          issue_id: string
+          number: number
+          pull_request_id: string
+          repo: string
+          state: string
+          title: string
+          url: string
+          workspace_id: string
+        }
+        Insert: {
+          author_id?: string | null
+          changed_at?: string
+          created_at?: string
+          github_updated_at: string
+          issue_id: string
+          number: number
+          pull_request_id: string
+          repo: string
+          state: string
+          title?: string
+          url: string
+          workspace_id: string
+        }
+        Update: {
+          author_id?: string | null
+          changed_at?: string
+          created_at?: string
+          github_updated_at?: string
+          issue_id?: string
+          number?: number
+          pull_request_id?: string
+          repo?: string
+          state?: string
+          title?: string
+          url?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "issue_pull_requests_author_id_fkey"
+            columns: ["author_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "issue_pull_requests_workspace_id_issue_id_fkey"
+            columns: ["workspace_id", "issue_id"]
+            isOneToOne: false
+            referencedRelation: "issues"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
       issues: {
         Row: {
           archived_at: string | null
@@ -1105,6 +1165,7 @@ export type Database = {
           p_event: Json
           p_moves: Json
           p_notes: Json
+          p_pull?: Json
           p_repo: string
           p_repository_id: number
           p_via: Json

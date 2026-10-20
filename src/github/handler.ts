@@ -4,7 +4,7 @@
  * `fetch`, so tests hand it a pretend one (tests/github.test.ts). server.ts starts it in Supabase.
  */
 import { ulid } from 'ulid'
-import { findRefs, movesFor, moveFor, notesFor, signatureOk, type Lookup } from './webhook'
+import { findRefs, movesFor, moveFor, notesFor, pullState, signatureOk, SHOWN_ACTIONS, type Lookup } from './webhook'
 
 export interface Env {
   /** the webhook secret GitHub signs with (`supabase secrets set GITHUB_WEBHOOK_SECRET=…`) */
@@ -24,6 +24,7 @@ const json = (status: number, body: unknown) =>
 interface Payload {
   action?: string
   pull_request?: {
+    id?: number
     number?: number
     html_url?: string
     title?: string | null
@@ -31,6 +32,7 @@ interface Payload {
     draft?: boolean
     merged?: boolean
     state?: string
+    updated_at?: string
     user?: { id?: number; login?: string }
     head?: { ref?: string }
   }
@@ -64,8 +66,11 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   const repo = p.repository
   if (!pr || !repo?.id || !repo.full_name || !pr.user?.id) return json(400, { error: 'Not a pull request event.' })
 
-  const move = moveFor({ action: p.action ?? '', draft: pr.draft, merged: pr.merged, state: pr.state, changes: p.changes })
-  if (!move) return json(200, { moved: [], action: p.action })
+  const action = p.action ?? ''
+  const move = moveFor({ action, draft: pr.draft, merged: pr.merged, state: pr.state, changes: p.changes })
+  // labels, reviews, new commits and the rest change neither the issues nor how the pull request shows on them
+  const shown = SHOWN_ACTIONS.includes(action) && !!pr.id && !!pr.number && !!pr.html_url
+  if (!move && !shown) return json(200, { moved: [], action })
   const refs = findRefs({ branch: pr.head?.ref, title: pr.title, body: pr.body })
 
   const call = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => {
@@ -85,7 +90,9 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   })
   const moved: string[] = []
   for (const w of found) {
-    const event = {
+    // nothing moves and nothing shows for an author who isn't a member here
+    if (!move && !w.actor) continue
+    const event = move && {
       number: pr.number,
       url: pr.html_url,
       title: (pr.title ?? '').slice(0, 200),
@@ -94,8 +101,8 @@ export async function handle(req: Request, env: Env): Promise<Response> {
       refs,
       ...(!w.actor && { skipped: 'author' }),
     }
-    const moves = w.actor ? movesFor(w.issues, refs, move) : []
-    const notes = w.actor
+    const moves = move && w.actor ? movesFor(w.issues, refs, move) : []
+    const notes = move && w.actor
       ? w.issues
           .filter((i) => moves.some((m) => m.issue === i.id))
           .flatMap((i) => notesFor(i, move.to, w.actor ?? '', w.people).map((n) => ({ id: ulid(), ...n })))
@@ -108,7 +115,20 @@ export async function handle(req: Request, env: Env): Promise<Response> {
       p_via: { pullRequest: { repo: repo.full_name, number: pr.number, url: pr.html_url } },
       p_moves: moves,
       p_notes: notes,
-      p_event: event,
+      // without a move the connection keeps its last one, for Settings
+      p_event: event || null,
+      p_pull: shown && w.actor
+        ? {
+            id: String(pr.id),
+            repo: repo.full_name,
+            number: pr.number,
+            title: (pr.title ?? '').slice(0, 300),
+            url: pr.html_url,
+            state: pullState(pr),
+            updated_at: pr.updated_at ?? new Date().toISOString(),
+            issues: w.issues.map((i) => i.id),
+          }
+        : null,
     })
     moved.push(...r.moved)
   }

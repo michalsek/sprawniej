@@ -40,8 +40,8 @@ export const afterKey = (table: LiveTable, last: Loose): string => after(KEYS[ta
 
 const fetched = (table: LiveTable, rows: readonly Loose[], keys?: Record<string, string>[]): Incoming => ({ from: 'fetch', table, rows, ...(keys && { keys }) })
 
-/** an issue's labels, followers and comments, read through their issue (to tell open issues from archived ones) */
-const ISSUE_PARTS = ['issue_labels', 'issue_followers', 'comments'] as const
+/** an issue's labels, followers, comments and pull requests, read through their issue (to tell open issues from archived ones) */
+const ISSUE_PARTS = ['issue_labels', 'issue_followers', 'comments', 'issue_pull_requests'] as const
 type IssuePart = (typeof ISSUE_PARTS)[number]
 const WITH_ISSUE = '*, issues!inner(archived_at)'
 const dropIssue = (rows: Loose[]): Loose[] => rows.map(({ issues: _issues, ...row }) => row)

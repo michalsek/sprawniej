@@ -30,6 +30,8 @@ export interface Mirror {
   comments: Rec<Rec<Row<'comments'>>>
   /** comment id → issue_id (an update or delete carries only the id) */
   commentIssue: Rec<string>
+  /** issue_id → pull_request_id → row */
+  issue_pull_requests: Rec<Rec<Row<'issue_pull_requests'>>>
   views: Rec<Row<'views'>>
   inbox: Rec<Row<'inbox'>>
   /** by keyString */
@@ -50,6 +52,7 @@ export const emptyMirror = (): Mirror => ({
   issue_followers: {},
   comments: {},
   commentIssue: {},
+  issue_pull_requests: {},
   views: {},
   inbox: {},
   read_state: {},
@@ -62,6 +65,7 @@ export const GROUPED = {
   issue_labels: ['issue_id', 'label_id'],
   issue_followers: ['issue_id', 'profile_id'],
   comments: ['issue_id', 'id'],
+  issue_pull_requests: ['issue_id', 'pull_request_id'],
 } as const
 export type Grouped = keyof typeof GROUPED
 export const isGrouped = (t: LiveTable): t is Grouped => t in GROUPED

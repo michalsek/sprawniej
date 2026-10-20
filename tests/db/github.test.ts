@@ -16,6 +16,7 @@ import {
   RUN,
   ownerSql,
   signUp,
+  listen,
   ulid,
   type Someone,
   type World,
@@ -57,12 +58,13 @@ const apply = async (o: {
   moves?: unknown[]
   notes?: unknown[]
   event?: unknown
+  pull?: unknown
 }) =>
   (
     await asService<{ r: { moved: string[] } }>(
       `select public.github_apply(${lit(o.connection)}, ${o.repositoryId ?? 'null'}, ${o.repo ? lit(o.repo) : 'null'}, ` +
         `${o.actor ? `${lit(o.actor)}::uuid` : 'null'}, ${lit(o.via ?? null)}::jsonb, ${lit(o.moves ?? [])}::jsonb, ` +
-        `${lit(o.notes ?? [])}::jsonb, ${lit(o.event ?? {})}::jsonb) as r`,
+        `${lit(o.notes ?? [])}::jsonb, ${o.event === null ? 'null' : lit(o.event ?? {})}::jsonb, ${o.pull ? `${lit(o.pull)}::jsonb` : 'null'}) as r`,
     )
   )[0].r
 
@@ -206,6 +208,66 @@ describe.skipIf(!enabled)('GitHub', () => {
 
     // an actor who isn't a member is refused
     await expect(apply({ connection: conn.id, actor: w.cy.profileId, moves })).rejects.toThrow(/isn.t in this workspace/)
+  })
+
+  test('the pull requests that mention an issue are kept, live, and only members read them', async () => {
+    const conn = await ok(ana.db.from('github_repos').insert({ workspace_id: ws, repo: `${repo}-prs` }).select('id').single())
+    const one = await newIssue(ana, ws, eng, { title: 'PR one' })
+    const two = await newIssue(ana, ws, eng, { title: 'PR two' })
+    const heard = await listen(ana, `ws:${ws}`)
+    const id = String(githubId())
+    const pull = (state: string, at: string, issues: string[], title = 'Fix login') => ({
+      id,
+      repo: `${repo}-prs`,
+      number: 21,
+      title,
+      url: `https://github.com/${repo}-prs/pull/21`,
+      state,
+      updated_at: at,
+      issues,
+    })
+    const rows = async () =>
+      (await ok(bob.db.from('issue_pull_requests').select('issue_id, state, title, author_id, number').eq('pull_request_id', id))).sort((a, b) =>
+        a.issue_id < b.issue_id ? -1 : 1,
+      )
+
+    // a draft moves nothing and leaves Settings as it was
+    await apply({ connection: conn.id, actor: bob.profileId, event: null, pull: pull('draft', '2026-10-20T10:00:00Z', [one.id, two.id]) })
+    expect(await rows()).toEqual(
+      [one.id, two.id].sort().map((issue_id) => ({ issue_id, state: 'draft', title: 'Fix login', author_id: bob.profileId, number: 21 })),
+    )
+    expect((await ok(ana.db.from('github_repos').select('last_event').eq('id', conn.id).single())).last_event).toBeNull()
+    expect(await heard.waitFor((m) => m.table === 'issue_pull_requests' && m.op === 'INSERT' && m.row?.issue_id === one.id)).toBeDefined()
+
+    // nobody signed in writes them, and people outside the workspace don't see them
+    await expectError(ana.db.from('issue_pull_requests').update({ state: 'merged' }).eq('pull_request_id', id))
+    await expectError(
+      ana.db.from('issue_pull_requests').insert({
+        workspace_id: ws, issue_id: one.id, pull_request_id: '1', repo, number: 1, url: 'https://github.com', state: 'open', github_updated_at: '2026-10-20T10:00:00Z',
+      }),
+    )
+    await expectError(ana.db.from('issue_pull_requests').delete().eq('pull_request_id', id))
+    expect(await ok(w.cy.db.from('issue_pull_requests').select().eq('pull_request_id', id))).toEqual([])
+
+    // merged, and the second issue taken out of the title
+    await apply({ connection: conn.id, actor: bob.profileId, event: { number: 21 }, pull: pull('merged', '2026-10-20T11:00:00Z', [one.id], 'Fix login for real') })
+    expect(await rows()).toEqual([{ issue_id: one.id, state: 'merged', title: 'Fix login for real', author_id: bob.profileId, number: 21 }])
+    expect(await heard.waitFor((m) => m.table === 'issue_pull_requests' && m.op === 'UPDATE' && m.row?.state === 'merged')).toBeDefined()
+    const notes = await ok(ana.db.from('deletions').select('row_key').eq('workspace_id', ws).eq('table_name', 'issue_pull_requests'))
+    expect(notes.map((n) => n.row_key)).toContainEqual({ issue_id: two.id, pull_request_id: id })
+
+    // a delivery that comes late changes nothing
+    await apply({ connection: conn.id, actor: bob.profileId, event: null, pull: pull('open', '2026-10-20T10:30:00Z', [one.id, two.id]) })
+    expect(await rows()).toEqual([{ issue_id: one.id, state: 'merged', title: 'Fix login for real', author_id: bob.profileId, number: 21 }])
+
+    // without a member as the author nothing is kept
+    const other = String(githubId())
+    await apply({ connection: conn.id, actor: null, event: null, pull: { ...pull('open', '2026-10-20T12:00:00Z', [two.id]), id: other } })
+    expect(await ok(ana.db.from('issue_pull_requests').select().eq('pull_request_id', other))).toEqual([])
+
+    // deleting the issue takes its pull requests with it
+    await ok(ana.db.from('issues').delete().eq('id', one.id))
+    expect(await rows()).toEqual([])
   })
 
   test('adding GitHub as a way to sign in fills the GitHub id', async () => {

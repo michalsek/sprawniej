@@ -630,6 +630,72 @@ describe('your own changes, edge cases', () => {
   })
 })
 
+const pullRow = (issue: string, id: string, more: Partial<Row<'issue_pull_requests'>> = {}): Row<'issue_pull_requests'> => ({
+  workspace_id: WS,
+  issue_id: issue,
+  pull_request_id: id,
+  repo: 'acme/web',
+  number: 12,
+  title: 'Fix login',
+  url: 'https://github.com/acme/web/pull/12',
+  state: 'open',
+  author_id: 'p-bob',
+  github_updated_at: T(30),
+  created_at: T(30),
+  changed_at: T(30),
+  ...more,
+})
+
+describe('pull requests', () => {
+  test('they show on their issue, by repository and number, with the author by login', () => {
+    const w = open()
+    const before = w.data
+    const r = step(w, {
+      from: 'fetch',
+      table: 'issue_pull_requests',
+      rows: [pullRow(I1, '900', { repo: 'acme/web', number: 30 }), pullRow(I1, '800', { repo: 'acme/api', number: 40 }), pullRow(I1, '700', { number: 5 })],
+    })
+    expect(Object.keys(r.patch)).toEqual(['pullRequests'])
+    expect(w.data.pullRequests[I1].map((p) => `${p.repo}#${p.number}`)).toEqual(['acme/api#40', 'acme/web#5', 'acme/web#30'])
+    expect(w.data.pullRequests[I1][0]).toEqual({
+      id: '800',
+      repo: 'acme/api',
+      number: 40,
+      title: 'Fix login',
+      url: 'https://github.com/acme/web/pull/12',
+      state: 'open',
+      author: 'bob',
+      updatedAt: Z(30),
+    })
+    expect(w.data.pullRequests[I2]).toBeUndefined()
+    expect(w.data.issues).toBe(before.issues)
+  })
+
+  test('a merge changes its state live, and one taken off the issue goes', () => {
+    const w = open()
+    step(w, { from: 'fetch', table: 'issue_pull_requests', rows: [pullRow(I1, '900'), pullRow(I1, '901', { number: 13 })] })
+    const other = w.data.pullRequests[I1][1]
+    step(w, msg('issue_pull_requests', 'UPDATE', { issue_id: I1, pull_request_id: '900', state: 'merged', changed_at: T(31) }))
+    expect(w.data.pullRequests[I1].map((p) => p.state)).toEqual(['merged', 'open'])
+    expect(w.data.pullRequests[I1][1]).toBe(other)
+    step(w, msg('issue_pull_requests', 'DELETE', { issue_id: I1, pull_request_id: '900' }))
+    expect(w.data.pullRequests[I1].map((p) => p.number)).toEqual([13])
+    step(w, { from: 'deletions', rows: [deletion('issue_pull_requests', { issue_id: I1, pull_request_id: '901' }, 40)] })
+    expect(w.data.pullRequests[I1]).toBeUndefined()
+  })
+
+  test('a deleted issue takes its pull requests along, and an archived one keeps them', () => {
+    const w = open()
+    step(w, { from: 'fetch', table: 'issue_pull_requests', rows: [pullRow(I1, '900'), pullRow(I2, '900')] })
+    step(w, msg('issues', 'UPDATE', { id: I2, archived_at: T(40), archived_by: ME, changed_at: T(40) }))
+    expect(w.data.archive[I2]).toBeDefined()
+    expect(w.data.pullRequests[I2]).toHaveLength(1)
+    step(w, msg('issues', 'DELETE', { id: I1 }))
+    expect(w.data.pullRequests[I1]).toBeUndefined()
+    expect(step(w, { from: 'fetch', table: 'issue_pull_requests', rows: [pullRow(I1, '900')] }).patch).toEqual({})
+  })
+})
+
 describe('the same inputs twice', () => {
   test('applying them again changes nothing', () => {
     let seed = 12345

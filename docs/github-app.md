@@ -4,7 +4,7 @@ When a pull request that mentions an issue (`ENG-12`) opens or becomes ready for
 In Review. When it is merged, the issue moves to Done. The change is written as the person who opened the pull
 request, so the issue's history and their teammates' Inbox show them, with a link to the pull request.
 
-Status: **agreed and built** (2.2.0). The user agreed section 6 on 2026-10-20: the author rule, GitHub sign-in is
+Status: **agreed and built** (2.2.0; pull requests on the issue page in 2.3.0). The user agreed section 6 on 2026-10-20: the author rule, GitHub sign-in is
 on, the wording, pull request links on the issue page later. The steps for a project are in docs/supabase-setup.md
 (GitHub: pull requests move issues). The team's App is **Gitniej (Sprawniej)**, https://github.com/apps/gitniej-sprawniej
 (`VITE_GITHUB_APP_URL`).
@@ -184,6 +184,25 @@ with `fetch` and the REST API, so `@supabase/supabase-js` stays inside `src/back
 3. **Words.** Settings › GitHub, the history link and the guide's GitHub part may say "pull request", "merged" and
    "repository" (CLAUDE.md, Writing).
 4. **Links on the issue page** (an `issue_pull_requests` table: the pull requests that mention an issue, shown under
-   its title, live) are left for later. They need a new shared table with realtime, the read cache and a new piece of
-   the issue page, about as much work again as the rest; the history link already says why an issue moved.
+   its title, live) were left for later, and came in 2.3.0 (7 below).
 5. **Release:** 2.2.0 (MINOR, after sign-up codes took 2.1.0). The migration only adds a table and replaces two functions; older apps keep working.
+
+## 7. Pull requests on the issue page (2.3.0)
+
+Under an issue's title: each pull request that mentions it, with its state (Open, Draft, Merged, Closed) in the
+colours of the statuses it moves issues to, linking to GitHub. It changes as soon as GitHub tells us.
+
+- **Table** `issue_pull_requests` (migrations `20261020140000_issue_pull_requests.sql` and
+  `20261020150000_pull_request_order.sql`, docs/data-format.md): one row per issue and pull request, broadcast on
+  `ws:`, members read only. Written only by `github_apply`, which takes a new last argument `pull`.
+- **The webhook** now reads `opened`, `reopened`, `edited`, `ready_for_review`, `converted_to_draft` and `closed`
+  even when nothing moves, and sends the pull request with the issues it mentions. An event that moves nothing sends
+  no `event`, so Settings goes on showing the last move. Other actions (new commits, labels, reviews) still read
+  nothing.
+- **The author rule holds**: a pull request is kept only when its author is a member with GitHub, so a workspace that
+  connects someone else's repository learns nothing.
+- **Order**: GitHub may deliver late. A row keeps GitHub's `updated_at`; an older delivery never replaces a newer state
+  or puts a pull request back on an issue a newer one took it off. (One gap stays: if a newer delivery took it off
+  every issue, a late older one can put it back until the next event.)
+- **A ref taken out** of the title or description takes the pull request off that issue; archived issues keep theirs.
+

@@ -1,4 +1,7 @@
-/** Status and priority icons: the same shapes everywhere, so people recognise them at a glance. */
+/** Status, priority and pull request icons: the same shapes everywhere, so people recognise them at a glance. */
+import { GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from 'lucide-react'
+import type { PullRequest } from '@/model/schema'
+import { pullStateName } from './format'
 import type { Priority, StatusId } from '@/model/status'
 import { statusOf } from '@/model/status'
 import { cn } from '@/lib/utils'
@@ -63,4 +66,17 @@ export function PriorityIcon({ priority, className }: { priority: Priority; clas
       ))}
     </svg>
   )
+}
+
+const PULL_STATE = {
+  open: { Icon: GitPullRequest, color: 'var(--status-review)' },
+  draft: { Icon: GitPullRequestDraft, color: 'var(--status-backlog)' },
+  merged: { Icon: GitMerge, color: 'var(--status-done)' },
+  closed: { Icon: GitPullRequestClosed, color: 'var(--status-canceled)' },
+} as const
+
+/** a pull request's state, in the colours of the statuses it moves issues to: open is In Review's, merged is Done's */
+export function PullRequestIcon({ state, className }: { state: PullRequest['state']; className?: string }) {
+  const { Icon, color } = PULL_STATE[state]
+  return <Icon className={cn('size-3.5 shrink-0', className)} style={{ color }} aria-label={pullStateName(state)} />
 }

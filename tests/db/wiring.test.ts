@@ -13,8 +13,10 @@ import {
   newTeam,
   newWorkspace,
   ok,
+  ownerSql,
   RUN,
   type TableName,
+  lit,
   ulid,
   type World,
 } from './support'
@@ -100,6 +102,24 @@ describe.skipIf(!enabled)('every shared table is wired the same way', () => {
       expect(await heard.waitFor(about(c.table, 'DELETE', key))).toBeDefined()
     })
   }
+
+  // written only by github_apply (the GitHub webhook), so this writes it as the database's owner
+  test('issue_pull_requests', async () => {
+    const key = { issue_id: await issueId(), pull_request_id: String(Date.now()) }
+    const where = `issue_id = ${lit(key.issue_id)} and pull_request_id = ${lit(key.pull_request_id)}`
+    await ownerSql(
+      `insert into public.issue_pull_requests (workspace_id, issue_id, pull_request_id, repo, number, title, url, state, github_updated_at)
+       values (${lit(w.ws)}, ${lit(key.issue_id)}, ${lit(key.pull_request_id)}, 'acme/web', 7, 'Wired', 'https://github.com/acme/web/pull/7', 'open', now())`,
+    )
+    const first = await changedAt('issue_pull_requests', key)
+    await ownerSql(`update public.issue_pull_requests set state = 'merged' where ${where}`)
+    expect((await changedAt('issue_pull_requests', key)) > first).toBe(true)
+    await ownerSql(`delete from public.issue_pull_requests where ${where}`)
+
+    const notes = await ok(w.ana.db.from('deletions').select('row_key').eq('workspace_id', w.ws).eq('table_name', 'issue_pull_requests'))
+    expect(notes.map((n) => n.row_key)).toContainEqual(key)
+    for (const op of ['INSERT', 'UPDATE', 'DELETE']) expect(await heard.waitFor(about('issue_pull_requests', op, key))).toBeDefined()
+  })
 
   test('workspaces, members and read marks', async () => {
     const mine = await listen(w.ana, `me:${w.ana.profileId}`)

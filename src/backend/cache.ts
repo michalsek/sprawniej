@@ -20,7 +20,7 @@ export { MAX_AGE_DAYS } from './rows'
 /** bump when CacheBody or CacheMeta change shape */
 export const CACHE_FORMAT = 1
 /** the newest migration: a copy made for another database layout is never read (a test checks it) */
-export const SCHEMA_ID = '20261020130000'
+export const SCHEMA_ID = '20261020150000'
 /** a copy longer than this (JSON characters) leaves the archive out, and if it's still too long it isn't kept */
 export const MAX_CHARS = 20_000_000
 /** workspaces kept per browser */
@@ -93,7 +93,7 @@ export function shrink(rows: CacheBody['rows']): CacheBody['rows'] {
   const archived = new Set((rows.issues ?? []).filter((r) => r.archived_at != null).map((r) => String(r.id)))
   if (!archived.size) return rows
   const out = { ...rows, issues: rows.issues?.filter((r) => !archived.has(String(r.id))) }
-  for (const t of ['issue_labels', 'issue_followers', 'comments'] as const) if (rows[t]) out[t] = rows[t].filter((r) => !archived.has(String(r.issue_id)))
+  for (const t of ['issue_labels', 'issue_followers', 'comments', 'issue_pull_requests'] as const) if (rows[t]) out[t] = rows[t].filter((r) => !archived.has(String(r.issue_id)))
   return out
 }
 

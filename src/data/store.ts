@@ -3,7 +3,7 @@
  * they never change it directly. All changes go through `actions.ts` (see CLAUDE.md, golden rules).
  */
 import { create } from 'zustand'
-import { TEAM_KEY, type ArchivedIssue, type Comment, type InboxItem, type Issue, type Label, type Member, type Person, type Project, type ReadState, type Team, type View, type Workspace } from '@/model/schema'
+import { TEAM_KEY, type ArchivedIssue, type Comment, type InboxItem, type Issue, type Label, type Member, type Person, type Project, type PullRequest, type ReadState, type Team, type View, type Workspace } from '@/model/schema'
 
 export interface DataState {
   workspace: Workspace | null
@@ -22,6 +22,8 @@ export interface DataState {
   views: Record<string, View>
   /** by issue id, oldest first */
   comments: Record<string, Comment[]>
+  /** by issue id (open or archived): the GitHub pull requests that mention it, by repository and number */
+  pullRequests: Record<string, PullRequest[]>
   /** my inbox, newest first */
   inbox: InboxItem[]
   readState: ReadState
@@ -40,6 +42,7 @@ export const EMPTY: DataState = {
   projects: {},
   views: {},
   comments: {},
+  pullRequests: {},
   inbox: [],
   readState: { readUntil: null },
 }

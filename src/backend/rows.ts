@@ -24,6 +24,7 @@ import {
   type Member,
   type Person,
   type Project,
+  type PullRequest,
   type ReadState,
   type Team,
   type View,
@@ -322,6 +323,27 @@ export function rowToInbox(row: Row<'inbox'>, r: Resolve): InboxItem {
     ...(row.status != null && { status: row.status as StatusId }),
     ...(row.read_at != null && { readAt: iso(row.read_at) }),
   }
+}
+
+/** written only by the GitHub webhook, so it has no `extra` */
+export function rowToPullRequest(row: Row<'issue_pull_requests'>, r: Resolve): PullRequest {
+  return {
+    id: row.pull_request_id,
+    repo: row.repo,
+    number: row.number,
+    title: row.title,
+    url: row.url,
+    state: row.state as PullRequest['state'],
+    author: login(row.author_id, r),
+    updatedAt: iso(row.github_updated_at),
+  }
+}
+
+/** an issue's pull requests by repository, then number */
+export function pullRequestsOf(rows: readonly Row<'issue_pull_requests'>[], r: Resolve): PullRequest[] {
+  return rows
+    .map((row) => rowToPullRequest(row, r))
+    .sort((a, b) => (a.repo < b.repo ? -1 : a.repo > b.repo ? 1 : a.number - b.number))
 }
 
 export function rowToReadState(row: Row<'read_state'>): ReadState {

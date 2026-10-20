@@ -18,7 +18,7 @@ export interface Source {
   miss(id: string, table: 'profiles' | 'teams', ref: Ref): void
 }
 
-type RecField = 'people' | 'members' | 'labels' | 'teams' | 'issues' | 'archive' | 'projects' | 'views' | 'comments'
+type RecField = 'people' | 'members' | 'labels' | 'teams' | 'issues' | 'archive' | 'projects' | 'views' | 'comments' | 'pullRequests'
 
 const byTime = (a: Comment, b: Comment) =>
   a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
@@ -101,6 +101,7 @@ export function derive(src: Source, data: StoreSlice, dirty: Dirty, ctx: ApplyCo
       p.set('issues', id, undefined)
       p.set('archive', id, undefined)
       p.set('comments', id, undefined)
+      p.set('pullRequests', id, undefined)
       return
     }
     const r = resolve('issue', id)
@@ -118,6 +119,12 @@ export function derive(src: Source, data: StoreSlice, dirty: Dirty, ctx: ApplyCo
     const result = rows.rowToIssue(row, src.fold('issue_labels', id), src.fold('issue_followers', id), r, list)
     // its team isn't known yet: it shows once the team arrives
     if (!result) return
+    const wasPull = new Map((p.cur('pullRequests')[id] ?? []).map((x) => [x.id, x]))
+    const pulls = rows.pullRequestsOf(src.fold('issue_pull_requests', id), r).map((x) => {
+      const o = wasPull.get(x.id)
+      return o && equal(o, x) ? o : x
+    })
+    p.set('pullRequests', id, pulls.length ? pulls : undefined)
     if (result.archived) {
       p.set('archive', id, result.issue)
       p.set('issues', id, undefined)

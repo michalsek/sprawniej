@@ -30,6 +30,7 @@ import { ArchivedIssuePage } from './ArchivedIssuePage'
 import { Comments } from './Comments'
 import { DueChip, DueDatePicker, EstimateIcon } from './DueDate'
 import { estimateName, shortDate } from './format'
+import { PullRequests } from './PullRequests'
 import { SubIssues } from './SubIssues'
 import { TitleField } from './TitleField'
 import { estimateItems, priorityItems, statusItems, useLabelItems, useParentItems, usePeopleItems, useProjectItems } from './pickers'
@@ -277,6 +278,7 @@ export function IssuePage() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+          <PullRequests issueId={issue.id} />
           {stacked && <div className="mt-4 rounded-lg border px-2 py-2">{properties}</div>}
           <Editor key={issue.id} value={issue.description} onChange={(description) => updateIssue(issue.id, { description })} className="mt-4" />
 

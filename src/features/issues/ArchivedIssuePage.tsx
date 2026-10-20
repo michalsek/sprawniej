@@ -16,6 +16,7 @@ import type { ArchivedIssue } from '@/model/schema'
 import { PRIORITY_NAMES, statusOf } from '@/model/status'
 import { Button } from '@/ui/button'
 import { Comments } from './Comments'
+import { PullRequests } from './PullRequests'
 import { DueChip, EstimateIcon } from './DueDate'
 import { estimateName, shortDate } from './format'
 import { PriorityIcon, StatusIcon } from './icons'
@@ -104,6 +105,7 @@ export function ArchivedIssuePage({ issue }: { issue: ArchivedIssue }) {
             </Button>
           </div>
           <h1 className="text-2xl font-semibold break-words">{issue.title}</h1>
+          <PullRequests issueId={issue.id} />
           {stacked && <div className="mt-4 rounded-lg border px-2 py-2">{properties}</div>}
           {issue.description ? (
             <div className="prose-sprawniej mt-4">

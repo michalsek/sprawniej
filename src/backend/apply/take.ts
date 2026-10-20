@@ -211,6 +211,7 @@ export class Intake {
         break
       case 'issue_labels':
       case 'issue_followers':
+      case 'issue_pull_requests':
         d.add('issue', row.issue_id)
         break
       case 'comments':
@@ -318,7 +319,7 @@ export class Intake {
     this.setGone(k, later(at, stampOf(old)))
     const id = key.id
     if (typeof id !== 'string') return
-    const children: Grouped[] = t === 'issues' ? ['issue_labels', 'issue_followers', 'comments'] : t === 'teams' ? ['team_members'] : t === 'projects' ? ['project_teams'] : []
+    const children: Grouped[] = t === 'issues' ? ['issue_labels', 'issue_followers', 'comments', 'issue_pull_requests'] : t === 'teams' ? ['team_members'] : t === 'projects' ? ['project_teams'] : []
     for (const ct of children) {
       for (const child of this.mirror.dropGroup(ct, id)) {
         const ck = localKey(ct, child)

@@ -249,6 +249,25 @@ export const inboxItemSchema = z
   .loose()
 export type InboxItem = z.infer<typeof inboxItemSchema>
 
+/** a GitHub pull request that mentions an issue (the issue_pull_requests table), kept by the GitHub webhook */
+export const pullRequestSchema = z
+  .object({
+    /** GitHub's number for the pull request */
+    id: z.string(),
+    /** owner/name */
+    repo: z.string(),
+    number: z.number(),
+    title: z.string(),
+    url: z.string(),
+    state: z.enum(['open', 'draft', 'merged', 'closed']),
+    /** who opened it, when they are (or were) in the workspace */
+    author: login.nullable(),
+    /** when it reached this state, by GitHub's clock */
+    updatedAt: iso,
+  })
+  .loose()
+export type PullRequest = z.infer<typeof pullRequestSchema>
+
 /** how far you've read your inbox (the read_state table), changed only by you */
 export const readStateSchema = z
   .object({

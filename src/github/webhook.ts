@@ -84,6 +84,19 @@ export function moveFor(e: PullRequestEvent): Move | null {
   }
 }
 
+// ---------- how it stands (shown on the issue page) ----------
+
+export type PullState = 'open' | 'draft' | 'merged' | 'closed'
+
+/** the pull request events that change what the issue page shows: it opens, closes, is renamed or changes from or to a draft */
+export const SHOWN_ACTIONS = ['opened', 'reopened', 'edited', 'ready_for_review', 'converted_to_draft', 'closed']
+
+export function pullState(pr: { state?: string; draft?: boolean; merged?: boolean }): PullState {
+  if (pr.merged) return 'merged'
+  if (pr.state === 'closed') return 'closed'
+  return pr.draft ? 'draft' : 'open'
+}
+
 // ---------- what the database says (github_lookup) ----------
 
 export interface LookupIssue {
