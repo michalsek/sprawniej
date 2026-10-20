@@ -12,6 +12,7 @@ import {
   newTeam,
   newWorkspace,
   ok,
+  projectInsert,
   type Someone,
   ulid,
   type World,
@@ -29,7 +30,7 @@ describe.skipIf(!enabled)('favourites', () => {
 
   const project = async (who: Someone, ws: string) => {
     const id = ulid()
-    await ok(who.db.from('projects').insert({ id, workspace_id: ws, name: 'Starred' }))
+    await ok(who.db.from('projects').insert(projectInsert({ id, workspace_id: ws, name: 'Starred' })))
     return id
   }
   const view = async (who: Someone, ws: string, team: string | null = null) => {

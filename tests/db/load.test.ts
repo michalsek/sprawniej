@@ -3,7 +3,7 @@ import { applyRows, emptyLive, type Incoming, type LiveState, type StoreSlice } 
 import { Loader, planFetch, sinceMark } from '@/backend/load'
 import { Registry } from '@/backend/registry'
 import { EMPTY } from '@/data/store'
-import { closeChannels, enabled, getWorld, newIssue, newWorkspace, ok, ulid, type World } from './support'
+import { closeChannels, enabled, getWorld, newIssue, newWorkspace, ok, projectInsert, ulid, type World } from './support'
 
 const fresh = (): StoreSlice => ({ ...EMPTY })
 
@@ -113,7 +113,7 @@ describe.skipIf(!enabled)('reading a workspace', () => {
 
   test('your favourites: opening reads them in your order, and their ids page after page', async () => {
     const projects = [ulid(), ulid(), ulid()]
-    await ok(w.ana.db.from('projects').insert(projects.map((id) => ({ id, workspace_id: ws, name: 'Starred' }))))
+    await ok(w.ana.db.from('projects').insert(projects.map((id) => projectInsert({ id, workspace_id: ws, name: 'Starred' }))))
     await ok(
       w.ana.db
         .from('favourites')
