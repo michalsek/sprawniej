@@ -27,7 +27,6 @@ import { saveTheme, useAuth } from '@/backend/auth'
 import {
   connectNotion as addNotion,
   disconnectNotion as removeNotion,
-  getNotion,
   newNotionAddress as replaceNotionAddress,
   setNotionTeam as moveNotionTeam,
 } from '@/backend/notion'
@@ -1115,14 +1114,6 @@ function notionTeam(c: WriteContext, key: string): string {
   return id
 }
 
-/** the workspace's connection, for an admin; throws when there is none */
-async function notionHere(c: WriteContext): Promise<string> {
-  if (!isAdmin(useData.getState())) throw new Error(RULES.notNotion)
-  const n = await getNotion(c.workspaceId)
-  if (!n) throw new Error('Notion isn’t connected.')
-  return n.id
-}
-
 /**
  * Pages sent from Notion become issues in this team (docs/notion.md). Gives the address to paste into Notion's
  * "Send webhook"; it's shown only now. Throws an Error whose message can be shown as it is.
@@ -1133,22 +1124,24 @@ export async function connectNotion(teamKey: string): Promise<{ id: string; addr
   return addNotion(c.workspaceId, notionTeam(c, teamKey))
 }
 
-/** "Replace address": a new one, and the old one stops working at once */
-export async function newNotionAddress(): Promise<string> {
-  const c = openHere()
-  return replaceNotionAddress(await notionHere(c))
+/** "Replace address": a new one for the connection `id`, and the old one stops working at once */
+export async function newNotionAddress(id: string): Promise<string> {
+  openHere()
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notNotion)
+  return replaceNotionAddress(id)
 }
 
-export async function setNotionTeam(teamKey: string): Promise<void> {
+export async function setNotionTeam(id: string, teamKey: string): Promise<void> {
   const c = openHere()
-  const team = notionTeam(c, teamKey)
-  await moveNotionTeam(await notionHere(c), team)
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notNotion)
+  await moveNotionTeam(id, notionTeam(c, teamKey))
 }
 
 /** Pages sent from Notion stop becoming issues; the issues already made stay. */
-export async function disconnectNotion(): Promise<void> {
-  const c = openHere()
-  await removeNotion(await notionHere(c))
+export async function disconnectNotion(id: string): Promise<void> {
+  openHere()
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notNotion)
+  await removeNotion(id)
 }
 
 /** Someone from the Linear import who hadn't joined is this member: their issues, comments and views move over. */

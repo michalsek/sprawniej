@@ -113,11 +113,14 @@ function AddressView({ address, onDone }: { address: string; onDone: () => void 
   )
 }
 
+/** while the address shows, only Done or the close button closes it: a stray click or Escape would lose it */
+const keepOpen = { onInteractOutside: (e: Event) => e.preventDefault(), onEscapeKeyDown: (e: Event) => e.preventDefault() }
+
 /** shows an address made somewhere else (Replace address) */
 function AddressDialog({ address, onDone }: { address: string; onDone: () => void }) {
   return (
     <Dialog open onOpenChange={(o) => !o && onDone()}>
-      <DialogContent className="[overflow-wrap:anywhere] sm:max-w-lg">
+      <DialogContent className="[overflow-wrap:anywhere] sm:max-w-lg" {...keepOpen}>
         <AddressView address={address} onDone={onDone} />
       </DialogContent>
     </Dialog>
@@ -150,7 +153,7 @@ function ConnectDialog({ onDone }: { onDone: (made: boolean) => void }) {
 
   return (
     <Dialog open onOpenChange={(o) => !o && close()}>
-      <DialogContent className="[overflow-wrap:anywhere] sm:max-w-lg">
+      <DialogContent className="[overflow-wrap:anywhere] sm:max-w-lg" {...(address ? keepOpen : {})}>
         {address ? (
           <AddressView address={address} onDone={close} />
         ) : (
@@ -187,45 +190,54 @@ function ConnectDialog({ onDone }: { onDone: (made: boolean) => void }) {
 function Connected({ conn, reload }: { conn: NotionConnection; reload: () => void }) {
   const teams = useData((s) => s.teams)
   const now = useNow()
-  const [moving, setMoving] = useState(false)
+  /** what is on its way: nothing else can be pressed meanwhile */
+  const [busy, setBusy] = useState<'team' | 'replace' | 'disconnect'>()
   const [confirm, setConfirm] = useState<'replace' | 'disconnect'>()
   const [address, setAddress] = useState<string>()
-  const team = conn.teamKey && teams[conn.teamKey] ? conn.teamKey : undefined
+  /** the team just picked, for the connection as it was read then: shown until the connection is read again */
+  const [picked, setPicked] = useState<{ key: string; of: NotionConnection }>()
+  const saved = conn.teamKey && teams[conn.teamKey] ? conn.teamKey : undefined
+  const team = picked?.of === conn ? picked.key : saved
 
-  async function move(key: string) {
+  async function run(what: NonNullable<typeof busy>, work: () => Promise<void>, fallback: string) {
+    setBusy(what)
+    try {
+      await work()
+    } catch (e) {
+      toast(words(e, fallback))
+      // the picker goes back to the team that's saved
+      setPicked(undefined)
+    } finally {
+      setBusy(undefined)
+      reload()
+    }
+  }
+
+  const move = (key: string) => {
     if (key === team) return
-    setMoving(true)
-    try {
-      await setNotionTeam(key)
-      toast(`Pages from Notion now go to ${teams[key]?.name ?? key}.`)
-    } catch (e) {
-      toast(words(e, "We couldn't change the team. Try again in a moment."))
-    } finally {
-      setMoving(false)
-      reload()
-    }
+    setPicked({ key, of: conn })
+    void run(
+      'team',
+      async () => {
+        await setNotionTeam(conn.id, key)
+        toast(`Pages from Notion now go to ${teams[key]?.name ?? key}.`)
+      },
+      "We couldn't change the team. Try again in a moment.",
+    )
   }
 
-  async function replace() {
-    try {
-      setAddress(await newNotionAddress())
-    } catch (e) {
-      toast(words(e, "We couldn't make a new address. Try again in a moment."))
-    } finally {
-      reload()
-    }
-  }
+  const replace = () =>
+    run('replace', async () => setAddress(await newNotionAddress(conn.id)), "We couldn't make a new address. Try again in a moment.")
 
-  async function disconnect() {
-    try {
-      await disconnectNotion()
-      toast("Notion disconnected. Pages sent from it don't become issues any more.")
-    } catch (e) {
-      toast(words(e, "We couldn't disconnect Notion. Try again in a moment."))
-    } finally {
-      reload()
-    }
-  }
+  const disconnect = () =>
+    run(
+      'disconnect',
+      async () => {
+        await disconnectNotion(conn.id)
+        toast("Notion disconnected. Pages sent from it don't become issues any more.")
+      },
+      "We couldn't disconnect Notion. Try again in a moment.",
+    )
 
   return (
     <div className="flex flex-col gap-5">
@@ -233,7 +245,7 @@ function Connected({ conn, reload }: { conn: NotionConnection; reload: () => voi
         <label htmlFor="notion-team" className="mb-1.5 block text-sm font-medium">
           Pages become issues in
         </label>
-        <TeamPicker id="notion-team" value={team} onChange={(k) => void move(k)} disabled={moving} />
+        <TeamPicker id="notion-team" value={team} onChange={move} disabled={!!busy} />
         {!team && <Problem>The team for Notion pages was deleted. Pick another.</Problem>}
       </div>
       <div className="flex items-start gap-3">
@@ -248,11 +260,11 @@ function Connected({ conn, reload }: { conn: NotionConnection; reload: () => voi
         </p>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => setConfirm('replace')}>
-          <RefreshCw /> Replace address
+        <Button variant="outline" disabled={!!busy} onClick={() => setConfirm('replace')}>
+          {busy === 'replace' ? <Loader2 className="animate-spin" /> : <RefreshCw />} Replace address
         </Button>
-        <Button variant="ghost" onClick={() => setConfirm('disconnect')}>
-          <Unplug /> Disconnect
+        <Button variant="ghost" disabled={!!busy} onClick={() => setConfirm('disconnect')}>
+          {busy === 'disconnect' ? <Loader2 className="animate-spin" /> : <Unplug />} Disconnect
         </Button>
       </div>
       <ConfirmDialog
@@ -316,10 +328,9 @@ function Connection({ ws }: { ws: string | null }) {
         <ConnectDialog
           onDone={(made) => {
             setConnecting(false)
-            if (made) {
-              toast('Notion connected. The next page sent to that address becomes an issue.')
-              reload()
-            }
+            if (made) toast('Notion connected. The next page sent to that address becomes an issue.')
+            // also when it wasn't: another admin may have connected meanwhile
+            reload()
           }}
         />
       )}

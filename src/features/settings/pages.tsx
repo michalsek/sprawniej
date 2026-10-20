@@ -167,7 +167,7 @@ export const PAGES: SettingsPage[] = [
     group: 'workspace',
     path: '/settings/workspace/notion',
     title: 'Notion',
-    description: 'A button or an automation in Notion sends a page here, and it becomes an issue in the team you pick.',
+    description: 'A button or an automation in Notion sends a page here, and it becomes an issue.',
     icon: NotebookText,
     who: 'everyone',
     component: NotionSettings,
