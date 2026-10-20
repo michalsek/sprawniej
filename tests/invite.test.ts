@@ -49,16 +49,17 @@ describe('the link to send', () => {
 
 describe('the ready-to-send message', () => {
   const url = `https://x.test/#/join/${TOKEN}`
-  test('greets someone from Linear by their first name', () => {
-    const m = inviteMessage(url, 'Acme', 'Jan Kowalski')
-    expect(m.startsWith('Hi Jan! ')).toBe(true)
-    expect(m).toContain(url)
-    expect(m).toContain('join Acme')
-    // no em dash (CLAUDE.md, writing)
-    expect(m).not.toContain('\u2014')
+  // noon here, so it is the same day in this computer's time zone
+  const expiresAt = new Date(2026, 9, 31, 12).toISOString()
+  test('greets someone from Linear by their first name; a link for one person is just for them', () => {
+    expect(inviteMessage(url, 'Acme', { forName: 'Jan Kowalski', expiresAt })).toBe(
+      `Hi Jan! We plan and track our work in Sprawniej. Open this link to join Acme. It's just for you and works until Saturday 31 October:\n${url}`,
+    )
   })
-  test('or anyone', () => {
-    expect(inviteMessage(url, 'Acme').startsWith('Hi! We plan')).toBe(true)
+  test('a link for several people or anyone is not', () => {
+    expect(inviteMessage(url, 'Acme', { expiresAt, shared: true })).toBe(
+      `Hi! We plan and track our work in Sprawniej. Open this link to join Acme. It works until Saturday 31 October:\n${url}`,
+    )
   })
 })
 
@@ -83,6 +84,9 @@ describe('which join screen', () => {
     expect(joinStage({ ...base, info: null })).toBe('unknown')
     expect(joinStage({ ...base, info: info('used') })).toBe('used')
     expect(joinStage({ ...base, info: info('expired') })).toBe('expired')
+    expect(joinStage({ ...base, info: info('ended') })).toBe('ended')
+    expect(joinStage({ ...base, info: info('full') })).toBe('full')
+    expect(joinStage({ ...base, info: info('left') })).toBe('left')
     expect(joinStage({ ...base, info: info('member') })).toBe('member')
     expect(joinStage({ ...base, pressedJoin: false })).toBe('welcome')
     expect(joinStage({ ...base, signedIn: false })).toBe('account')

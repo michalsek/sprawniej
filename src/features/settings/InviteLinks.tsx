@@ -88,7 +88,7 @@ export function InviteLinks({ invites: { invites, state, reload }, onCreate }: {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onSelect={() => copy(inviteMessage(url, ws, guest?.name), 'Message')}>
+                        <DropdownMenuItem onSelect={() => copy(inviteMessage(url, ws, { forName: guest?.name, expiresAt: i.expiresAt, shared: i.maxUses !== 1 }), 'Message')}>
                           <Copy /> Copy message
                         </DropdownMenuItem>
                         <DropdownMenuItem variant="destructive" onSelect={() => void remove(i)}>

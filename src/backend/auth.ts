@@ -91,11 +91,17 @@ const MESSAGES: Record<string, string> = {
 }
 
 /**
- * Why a new account wasn't let in (supabase/migrations/20261020130000_signup_codes.sql, private.let_in). They come
- * back as the error's message; a test checks this list against the SQL.
+ * The invite link can't make an account (it was used, ended, is full or expired). The join page then asks the link
+ * how it stands and says exactly why.
+ */
+export const INVITE_REFUSED = 'This invite link was already used or has expired. Ask for a new one.'
+
+/**
+ * Why a new account wasn't let in (private.let_in, last in supabase/migrations/20261020170000_shared_invite_links.sql).
+ * They come back as the error's message; a test checks this list against the SQL.
  */
 export const SIGNUP_REFUSALS: ReadonlySet<string> = new Set([
-  'This invite link was already used or has expired. Ask for a new one.',
+  INVITE_REFUSED,
   'You need a sign-up code to make an account. Ask whoever looks after Sprawniej for one.',
   "That sign-up code doesn't work. Check it and try again.",
   'That sign-up code no longer works. Ask whoever looks after Sprawniej for a new one.',

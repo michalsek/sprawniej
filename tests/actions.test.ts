@@ -1,12 +1,15 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test'
 import { stopWrites } from '@/backend/writes'
+import * as workspaces from '@/backend/workspaces'
 import {
   archiveIssues,
+  createInvite,
   createIssue,
   createLabel,
   createProject,
   createView,
   deleteProject,
+  endInvite,
   followerChanges,
   followNumber,
   issueColumns,
@@ -264,4 +267,28 @@ test('deleting a label or a project changes views only once it is deleted', asyn
   expect(sent().map((r) => r.kind !== 'notes' && r.kind !== 'call' && r.table)).toEqual(['labels'])
   expect(state().views[v.id].filters).toEqual({ labels: [label.id, keep.id] })
   expect(state().labels[label.id]).toBeDefined()
+})
+
+describe('invite links', () => {
+  test('a link for someone from Linear is always for one person', async () => {
+    const make = spyOn(workspaces, 'createInvite').mockResolvedValue({} as workspaces.Invite)
+    try {
+      await createInvite({ role: 'member', forGuest: 'bob', maxUses: null, days: 7 })
+      expect(make.mock.calls[0]?.[1]).toEqual({ role: 'member', forEmail: undefined, days: 7, forProfile: profileIdOf('bob'), maxUses: 1 })
+    } finally {
+      make.mockRestore()
+    }
+  })
+
+  test('only admins and owners end one', async () => {
+    const end = spyOn(workspaces, 'endInvite').mockResolvedValue()
+    try {
+      const s = state()
+      useData.setState({ members: { ...s.members, ana: { ...s.members.ana, role: 'member' } } })
+      await expect(endInvite('i1')).rejects.toThrow('Only admins and owners can invite people.')
+      expect(end).not.toHaveBeenCalled()
+    } finally {
+      end.mockRestore()
+    }
+  })
 })

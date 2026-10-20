@@ -42,7 +42,7 @@ export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Per
 
   if (made) {
     const { url, local } = inviteUrl(made.token)
-    const message = inviteMessage(url, ws, guest?.name)
+    const message = inviteMessage(url, ws, { forName: guest?.name, expiresAt: made.expiresAt, shared: made.maxUses !== 1 })
     const to = made.forEmail ?? ''
     const mail = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(`Join ${ws} in Sprawniej`)}&body=${encodeURIComponent(message)}`
     return (

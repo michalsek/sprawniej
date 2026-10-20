@@ -1,5 +1,5 @@
 /** Invite links: reading one from the address, making the one to send, and which join screen to show. Pure. */
-import { INVITE_DAYS, type InviteInfo } from '@/backend/workspaces'
+import type { InviteInfo } from '@/backend/workspaces'
 import { authRedirectUrl, publicAppUrl } from '@/config'
 
 const TOKEN = /^[0-9a-f]{16,128}$/
@@ -29,10 +29,17 @@ export function inviteUrl(token: string): { url: string; local: boolean } {
   return { url: `${published ?? authRedirectUrl()}#/join/${token}`, local: published === null }
 }
 
-/** a ready-to-send message ("Hi Jan! …") */
-export function inviteMessage(url: string, workspace: string, forName?: string | null): string {
-  const first = forName?.trim().split(/\s+/)[0]
-  return `${first ? `Hi ${first}!` : 'Hi!'} We plan and track our work in Sprawniej. Open this link to join ${workspace}. It works once, in the next ${INVITE_DAYS} days:\n${url}`
+/** "Saturday 31 October", in this computer's time zone */
+const untilDay = (at: string) => new Date(at).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' })
+
+/**
+ * A ready-to-send message ("Hi Jan! …"). `forName`: the person from Linear it is for; `shared`: a link for several
+ * people or anyone, so it isn't "just for you".
+ */
+export function inviteMessage(url: string, workspace: string, o: { forName?: string | null; expiresAt: string; shared?: boolean }): string {
+  const first = o.forName?.trim().split(/\s+/)[0]
+  const works = o.shared ? 'It works' : "It's just for you and works"
+  return `${first ? `Hi ${first}!` : 'Hi!'} We plan and track our work in Sprawniej. Open this link to join ${workspace}. ${works} until ${untilDay(o.expiresAt)}:\n${url}`
 }
 
 /** "Ania, Tomek and 4 others are here." (invite_info shows up to 8, so 8 may mean more) */
@@ -49,7 +56,21 @@ export function peopleLine(names: readonly string[], most = 8): string {
 /** sessionStorage: the invite you pressed Join for (it outlasts a trip to GitHub to sign in) */
 export const JOINING_KEY = 'sprawniej:joining'
 
-export type JoinStage = 'loading' | 'failed' | 'unknown' | 'used' | 'expired' | 'member' | 'welcome' | 'account' | 'profile' | 'name' | 'joining'
+export type JoinStage =
+  | 'loading'
+  | 'failed'
+  | 'unknown'
+  | 'used'
+  | 'ended'
+  | 'full'
+  | 'expired'
+  | 'left'
+  | 'member'
+  | 'welcome'
+  | 'account'
+  | 'profile'
+  | 'name'
+  | 'joining'
 
 export function joinStage(i: {
   info: InviteInfo | null | undefined

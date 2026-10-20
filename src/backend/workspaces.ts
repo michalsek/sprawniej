@@ -39,14 +39,22 @@ export async function createWorkspace(name: string, team: TeamDraft, db: Db = re
 
 export type { Role }
 export type InviteRole = Exclude<Role, 'owner'>
-const INVITE_STATES = ['open', 'used', 'expired', 'member'] as const
+const INVITE_STATES = ['open', 'used', 'ended', 'full', 'expired', 'left', 'member'] as const
 export type InviteState = (typeof INVITE_STATES)[number]
 const isInviteState = (v: unknown): v is InviteState => (INVITE_STATES as readonly unknown[]).includes(v)
 /** invites are for admins and members; owners are made in Settings */
 const inviteRole = (v: unknown): InviteRole => (isRole(v) && v !== 'owner' ? v : 'member')
 
+const DAY = 86_400_000
+
 /** how long a link works (the database's default) */
 export const INVITE_DAYS = 14
+/** the lengths to pick from, in days; any other is 1 to MAX_INVITE_DAYS */
+export const INVITE_LENGTHS = [7, 14] as const
+/** the database takes 30 days after a link is made; 28 leaves room for a clock that is a little off */
+export const MAX_INVITE_DAYS = 28
+/** "up to N people": the most the app offers (the database takes up to 1000) */
+export const MAX_INVITE_PEOPLE = 100
 
 /**
  * The rules' own words (guard_members and keep_an_owner in supabase/migrations/20261019000003_triggers.sql, which
@@ -104,7 +112,7 @@ export async function inviteInfo(token: string): Promise<InviteInfo | null> {
   return data ? toInviteInfo(data) : null
 }
 
-export type JoinProblem = 'used' | 'expired' | 'unknown' | 'network' | 'other'
+export type JoinProblem = 'used' | 'ended' | 'full' | 'expired' | 'left' | 'unknown' | 'network' | 'other'
 
 export class InviteError extends Error {
   readonly kind: JoinProblem
@@ -121,6 +129,9 @@ export function inviteProblem(e: unknown): InviteError {
   if (isUnreachable(e)) return new InviteError('network', UNREACHABLE)
   if (code === 'SP002') return new InviteError('used', 'This invite was already used. Ask for a new one.')
   if (code === 'SP003') return new InviteError('expired', 'This invite has expired. Ask for a new one.')
+  if (code === 'SP006') return new InviteError('ended', 'This invite link was ended. Ask for a new one.')
+  if (code === 'SP007') return new InviteError('full', 'This invite link is full. Ask for a new one.')
+  if (code === 'SP008') return new InviteError('left', 'This link was made before you left. Ask for a new one.')
   if (code === 'P0002') return new InviteError('unknown', "This invite link doesn't work. Ask for a new one.")
   return new InviteError('other', friendlyDbError(e, "We couldn't add you to the workspace. Try again in a moment."))
 }
@@ -146,9 +157,15 @@ export interface Invite {
   invitedBy: string | null
   createdAt: string
   expiresAt: string
+  /** how many people may join with it: 1 is one person, null anyone with the link */
+  maxUses: number | null
+  /** an admin ended it early */
+  endedAt: string | null
+  /** who joined with it, and when */
+  uses: { profileId: string; at: string }[]
 }
 
-const INVITE_COLUMNS = 'id,token,role,for_profile,for_email,invited_by,created_at,expires_at'
+const INVITE_COLUMNS = 'id,token,role,for_profile,for_email,invited_by,created_at,expires_at,max_uses,ended_at,invite_uses(profile_id,at)'
 
 interface InviteRow {
   id: string
@@ -159,6 +176,9 @@ interface InviteRow {
   invited_by: string | null
   created_at: string
   expires_at: string
+  max_uses: number | null
+  ended_at: string | null
+  invite_uses: { profile_id: string; at: string }[]
 }
 
 const toInvite = (r: InviteRow): Invite => ({
@@ -170,9 +190,15 @@ const toInvite = (r: InviteRow): Invite => ({
   invitedBy: r.invited_by,
   createdAt: r.created_at,
   expiresAt: r.expires_at,
+  maxUses: r.max_uses,
+  endedAt: r.ended_at,
+  uses: r.invite_uses.map((u) => ({ profileId: u.profile_id, at: u.at })),
 })
 
-/** links not used yet (expired ones too), newest first; empty for members (the rules show them to admins only) */
+/**
+ * links not used up yet (ended, full and expired ones too; a link for one person goes once it is accepted), newest
+ * first; empty for members (the rules show them to admins only)
+ */
 export async function listInvites(ws: string): Promise<Invite[]> {
   const { data, error } = await requireClient()
     .from('invites')
@@ -184,12 +210,35 @@ export async function listInvites(ws: string): Promise<Invite[]> {
   return data.map(toInvite)
 }
 
-/** throws an Error whose message can be shown as it is */
-export async function createInvite(ws: string, o: { role: InviteRole; forProfile?: string; forEmail?: string }): Promise<Invite> {
+/** a whole number of days from 1 to MAX_INVITE_DAYS (anything else is brought into that range; not a number: 14) */
+export function expiresAtFor(days: number, now: number): string {
+  const n = Number.isFinite(days) ? Math.min(MAX_INVITE_DAYS, Math.max(1, Math.round(days))) : INVITE_DAYS
+  return new Date(now + n * DAY).toISOString()
+}
+
+/** null (anyone with the link) or a whole number of people from 1 to MAX_INVITE_PEOPLE */
+export const maxUsesFor = (n: number | null): number | null =>
+  n === null ? null : Number.isFinite(n) ? Math.min(MAX_INVITE_PEOPLE, Math.max(1, Math.round(n))) : 1
+
+/**
+ * `days`: how long it works (14 unless given); `maxUses`: how many people (1 unless given, null for anyone). A link for
+ * a person from Linear is always for one person. Throws an Error whose message can be shown as it is.
+ */
+export async function createInvite(
+  ws: string,
+  o: { role: InviteRole; forProfile?: string; forEmail?: string; days?: number; maxUses?: number | null },
+): Promise<Invite> {
   const email = o.forEmail?.trim()
   const { data, error } = await requireClient()
     .from('invites')
-    .insert({ workspace_id: ws, role: o.role, for_profile: o.forProfile ?? null, for_email: email ? email : null })
+    .insert({
+      workspace_id: ws,
+      role: o.role,
+      for_profile: o.forProfile ?? null,
+      for_email: email ? email : null,
+      expires_at: expiresAtFor(o.days ?? INVITE_DAYS, Date.now()),
+      max_uses: o.forProfile ? 1 : maxUsesFor(o.maxUses === undefined ? 1 : o.maxUses),
+    })
     .select(INVITE_COLUMNS)
     .single()
   if (error?.code === '42501') throw new Error(RULES.notInviter)
@@ -204,7 +253,11 @@ export async function deleteInvite(id: string): Promise<void> {
   if (!data.length) throw new Error('That link was already deleted.')
 }
 
-const DAY = 86_400_000
+/** ends a link now; nobody new can join with it. Throws an Error whose message can be shown as it is. */
+export async function endInvite(id: string): Promise<void> {
+  const { error } = await requireClient().rpc('end_invite', { p_invite: id })
+  if (error) throw new Error(friendlyDbError(error, "We couldn't end the link. Try again in a moment."))
+}
 
 /** "expires today", "expires tomorrow", "expires in 3 days", "expired" (by calendar days here) */
 export function expiresText(expiresAt: string, now: number): string {
@@ -219,6 +272,13 @@ export function expiresText(expiresAt: string, now: number): string {
 }
 
 export const isExpired = (i: Pick<Invite, 'expiresAt'>, now: number): boolean => Date.parse(i.expiresAt) < now
+
+/** whether a listed link still works, and if not, why (as the database decides, private.invite_state) */
+export function inviteState(i: Pick<Invite, 'endedAt' | 'expiresAt' | 'maxUses' | 'uses'>, now: number): 'open' | 'ended' | 'full' | 'expired' {
+  if (i.endedAt) return 'ended'
+  if (i.maxUses !== null && i.uses.length >= i.maxUses) return 'full'
+  return isExpired(i, now) ? 'expired' : 'open'
+}
 
 async function changeMember(ws: string, profileId: string, patch: { role?: Role; removed_at?: string }): Promise<void> {
   const { data, error } = await requireClient()

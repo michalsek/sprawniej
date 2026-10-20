@@ -25,6 +25,7 @@ import {
   createInvite as makeInvite,
   createWorkspace,
   deleteInvite as removeInvite,
+  endInvite as stopInvite,
   linkPerson as linkGuest,
   removeMember,
   RULES,
@@ -959,11 +960,22 @@ export async function leaveWorkspace(): Promise<void> {
   location.hash = '#/'
 }
 
-/** a link for one person (for someone from Linear: they become that person when they join) */
-export async function createInvite(o: { role: InviteRole; forGuest?: string; forEmail?: string }): Promise<Invite> {
+/**
+ * A link for one person (the default), for up to `maxUses` people, or for anyone with it (`maxUses: null`), working for
+ * `days` (14 unless given). For someone from Linear it is always for one person: they become that person when they join.
+ */
+export async function createInvite(o: { role: InviteRole; forGuest?: string; forEmail?: string; days?: number; maxUses?: number | null }): Promise<Invite> {
   const c = openHere()
   if (!isAdmin(useData.getState())) throw new Error(RULES.notInviter)
-  return makeInvite(c.workspaceId, { role: o.role, forEmail: o.forEmail, ...(o.forGuest && { forProfile: idOf(c, o.forGuest) }) })
+  const who = o.forGuest ? { forProfile: idOf(c, o.forGuest), maxUses: 1 } : { maxUses: o.maxUses }
+  return makeInvite(c.workspaceId, { role: o.role, forEmail: o.forEmail, days: o.days, ...who })
+}
+
+/** nobody new can join with the link from now on; who joined stays. It can't be undone. */
+export async function endInvite(id: string): Promise<void> {
+  openHere()
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notInviter)
+  await stopInvite(id)
 }
 
 export async function deleteInvite(id: string): Promise<void> {
