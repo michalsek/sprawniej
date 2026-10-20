@@ -7,6 +7,9 @@
  * times) is guessed, so it shows at once too, and the saved row puts it right.
  *
  * While no workspace is open (or it's still opening) there is nowhere to save to, and actions do nothing.
+ *
+ * Light or dark (setTheme) is yours, not the workspace's: it is kept with your account, works with no workspace open
+ * and never shows on the save chip.
  */
 import { generateKeyBetween } from 'fractional-indexing'
 import { ulid } from 'ulid'
@@ -20,6 +23,7 @@ import { MESSAGES } from '@/backend/writes/problems'
 import { backend } from '@/backend'
 import { PictureError, pictures, type PictureProblem } from '@/backend/pictures'
 import { connectRepo as addRepo, disconnectRepo as removeRepo, repoFromInput } from '@/backend/github'
+import { saveTheme, useAuth } from '@/backend/auth'
 import {
   acceptInvite,
   createInvite as makeInvite,
@@ -41,6 +45,7 @@ import { AUTO_ARCHIVE_MONTHS, handleOf } from '@/model/schema'
 import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
+import { clearUnsent, makeThemeSaver, markUnsent, readDevice, readUnsent, showTheme, writeDevice, type ThemeChoice } from '@/lib/theme'
 import { IMAGE_TYPES, MAX_IMAGE_MB, openWorkspaceId, pictureName, picturePath } from './assets'
 import { cleanHandle, HANDLE_WORDS, handleProblem } from './handles'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
@@ -1065,4 +1070,25 @@ export async function addImage(file: Blob, named?: (src: string) => void): Promi
     throw new Error(PICTURE_MESSAGES[e instanceof PictureError ? e.kind : 'network'], { cause: e })
   }
   return src
+}
+
+// ---------- light or dark ----------
+
+// what couldn't be sent stays marked, and goes again when you're back online, signed in again, or next time
+const themeSaver = makeThemeSaver(saveTheme, () => clearUnsent())
+
+/** System, Light or Dark: shows at once, and saves by itself with your account (quietly, also when offline) */
+export function setTheme(choice: ThemeChoice) {
+  showTheme(choice)
+  writeDevice(choice)
+  const id = useAuth.getState().user?.id
+  if (!id) return
+  markUnsent(id)
+  themeSaver.save(choice)
+}
+
+/** a choice made here that isn't with your account yet goes again */
+export function sendUnsentTheme() {
+  const id = useAuth.getState().user?.id
+  if (id && readUnsent() === id) themeSaver.save(readDevice() ?? 'system')
 }

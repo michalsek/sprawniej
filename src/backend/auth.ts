@@ -8,6 +8,7 @@
 import type { AuthChangeEvent, Session as AuthSession, User, UserIdentity } from '@supabase/supabase-js'
 import { create } from 'zustand'
 import { authRedirectUrl } from '@/config'
+import { parseTheme, type ThemeChoice } from '@/lib/theme'
 import { useSession } from '@/session'
 import { stopCaching } from './cacheStore'
 import { backendConfig, getClient, requireClient } from './client'
@@ -18,6 +19,8 @@ export interface AuthUser {
   email: string | null
   name: string
   avatarUrl: string
+  /** Light or dark, kept with the account so it follows you (src/lib/theme.ts); undefined when never picked */
+  theme?: ThemeChoice
 }
 
 export interface AuthState {
@@ -132,6 +135,7 @@ const toUser = (u: User | null | undefined): AuthUser | null =>
         email: u.email ?? null,
         name: String(u.user_metadata?.full_name ?? u.user_metadata?.name ?? ''),
         avatarUrl: String(u.user_metadata?.avatar_url ?? ''),
+        theme: u.user_metadata?.theme === undefined ? undefined : parseTheme(u.user_metadata.theme),
       }
     : null
 
@@ -213,8 +217,24 @@ export function startAuth(urlProblem?: string): void {
     history.replaceState(history.state, '', url.toString())
     if (cameBack && !signedIn) useAuth.setState({ urlProblem: GITHUB_UNFINISHED })
   }
+  // the kept sign-in's copy of you can be an hour old (a light or dark picked on another device since): ask once
+  const refresh = (signedIn: AuthUser | null) => {
+    if (!signedIn) return
+    db.auth.getUser().then(
+      ({ data }) => {
+        const fresh = toUser(data.user)
+        if (fresh && useAuth.getState().user?.id === fresh.id) useAuth.setState({ user: fresh })
+      },
+      // the kept copy stays; renewing the sign-in brings a fresh one later
+      () => {},
+    )
+  }
   db.auth.getSession().then(
-    ({ data }) => settle(toUser(data.session?.user)),
+    ({ data }) => {
+      const signedIn = toUser(data.session?.user)
+      settle(signedIn)
+      refresh(signedIn)
+    },
     // the stored sign-in can't be read: start signed out
     () => settle(null),
   )
@@ -376,6 +396,12 @@ export async function waysToSignIn(): Promise<WayRow[]> {
 /** sets or changes your password (no Save button: it's the dialog's own form) */
 export async function setPassword(password: string): Promise<void> {
   const { error } = await requireClient().auth.updateUser({ password, data: { password_set: true } })
+  if (error) throw new AuthProblem(friendlyAuthError(error))
+}
+
+/** keeps your light or dark with your account (the rest of what it keeps, like your name, stays as it is) */
+export async function saveTheme(theme: ThemeChoice): Promise<void> {
+  const { error } = await requireClient().auth.updateUser({ data: { theme } })
   if (error) throw new AuthProblem(friendlyAuthError(error))
 }
 
