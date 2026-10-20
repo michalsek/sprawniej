@@ -11,7 +11,10 @@ import type { FavouriteKind } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 
-export function FavouriteButton({ kind, id, name, className }: { kind: FavouriteKind; id: string; name?: string; className?: string }) {
+/** on a list row: shown on hover or keyboard focus where there is a mouse, always on touch screens, and always when on */
+const ON_ROW = '[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 aria-pressed:opacity-100'
+
+export function FavouriteButton({ kind, id, name, row, className }: { kind: FavouriteKind; id: string; name?: string; row?: boolean; className?: string }) {
   const on = useData((s) => isFavourite(s, id))
   return (
     <Tooltip>
@@ -22,7 +25,7 @@ export function FavouriteButton({ kind, id, name, className }: { kind: Favourite
           aria-label={name ? `Favourite: ${name}` : 'Favourite'}
           aria-pressed={on}
           onClick={() => toggleFavourite(kind, id)}
-          className={className}
+          className={cn(row && ON_ROW, className)}
         >
           <Star className={cn(on ? 'fill-current text-foreground' : 'text-muted-foreground')} />
         </Button>

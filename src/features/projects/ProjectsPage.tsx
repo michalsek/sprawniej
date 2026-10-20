@@ -23,9 +23,6 @@ import { useProgressIssues } from './useProjectIssues'
 import { PROJECT_STATUS_NAMES } from './status'
 
 /** one project in the list: its emoji changes in place, the star keeps it in your sidebar, and ⋯ renames or deletes it */
-/** shown on hover or keyboard focus where there is a mouse, always on touch screens, and always when on */
-const STAR = '[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 aria-pressed:opacity-100'
-
 function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; lead?: Person }) {
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -62,7 +59,7 @@ function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; 
         </Link>
       )}
       <span className="flex items-center">
-        <FavouriteButton kind="project" id={p.id} name={p.name} className={STAR} />
+        <FavouriteButton kind="project" id={p.id} name={p.name} row />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${p.name}`} className="[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">

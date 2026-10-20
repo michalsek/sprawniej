@@ -21,9 +21,6 @@ import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { NewViewDialog } from './NewViewDialog'
 
-/** shown on hover or keyboard focus where there is a mouse, always on touch screens, and always when on */
-const STAR = '[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 aria-pressed:opacity-100'
-
 function ViewRow({ view, owner }: { view: View; owner?: Person }) {
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState(false)
@@ -45,7 +42,7 @@ function ViewRow({ view, owner }: { view: View; owner?: Person }) {
         <span className="truncate">{owner?.name ?? view.owner}</span>
       </span>
       <span className="flex items-center">
-        <FavouriteButton kind="view" id={view.id} name={view.name} className={STAR} />
+        <FavouriteButton kind="view" id={view.id} name={view.name} row />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" aria-label={`More actions for ${view.name}`} className="[@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100">
