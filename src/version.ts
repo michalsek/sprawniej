@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.5.0'
+export const APP_VERSION = '2.6.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,17 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.6.0',
+    date: '2026-10-20',
+    title: 'Invite links for several people',
+    notes: [
+      'Make an invite link for one person, for up to a number of people, or for anyone with the link',
+      'Pick how long a link works: 1 week, 2 weeks, or a number of days up to 28',
+      'See who joined with each link, and end a link early with End link now',
+      'Someone who left or was removed comes back only with a link made after that',
+    ],
+  },
   {
     version: '2.5.0',
     date: '2026-10-20',

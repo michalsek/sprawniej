@@ -4,6 +4,14 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.6.0: Invite links for several people
+*2026-10-20*
+
+- Make an invite link for one person, for up to a number of people, or for anyone with the link
+- Pick how long a link works: 1 week, 2 weeks, or a number of days up to 28
+- See who joined with each link, and end a link early with End link now
+- Someone who left or was removed comes back only with a link made after that
+
 ## 2.5.0: Change your @handle
 *2026-10-20*
 
