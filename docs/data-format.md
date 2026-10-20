@@ -100,15 +100,31 @@ name still shows on old work), `changed_at`. Read by the workspace's members (mo
 write it and `invite_info` still returns it), `for_email` (so the admin
 remembers where to send it), `for_profile` (a guest: whoever accepts becomes them; set to null when the guest goes),
 `role` (`admin` or `member`), `invited_by` (set by a trigger), `created_at`, `expires_at` (14 days by default, at most
-30 after `created_at`), `accepted_by`, `accepted_at`. Only the workspace's admins and owners see and change them; an
-invite for a guest must name a guest of that workspace. Never broadcast.
+30 after `created_at`), `max_uses` (how many people may join with it: `1`, the default, is one person, up to `1000`,
+or null for anyone with the link; an invite for a guest is always `1`), `ended_at` (an admin ended it early with
+`end_invite`; it can't be undone), `accepted_by`, `accepted_at` (set only for a link for one person, when it is
+accepted). Only the workspace's admins and owners see them, and change `for_login`, `for_email`, `role` and
+`expires_at`; `max_uses` is set when the link is made, `ended_at` only by `end_invite`. An invite for a guest must name
+a guest of that workspace. Never broadcast.
+
+A link is, in this order (`private.invite_state`, one rule for joining, the join page and new accounts):
+`used` (a link for one person that was accepted), `ended`, `full` (as many people joined as `max_uses` allows),
+`expired`, `left` (it was made before you left the workspace or were removed: coming back takes a newer link) or
+`open`.
 
 What someone holding the link sees comes from `invite_info(token)`, one row (none for an unknown token):
 `workspace_id` (only to someone already in it), `workspace_name`, `invited_by_name`, `invited_by_login` (their
 @handle now), `invited_by_avatar`, `for_login` and `for_name` (the guest's name, for an invite made for one), `role`,
-`state` (`member`: you're already in, `used`, `expired` or `open`) and `people` (up to 8 names and pictures of
-members, as `[{"name", "avatarUrl"}]`). A used or expired link gives no `people`, `for_login` or `for_name`. Never
-the token, never an email.
+`state` (`member`: you're already in, or one of the states above) and `people` (up to 8 names and pictures of
+members, as `[{"name", "avatarUrl"}]`). Only an `open` link, or one for someone already in, gives `people`,
+`for_login` and `for_name`. Never the token, never an email.
+
+### invite_uses
+
+Who joined with which link, one row per person: `invite_id`, `workspace_id`, `profile_id`, `at`. Written only by
+`accept_invite` (someone already in writes none); the migration that made the table wrote one for every invite
+accepted before. Admins and owners read them; nobody writes, changes or deletes one. Deleting an invite deletes its
+rows, and so does deleting the person's profile. Never broadcast.
 
 ### teams
 
@@ -252,7 +268,7 @@ keys: `{"id": "…"}` or `{"issue_id": "…", "label_id": "…"}`), `deleted_at`
 included, so a browser that catches up drops them too, but only for the tables `private.wiring` marks with
 `forget = true`: workspace members, teams, team members, labels, projects, project teams, issues, issue labels,
 followers, pull requests, comments and views, plus profiles of guests (a profile with an account belongs to no workspace, so it
-leaves none). Workspaces, invites, inbox notes and read marks leave none; a browser compares its inbox notes instead.
+leaves none). Workspaces, invites, invite uses, inbox notes and read marks leave none; a browser compares its inbox notes instead.
 Nothing is noted while the whole workspace is going. Kept 45 days.
 
 ### github_repos
@@ -272,7 +288,7 @@ workspace's with `guest_emails()` and set them with `set_guest_email()`.
 
 ## Who may make an account (sign-up codes)
 
-A new account needs a **sign-up code** or an open **invite link**. Whoever looks after Sprawniej makes codes in the
+A new account needs a **sign-up code** or an **invite link** that still has room. Whoever looks after Sprawniej makes codes in the
 SQL editor (recipes in docs/supabase-setup.md, "Sign-up codes"); there is no screen for them in the app.
 
 **Where it is checked.** Two places, one rule (`private.let_in`):
@@ -293,8 +309,13 @@ made before sign-up codes were let in by the migration.
 **What it looks at.** The app sends `signup_code` (what the person typed) or `invite` (the invite link's token) in the
 new account's metadata (`signUp(..., { data })`), or to `use_signup_code(code, invite)`. An account is let in when:
 
-- `invite` names an invite that is not used and not expired, and no account was made with it yet (one account per
-  link: the link still has to be accepted with `accept_invite` afterwards, as before); or
+- `invite` names an invite that is `open` (not used, ended, full or expired) and still has a place for an account:
+  `max_uses` is null (anyone with the link), or the people who joined with it plus the accounts made with it that
+  haven't joined yet are fewer than `max_uses`. An account made with it that was deleted since frees its place (one
+  made in the last ten minutes always holds it, as the hook runs before the account is written). So a link for one
+  person makes one account, as before, and the link still has to be accepted with `accept_invite` afterwards.
+  Joining counts only who joined, so an account that never joins can't keep a real person out. The invite's row lock
+  makes two sign-ups at once wait for each other; or
 - `signup_code` matches a code that is not switched off, not expired and not used up. Case, spaces and dashes don't
   matter (`k7qx m2pa 9rtd` is `K7QX-M2PA-9RTD`). Using it adds one to `uses`, under a row lock, so two sign-ups at once
   can't both take the last use.
@@ -333,6 +354,7 @@ Each runs as its owner (security definer), checks who is calling, and raises err
 tells apart: `42501` not allowed, `P0002` not there, `23505` already taken, `23503` no such team, `22023` not valid,
 `23514` a workspace needs an owner, `SP001` you already have a name, `SP002` the invite was used, `SP003` it expired,
 `SP004` a sign-up code is needed first, `SP005` that sign-up code or invite can't let you in (the message says why),
+`SP006` the invite link was ended, `SP007` it is full, `SP008` it was made before you left the workspace,
 `SP010` an import the database can't take (the detail says why). `src/backend/problem.ts` shows those messages as they
 are and puts everything else in our own words.
 
@@ -342,10 +364,11 @@ are and puts everything else in our own words.
 | `create_profile(login, name)` | signed in, once, let in | Your profile with the @handle you picked; `23505` when someone shows as that @handle now, case aside. When it is only someone's login (they moved off it), your login is the handle with a short random ending and `handle` is what you picked. |
 | `set_handle(handle)` | with a profile | Changes your @handle and returns your profile; your login stays. Your own login stores null, and a change of case only is allowed. `22023`: not a handle; `23505`: someone else has it now, case aside. Your old one is free for anyone from then on. |
 | `signup_code_needed()` | signed in | True while you have no profile and weren't let in (a GitHub sign-up without a code). |
-| `use_signup_code(code, invite)` | signed in | Lets your account in with a sign-up code or an open invite link's token (`SP005` with the reason when it can't). Nothing to do if you're in already. |
+| `use_signup_code(code, invite)` | signed in | Lets your account in with a sign-up code or the token of an invite link that still has room (`SP005` with the reason when it can't). Nothing to do if you're in already. |
 | `create_workspace(name, team_key, team_name, team_emoji)` | with a profile | A workspace with you as owner, and a first team with you in it. |
 | `invite_info(token)` | anyone, also not signed in | What the join page shows (see invites); the workspace id only to someone already in it. |
-| `accept_invite(token)` | with a profile | Makes you a member (or brings you back), marks the invite used, turns an invited guest into you. |
+| `accept_invite(token)` | with a profile | Makes you a member (or brings you back) and writes down that you joined with it (`invite_uses`); marks a link for one person used; turns an invited guest into you. Someone already in gets the workspace and uses no place. Refuses with `SP002` used, `SP006` ended, `SP007` full, `SP003` expired, `SP008` made before you left. Two people at the last place wait for the invite's row lock: one joins, the other gets `SP007`. |
+| `end_invite(invite)` | admins | Ends a link now: nobody new joins or makes an account with it. Who joined stays written down. Ending twice keeps the first time. `P0002` for a link that isn't there or isn't yours to end. |
 | `leave_workspace(workspace)` | a member | You leave. The last owner can't. |
 | `move_issue_to_team(issue, team)` | a member | Moves an issue to another team: a new number there, the old one in `former_refs`. |
 | `link_person(workspace, guest, to)` | admins | This person from Linear is that member: everything moves over (`move_person`). |
@@ -371,6 +394,7 @@ for rows that will only be updated (Postgres checks the proposed row before it f
 - Who is asking: `my_profile_id()`, `my_workspaces()` (now, not the ones left), `my_admin_workspaces()`,
   `my_owner_workspaces()`, `my_people()`, `belongs(person, workspace)`, `actor_id()`.
 - `valid_login`, `is_completed`, `take_number`, `swap_login`, `move_person`, and the nightly jobs.
+- Invites: `invite_state(invite, person)`, the state of a link (see invites).
 - Sign-up codes: `let_in` (the one rule), `before_user_created` (the Auth hook; only `supabase_auth_admin` may run it),
   `must_be_let_in` (the profiles trigger), and for the SQL editor `make_signup_code`, `switch_off_signup_code`.
 - Four settings change what triggers do within one transaction: `sprawniej.importing` (imports and `move_person`:
@@ -385,7 +409,7 @@ New functions are closed by default: nobody runs one unless a migration grants i
 
 "Before" triggers on one event run in name order, hence the `a_`, `b_`, `c_` names.
 
-- `a_stamp` on every table `private.wiring` gives a stamp (all but invites, history, used numbers and deletions): `changed_at` (`touch`); on issues also authors, times and who archived
+- `a_stamp` on every table `private.wiring` gives a stamp (all but invites, invite uses, history, used numbers and deletions): `changed_at` (`touch`); on issues also authors, times and who archived
   (`issue_times`); on comments the author and `edited_at` (`comment_times`). Imports keep the times they bring.
 - `a_author` on views (`owner_id`), inbox (`actor_id`), invites (`invited_by`) and github_repos (`added_by`): whoever is signed in.
 - `b_number` on issues: the next number of the team (Issue numbers in docs/architecture.md).
@@ -416,6 +440,7 @@ let them add, change and delete them, except:
 - workspaces: admins and owners rename, owners delete; creating is `create_workspace()`;
 - workspace_members: admins and owners change roles and remove people;
 - invites and github_repos: admins and owners only;
+- invite_uses: admins and owners read them; nobody writes them (only `accept_invite`);
 - profiles: see the profiles table;
 - issue_events, issue_numbers, deletions, issue_pull_requests: read only.
 
@@ -439,7 +464,7 @@ An `INSERT` sends the whole row, an `UPDATE` only the columns that changed plus 
 all when only a team's counter changed), a `DELETE` the keys. A row over 200 kB comes without `description` or `body`
 and with `"partial": true`; the app fetches it. A profile's change goes to every workspace the person is (or was) in.
 Imports and `move_person` send `{"op": "catch_up"}` (with `"table"` for imports) once per batch instead. Invites,
-history, used numbers and deletions are never broadcast. Access is checked when a browser joins, so someone removed
+invite uses, history, used numbers and deletions are never broadcast. Access is checked when a browser joins, so someone removed
 keeps hearing a workspace until they reconnect.
 
 ## Pictures

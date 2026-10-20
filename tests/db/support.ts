@@ -291,6 +291,7 @@ export const TABLES = [
   'profiles',
   'workspace_members',
   'invites',
+  'invite_uses',
   'teams',
   'team_members',
   'labels',

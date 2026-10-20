@@ -73,8 +73,8 @@ settings). These steps set up any project, in any account, and publish the app. 
 
 ## Sign-up codes
 
-Nobody can make an account without a **sign-up code** or an open invite link (docs/data-format.md, "Who may make an
-account"). For email and password, Supabase Auth's *before user created* hook checks it before the account exists; it
+Nobody can make an account without a **sign-up code** or an invite link that still has room (docs/data-format.md, "Who
+may make an account"). For email and password, Supabase Auth's *before user created* hook checks it before the account exists; it
 is switched on in `config.toml` and pushed with step 4 (after `db push`, which makes the function it calls). To see
 that it is on: Dashboard, Authentication, Auth Hooks, "Before User Created" pointing at
 `private.before_user_created`. Someone who signs up with GitHub is asked for the code on the next screen, and gets

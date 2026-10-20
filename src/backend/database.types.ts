@@ -220,17 +220,62 @@ export type Database = {
           },
         ]
       }
+      invite_uses: {
+        Row: {
+          at: string
+          invite_id: string
+          profile_id: string
+          workspace_id: string
+        }
+        Insert: {
+          at?: string
+          invite_id: string
+          profile_id: string
+          workspace_id: string
+        }
+        Update: {
+          at?: string
+          invite_id?: string
+          profile_id?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invite_uses_invite_id_fkey"
+            columns: ["invite_id"]
+            isOneToOne: false
+            referencedRelation: "invites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invite_uses_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invite_uses_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invites: {
         Row: {
           accepted_at: string | null
           accepted_by: string | null
           created_at: string
+          ended_at: string | null
           expires_at: string
           for_email: string | null
           for_login: string | null
           for_profile: string | null
           id: string
           invited_by: string | null
+          max_uses: number | null
           role: string
           token: string
           workspace_id: string
@@ -239,12 +284,14 @@ export type Database = {
           accepted_at?: string | null
           accepted_by?: string | null
           created_at?: string
+          ended_at?: string | null
           expires_at?: string
           for_email?: string | null
           for_login?: string | null
           for_profile?: string | null
           id?: string
           invited_by?: string | null
+          max_uses?: number | null
           role?: string
           token?: string
           workspace_id: string
@@ -253,12 +300,14 @@ export type Database = {
           accepted_at?: string | null
           accepted_by?: string | null
           created_at?: string
+          ended_at?: string | null
           expires_at?: string
           for_email?: string | null
           for_login?: string | null
           for_profile?: string | null
           id?: string
           invited_by?: string | null
+          max_uses?: number | null
           role?: string
           token?: string
           workspace_id?: string
@@ -1139,6 +1188,7 @@ export type Database = {
         }
         Returns: string
       }
+      end_invite: { Args: { p_invite: string }; Returns: undefined }
       ensure_profile: {
         Args: never
         Returns: {

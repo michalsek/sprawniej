@@ -91,15 +91,25 @@ For a team of eight that is fine.
 
 ## Invites
 
-An invite is a link `#/join/<token>` with a random 144-bit token (`invites.token`). It works once, for 14 days
-(`expires_at`, never more than 30 days after it was made), and only admins and owners see a workspace's invites (they
-hold the tokens), so invites are never broadcast.
+An invite is a link `#/join/<token>` with a random 144-bit token (`invites.token`). It is for one person (the
+default), for up to a number of people, or for anyone who has it (`max_uses`: 1, up to 1000, or null), and it works
+until it expires (`expires_at`, 14 days unless whoever made it chose otherwise, never more than 30 days after it was
+made) or an admin ends it early (`end_invite`, for good). An invite for a person from Linear is always for one person.
+Only admins and owners see a workspace's invites (they hold the tokens), so invites are never broadcast; nor is
+`invite_uses`, the record of who joined with which link. Admins' lists stay fresh because joining changes
+`workspace_members`, which is broadcast.
 
-- `invite_info(token)` is what the join page shows before you sign in: the workspace's name, who invited you, the role
-  and up to 8 faces. A used or expired link shows no faces and doesn't say whom it was for. Never the token, never an
-  email. `anon` may call it (an accepted advisor warning, docs/supabase-work.md).
-- `accept_invite(token)` makes you a member (or brings you back), marks the invite used, and, for an invite made for a
-  person from Linear (`for_profile`), turns that person into you (`move_person`, below).
+- One rule says whether a link can still be used (`private.invite_state`): used (a link for one person that was
+  accepted), ended, full, expired, made before you left (someone who left or was removed comes back only with a link
+  made after that), or open. Joining, the join page and making an account with a link all ask it.
+- `invite_info(token)` is what the join page shows before you sign in: the workspace's name, who invited you, the role,
+  the state and up to 8 faces. A link that can't be used shows no faces and doesn't say whom it was for. Never the
+  token, never an email. `anon` may call it (an accepted advisor warning, docs/supabase-work.md).
+- `accept_invite(token)` makes you a member (or brings you back), writes down that you joined with it, marks a link
+  for one person used, and, for an invite made for a person from Linear (`for_profile`), turns that person into you
+  (`move_person`, below). Everything that counts or changes a link's places (`accept_invite`, making an account with
+  it, `end_invite`) takes the invite's row lock first, so two people at the last place can't both get in: the second
+  one counts after the first is saved and is told the link is full.
 - Settings › Invite links makes the links (`InviteDialog.tsx`), with an optional email "so you remember where to send it"
   and a role (member or admin). People send them themselves: Sprawniej sends no email.
 - Links point at the app's public address (`publicAppUrl` in `src/config.ts`: `VITE_PUBLIC_URL` at build time, or the
@@ -165,8 +175,8 @@ sends each change to `ws:<workspace id>` (shared rows) or `me:<profile id>` (you
 channels are private: the database checks you may listen when you join (`realtime.messages` policy), so the app hands
 over the sign-in first. An update sends only the columns that changed, plus the keys and `changed_at`; a delete sends
 the keys. A row over 200 kB sends a nudge without its text (`partial`), and the app fetches the row. Imports and
-`move_person` send one "catch up" message instead of one per row. Invites, history, used numbers and deletions are
-not broadcast.
+`move_person` send one "catch up" message instead of one per row. Invites, who joined with them, history, used numbers
+and deletions are not broadcast.
 
 `applyRows` (`src/backend/apply.ts`, rules in `apply/state.ts`) takes in loads, fetched rows, messages, deletions and
 your own changes. Newer wins, column by column (`changed_at`, compared to the microsecond). Your own changes still on
