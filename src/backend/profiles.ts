@@ -49,7 +49,7 @@ export async function createProfile(login: string, name: string): Promise<MyProf
 }
 
 /**
- * Changes your @handle (Settings › Your account) and gives back your profile's row (backend.setHandle shows it at
+ * Changes your @handle (Settings › Profile) and gives back your profile's row (backend.setHandle shows it at
  * once). Throws a ProfileProblem worded to show (taken, not a handle).
  */
 export async function setHandle(handle: string): Promise<Row<'profiles'>> {

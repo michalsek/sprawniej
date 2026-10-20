@@ -882,7 +882,7 @@ export function renameMe(name: string) {
 }
 
 /**
- * Your @handle, everywhere you are (Settings › Your account). Awaited like the member actions below: the database
+ * Your @handle, everywhere you are (Settings › Profile). Awaited like the member actions below: the database
  * says whether someone else has it. Throws an Error whose message can be shown as it is. Mentions of your old handle
  * become plain text, and anyone may take it.
  */

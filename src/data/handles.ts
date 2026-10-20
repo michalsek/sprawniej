@@ -1,5 +1,5 @@
 /**
- * Changing your @handle (Settings › Your account). Your login, the hidden key everything points at, never changes;
+ * Changing your @handle (Settings › Profile). Your login, the hidden key everything points at, never changes;
  * the handle is what people see and mention. These checks run as you type, before anything is sent; the database
  * checks again (set_handle), also against people in other workspaces.
  */

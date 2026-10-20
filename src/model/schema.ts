@@ -33,7 +33,7 @@ export type Workspace = z.infer<typeof workspaceSchema>
 export const personSchema = z
   .object({
     login,
-    /** the @handle they changed to (Settings › Your account); missing: the same as `login` */
+    /** the @handle they changed to (Settings › Profile); missing: the same as `login` */
     handle: z.string().optional(),
     githubId: z.number().int(),
     name: z.string(),

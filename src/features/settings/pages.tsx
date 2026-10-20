@@ -58,7 +58,7 @@ export const PAGES: SettingsPage[] = [
     icon: CircleUser,
     who: 'everyone',
     component: ProfilePage,
-    words: 'account name picture avatar sign out switch workspace',
+    words: 'account name handle mention picture avatar sign out switch workspace',
   },
   {
     id: 'sign-in',
