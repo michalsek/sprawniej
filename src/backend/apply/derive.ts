@@ -8,7 +8,7 @@ import type { LiveTable, Row } from '../tables'
 import type { Grouped } from './mirror'
 import type { Dirty } from './take'
 import type { ApplyContext, Ref, StoreSlice } from './state'
-import type { Comment, InboxItem } from '@/model/schema'
+import type { Comment, Favourite, InboxItem } from '@/model/schema'
 import { equal } from '@/lib/equal'
 
 /** where the rows come from: the database's copy with your changes on top (take.ts, Intake) */
@@ -22,6 +22,9 @@ type RecField = 'people' | 'members' | 'labels' | 'statuses' | 'teams' | 'issues
 
 const byTime = (a: Comment, b: Comment) =>
   a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+/** your order, then id, compared as plain strings (fractional keys rely on byte order) */
+const byOrder = (a: Favourite, b: Favourite) =>
+  a.sortOrder < b.sortOrder ? -1 : a.sortOrder > b.sortOrder ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 const newestFirst = (a: InboxItem, b: InboxItem) => (a.at > b.at ? -1 : a.at < b.at ? 1 : a.id > b.id ? -1 : a.id < b.id ? 1 : 0)
 
 /** the store parts that change, copied once */
@@ -173,6 +176,20 @@ export function derive(src: Source, data: StoreSlice, dirty: Dirty, ctx: ApplyCo
     const row = src.shown('read_state', { profile_id: meId, workspace_id: workspaceId })
     const next = row ? rows.rowToReadState(row) : { readUntil: null }
     if (!equal(data.readState, next)) p.out.readState = next
+  }
+
+  if (dirty.favourites && meId) {
+    const was = new Map(data.favourites.map((f) => [f.id, f]))
+    const next = src
+      .fold('favourites', meId)
+      .filter((row) => row.workspace_id === workspaceId)
+      .map(rows.rowToFavourite)
+      .sort(byOrder)
+      .map((f) => {
+        const o = was.get(f.id)
+        return o && equal(o, f) ? o : f
+      })
+    if (next.length !== data.favourites.length || next.some((f, n) => f !== data.favourites[n])) p.out.favourites = next
   }
 
   if (dirty.workspace || workspaceGone) {

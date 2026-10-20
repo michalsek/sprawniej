@@ -15,7 +15,7 @@
 import type { StoreApi } from 'zustand'
 import { EMPTY, type DataState } from '@/data/store'
 import { applyRows, emptyLive, type Incoming, type LiveState, type Mirror, type StoreSlice } from './apply'
-import { cacheMark, inboxGone } from './cache'
+import { cacheMark, favouritesGone, inboxGone } from './cache'
 import type { ConnectionEvents } from './connection'
 import { RowFetcher, type Asked } from './fetching'
 import { isMessage, track, type ChannelEvents, type ChannelsLike, type ChannelStatus, type Topic, type Tracked } from './live'
@@ -131,6 +131,7 @@ const slice = (s: DataState): StoreSlice => ({
   pullRequests: s.pullRequests,
   inbox: s.inbox,
   readState: s.readState,
+  favourites: s.favourites,
 })
 
 /** the keys asked for, by table, as an answer that brought none of them (so they may be asked for again) */
@@ -641,19 +642,27 @@ export class LiveWorkspace implements WriteTarget {
 
   /**
    * What changed since `from` (a raw database time): changed rows and deletions, the labels, followers and comments
-   * of issues new to us, and (opening from a copy) DELETEs for the inbox notes that went.
+   * of issues new to us, DELETEs for your favourites that went, and (opening from a copy) for the inbox notes that went.
+   * Favourites are compared every time: a few ids, and an unstar in another tab while this one was away leaves no trace.
    */
   private async changesSince(from: string): Promise<{ inputs: Incoming[]; gone: boolean }> {
     const { reader } = this.env
+    const meId = this.me.id
     const members = new Set(Object.values(this.live.server.workspace_members).map((m) => m.profile_id))
-    // the notes we have before asking: one that comes meanwhile is no note that went
+    // the notes and favourites we have before asking: one that comes meanwhile is none that went
     const notes = this.checkInbox ? Object.keys(this.live.server.inbox) : null
-    const [{ inputs, gone }, inbox] = await Promise.all([reader.changed(sinceMark(from), members), notes ? reader.inboxIds() : null])
+    const stars = Object.keys(this.live.server.favourites[meId] ?? {})
+    const [{ inputs, gone }, inbox, starred] = await Promise.all([
+      reader.changed(sinceMark(from), members),
+      notes ? reader.inboxIds() : null,
+      stars.length ? reader.favouriteIds() : null,
+    ])
     if (gone || this.closed) return { inputs, gone }
     const known = this.live.server.issues
     const fresh = inputs.flatMap((i) => (i.from === 'fetch' && i.table === 'issues' ? i.rows.map((r) => String(r.id)).filter((id) => !known[id]) : []))
     if (fresh.length) inputs.push(...(await reader.partsOf(fresh)))
     if (notes && inbox) inputs.push(...inboxGone(notes, inbox))
+    if (starred) inputs.push(...favouritesGone(meId, stars, starred))
     return { inputs, gone }
   }
 

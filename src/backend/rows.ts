@@ -16,6 +16,7 @@ import {
   type ArchivedIssue,
   type Comment,
   type Display,
+  type Favourite,
   type Filters,
   type InboxItem,
   type Issue,
@@ -111,6 +112,7 @@ const KNOWN = {
   view: names<View & Linked>('id', 'name', 'emoji', 'description', 'owner', 'team', 'filters', 'display', 'createdAt', 'linearId'),
   inbox: names<InboxItem>('id', 'type', 'issue', 'actor', 'at', 'comment', 'status', 'statusId', 'readAt'),
   readState: names<ReadState>('readUntil'),
+  favourite: names<Favourite>('id', 'kind', 'sortOrder'),
 }
 
 /** a JSON column that holds an object (extra, filters, display); anything else reads as {} */
@@ -367,6 +369,11 @@ export function pullRequestsOf(rows: readonly Row<'issue_pull_requests'>[], r: R
 
 export function rowToReadState(row: Row<'read_state'>): ReadState {
   return { ...fromExtra(row.extra, KNOWN.readState), readUntil: isoOrNull(row.read_until) }
+}
+
+/** project_id and view_id only repeat item_id for the foreign keys, so they are left out */
+export function rowToFavourite(row: Row<'favourites'>): Favourite {
+  return { ...fromExtra(row.extra, KNOWN.favourite), id: row.item_id, kind: row.kind, sortOrder: row.sort_order }
 }
 
 // ---------- the app to rows ----------

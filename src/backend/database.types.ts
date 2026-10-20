@@ -95,6 +95,71 @@ export type Database = {
         }
         Relationships: []
       }
+      favourites: {
+        Row: {
+          changed_at: string
+          extra: Json
+          item_id: string
+          kind: string
+          profile_id: string
+          project_id: string | null
+          sort_order: string
+          view_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          changed_at?: string
+          extra?: Json
+          item_id: string
+          kind: string
+          profile_id: string
+          project_id?: never
+          sort_order: string
+          view_id?: never
+          workspace_id: string
+        }
+        Update: {
+          changed_at?: string
+          extra?: Json
+          item_id?: string
+          kind?: string
+          profile_id?: string
+          project_id?: never
+          sort_order?: string
+          view_id?: never
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "favourites_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "favourites_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "favourites_workspace_id_project_id_fkey"
+            columns: ["workspace_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["workspace_id", "id"]
+          },
+          {
+            foreignKeyName: "favourites_workspace_id_view_id_fkey"
+            columns: ["workspace_id", "view_id"]
+            isOneToOne: false
+            referencedRelation: "views"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
       github_repos: {
         Row: {
           added_by: string | null

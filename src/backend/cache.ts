@@ -20,7 +20,7 @@ export { MAX_AGE_DAYS } from './rows'
 /** bump when CacheBody or CacheMeta change shape */
 export const CACHE_FORMAT = 1
 /** the newest migration: a copy made for another database layout is never read (a test checks it) */
-export const SCHEMA_ID = '20261021150000'
+export const SCHEMA_ID = '20261021160000'
 /** a copy longer than this (JSON characters) leaves the archive out, and if it's still too long it isn't kept */
 export const MAX_CHARS = 20_000_000
 /** workspaces kept per browser */
@@ -181,4 +181,11 @@ export function keepStored(stored: unknown, next: CacheMeta, now: number): boole
 /** inbox notes the copy has that aren't there any more (the inbox leaves no deletions behind): DELETEs for them */
 export function inboxGone(kept: Iterable<string>, now: ReadonlySet<string>): Incoming[] {
   return [...kept].filter((id) => !now.has(id)).map((id): Incoming => ({ from: 'message', message: { table: 'inbox', op: 'DELETE', row: { id } } }))
+}
+
+/** your favourites the copy has that aren't there any more (they leave no deletions behind either): DELETEs for them */
+export function favouritesGone(meId: string, kept: Iterable<string>, now: ReadonlySet<string>): Incoming[] {
+  return [...kept]
+    .filter((id) => !now.has(id))
+    .map((id): Incoming => ({ from: 'message', message: { table: 'favourites', op: 'DELETE', row: { profile_id: meId, item_id: id } } }))
 }

@@ -325,6 +325,7 @@ export const TABLES = [
   'github_repos',
   'issue_pull_requests',
   'notion_connections',
+  'favourites',
 ] as const satisfies readonly TableName[]
 
 /** the column that says which workspace a row belongs to */

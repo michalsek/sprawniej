@@ -111,6 +111,19 @@ describe.skipIf(!enabled)('reading a workspace', () => {
     expect([...ids].sort()).toEqual(all.sort())
   })
 
+  test('your favourites: opening reads them in your order, and their ids page after page', async () => {
+    const projects = [ulid(), ulid(), ulid()]
+    await ok(w.ana.db.from('projects').insert(projects.map((id) => ({ id, workspace_id: ws, name: 'Starred' }))))
+    await ok(
+      w.ana.db
+        .from('favourites')
+        .insert(projects.map((item_id, n) => ({ profile_id: w.ana.profileId, workspace_id: ws, kind: 'project', item_id, sort_order: `a${projects.length - n}` }))),
+    )
+    expect([...(await as(w.ana, 1).favouriteIds())].sort()).toEqual([...projects].sort())
+    const r = apply(emptyLive(), await as(w.ana).all())
+    expect(r.patch.favourites?.map((f) => f.id)).toEqual([...projects].reverse())
+  })
+
   test('rows asked for by key, a new issue with its parts', async () => {
     const groups = planFetch([{ table: 'issues', key: { id: open } }, { table: 'labels', key: { id: label } }])
     const inputs = await as(w.ana).byKeys(groups, [open])

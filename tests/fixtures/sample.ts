@@ -182,5 +182,6 @@ export function sampleData(): DataState {
       { id: 'n2', type: 'mentioned', issue: issues[0].id, actor: 'zosia', at: at(3), comment: 'c1' },
     ],
     readState: { readUntil: null },
+    favourites: [],
   }
 }

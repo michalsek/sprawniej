@@ -86,6 +86,7 @@ function setup(reader: Partial<Reader> = {}, joined: Promise<'up' | 'slow' | 'de
     all: mock(async () => world()),
     changed: mock(async () => ({ inputs: [] as Incoming[], gone: false })),
     inboxIds: async () => new Set<string>(),
+    favouriteIds: async () => new Set<string>(),
     archived: async () => [],
     byKeys: mock(async () => [] as Incoming[]),
     partsOf: async () => [],
@@ -470,6 +471,20 @@ describe('the writer and the open workspace', () => {
   })
 })
 
+const favourite = (item: string, sort: string) => ({ profile_id: ME, workspace_id: WS, kind: 'project', item_id: item, sort_order: sort, project_id: item, view_id: null, changed_at: T(5), extra: {} })
+
+describe('favourites', () => {
+  test('every catch-up drops the ones that went meanwhile (an unstar leaves nothing behind)', async () => {
+    let there = new Set(['pr-1', 'pr-2'])
+    const s = setup({ all: async () => [...world(), fetch('favourites', [favourite('pr-1', 'a0'), favourite('pr-2', 'a1')])], favouriteIds: async () => there })
+    await s.ws.open()
+    expect(s.env.data.getState().favourites.map((f) => f.id)).toEqual(['pr-1', 'pr-2'])
+    there = new Set(['pr-1'])
+    await s.ws.catchUp()
+    expect(s.env.data.getState().favourites.map((f) => f.id)).toEqual(['pr-1'])
+  })
+})
+
 describe('reading the workspace again', () => {
   test('a quiet workspace (its newest change is old) still catches up; 44 days without catching up reads it again', async () => {
     const changed = mock(async () => ({ inputs: [] as Incoming[], gone: false }))
@@ -640,6 +655,14 @@ describe('the copy kept in this browser', () => {
     joined.resolve('up')
     await opened
     expect(s.env.status.getState()).toMatchObject({ state: 'saved', synced: true })
+  })
+
+  test('favourites removed elsewhere while away go too, opening from the copy', async () => {
+    const kept = keptCopy({ inputs: [...keptCopy().inputs, fetch('favourites', [favourite('pr-1', 'a0'), favourite('pr-2', 'a1')])] })
+    const s = setup({ favouriteIds: async () => new Set(['pr-2']) }, Promise.resolve('up'), NO_WRITES, keeping(kept).hooks)
+    await s.ws.open()
+    await sleep(2)
+    expect(s.env.data.getState().favourites.map((f) => f.id)).toEqual(['pr-2'])
   })
 
   test('inbox notes that went while away go (they leave nothing behind)', async () => {

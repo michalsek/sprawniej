@@ -93,11 +93,11 @@ export class Loader {
     return paged(this.db, table, cols, select, filter, { page: this.page, onPage })
   }
 
-  /** a table's rows that belong to this workspace (and, for your inbox and read marks, to you) */
+  /** a table's rows that belong to this workspace (and, for your inbox, read marks and favourites, to you) */
   private scope(table: LiveTable): (q: Query) => Query {
     if (table === 'workspaces') return (q) => q.eq('id', this.ws)
     if (table === 'inbox') return (q) => q.eq('workspace_id', this.ws).eq('recipient_id', this.meId)
-    if (table === 'read_state') return (q) => q.eq('workspace_id', this.ws).eq('profile_id', this.meId)
+    if (table === 'read_state' || table === 'favourites') return (q) => q.eq('workspace_id', this.ws).eq('profile_id', this.meId)
     return (q) => q.eq('workspace_id', this.ws)
   }
 
@@ -129,7 +129,7 @@ export class Loader {
 
   /** everything an opening workspace needs (the archive comes later, when something needs it) */
   all(progress?: (text: string) => void): Promise<Incoming[]> {
-    const plain = ['workspaces', 'teams', 'team_members', 'labels', 'statuses', 'projects', 'project_teams', 'views', 'inbox', 'read_state'] as const
+    const plain = ['workspaces', 'teams', 'team_members', 'labels', 'statuses', 'projects', 'project_teams', 'views', 'inbox', 'read_state', 'favourites'] as const
     const members = this.paged('workspace_members', KEYS.workspace_members, '*', this.scope('workspace_members'))
     const told = (n: number) => (n >= PAGE ? progress?.(`Getting your team's issues: ${n.toLocaleString('en')} so far…`) : undefined)
     return Promise.all([
@@ -185,6 +185,12 @@ export class Loader {
     return new Set(rows.map((r) => String(r.id)))
   }
 
+  /** the item ids of your favourites (they leave nothing behind either, so the ones we have are compared with them) */
+  async favouriteIds(): Promise<Set<string>> {
+    const rows = await this.paged('favourites', KEYS.favourites, 'profile_id,item_id', this.scope('favourites'))
+    return new Set(rows.map((r) => String(r.item_id)))
+  }
+
   /** what the groups ask for; new issues (ones we didn't have) come with their labels, followers and comments */
   async byKeys(groups: readonly FetchGroup[], issuesNew: readonly string[]): Promise<Incoming[]> {
     const asked = groups.map(async (g) => {
@@ -228,7 +234,7 @@ export class Loader {
 }
 
 /** what a Loader reads with (LiveWorkspace's tests give it a pretend one) */
-export type Reader = Pick<Loader, 'all' | 'archived' | 'changed' | 'inboxIds' | 'byKeys' | 'partsOf' | 'exists' | 'countArchived'>
+export type Reader = Pick<Loader, 'all' | 'archived' | 'changed' | 'inboxIds' | 'favouriteIds' | 'byKeys' | 'partsOf' | 'exists' | 'countArchived'>
 
 /** rows asked for by key, grouped so each group is one request */
 export interface FetchGroup {

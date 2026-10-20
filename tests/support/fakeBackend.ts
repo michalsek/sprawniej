@@ -33,6 +33,7 @@ const slice = (s: DataState): StoreSlice => ({
   pullRequests: s.pullRequests,
   inbox: s.inbox,
   readState: s.readState,
+  favourites: s.favourites,
 })
 
 /** like LiveWorkspace: applyRows into the store */

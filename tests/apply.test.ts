@@ -548,6 +548,50 @@ describe('only this workspace, and only you', () => {
   })
 })
 
+describe('favourites', () => {
+  const favourite = (item: string, sort: string, more: Partial<Row<'favourites'>> = {}): Row<'favourites'> => ({
+    profile_id: ME,
+    workspace_id: WS,
+    kind: 'project',
+    item_id: item,
+    sort_order: sort,
+    project_id: item,
+    view_id: null,
+    changed_at: T(30),
+    extra: {},
+    ...more,
+  })
+
+  test('yours in this workspace, in your order; someone else’s and another workspace’s are ignored', () => {
+    const w = open()
+    step(w, msg('favourites', 'INSERT', favourite('pr-1', 'a1')), msg('favourites', 'INSERT', favourite('v-1', 'a0', { kind: 'view', project_id: null, view_id: 'v-1' })))
+    expect(w.data.favourites).toEqual([
+      { id: 'v-1', kind: 'view', sortOrder: 'a0' },
+      { id: 'pr-1', kind: 'project', sortOrder: 'a1' },
+    ])
+    const r = step(w, msg('favourites', 'INSERT', favourite('pr-2', 'a2', { profile_id: 'p-bob' })), msg('favourites', 'INSERT', favourite('pr-3', 'a3', { workspace_id: 'ws-2' })))
+    expect(r.patch).toEqual({})
+  })
+
+  test('a new order moves it, a delete removes it, and the echo of what we have changes nothing', () => {
+    const w = open()
+    step(w, msg('favourites', 'INSERT', favourite('pr-1', 'a0')), msg('favourites', 'INSERT', favourite('v-1', 'a1', { kind: 'view', project_id: null, view_id: 'v-1' })))
+    step(w, msg('favourites', 'UPDATE', { profile_id: ME, item_id: 'v-1', sort_order: 'Zz', changed_at: T(31) }))
+    expect(w.data.favourites.map((f) => f.id)).toEqual(['v-1', 'pr-1'])
+    expect(step(w, msg('favourites', 'UPDATE', { profile_id: ME, item_id: 'v-1', sort_order: 'Zz', changed_at: T(31) })).patch).toEqual({})
+    step(w, msg('favourites', 'DELETE', { profile_id: ME, item_id: 'v-1' }))
+    expect(w.data.favourites.map((f) => f.id)).toEqual(['pr-1'])
+  })
+
+  test('a change to one we don’t have (your other workspaces’ come on the same channel) asks for nothing and leaves the mark', () => {
+    const w = open()
+    const before = w.state.mark
+    const r = step(w, msg('favourites', 'UPDATE', { profile_id: ME, item_id: 'pr-9', sort_order: 'b0', changed_at: T(95) }))
+    expect(r.fetch).toEqual([])
+    expect(w.state.mark).toBe(before)
+  })
+})
+
 describe('people and teams that arrive later', () => {
   test('rows that point at someone new wait for their profile, asked for once', () => {
     const w = open()

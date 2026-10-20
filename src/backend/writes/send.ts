@@ -50,8 +50,8 @@ export interface Transport {
   run(req: Request, opts: { retry: boolean }): Promise<Answer>
 }
 
-/** join tables: added unless already there */
-export const ADD_UNLESS_THERE: ReadonlySet<LiveTable> = new Set(['issue_labels', 'team_members', 'project_teams', 'issue_followers'])
+/** join tables (and your favourites): added unless already there, so starring in two tabs at once makes one */
+export const ADD_UNLESS_THERE: ReadonlySet<LiveTable> = new Set(['issue_labels', 'team_members', 'project_teams', 'issue_followers', 'favourites'])
 
 export const whatOf = (req: Request): What => ({ table: req.kind === 'notes' ? 'inbox' : req.kind === 'call' ? 'issues' : req.table, op: req.kind })
 

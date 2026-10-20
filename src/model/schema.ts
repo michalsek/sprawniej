@@ -318,3 +318,20 @@ export const readStateSchema = z
   })
   .loose()
 export type ReadState = z.infer<typeof readStateSchema>
+
+/** what can be starred (the favourites table's `kind`) */
+export const FAVOURITE_KINDS = ['project', 'view'] as const
+export type FavouriteKind = (typeof FAVOURITE_KINDS)[number]
+
+/** a project or view you starred (the favourites table), shown in your sidebar in your own order; yours only */
+export const favouriteSchema = z
+  .object({
+    /** the project's or view's id */
+    id: z.string(),
+    /** a plain string: a kind from a newer app is kept, and simply not shown */
+    kind: z.string(),
+    /** fractional index, like an issue's */
+    sortOrder: z.string(),
+  })
+  .loose()
+export type Favourite = z.infer<typeof favouriteSchema>

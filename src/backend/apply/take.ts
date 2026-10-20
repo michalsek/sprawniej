@@ -36,6 +36,7 @@ export class Dirty {
     inbox: new Set(),
   }
   readState = false
+  favourites = false
   workspace = false
 
   add(kind: Kind, id: unknown) {
@@ -230,6 +231,9 @@ export class Intake {
       case 'read_state':
         d.readState = true
         break
+      case 'favourites':
+        d.favourites = true
+        break
     }
   }
 
@@ -247,11 +251,11 @@ export class Intake {
     delete this.edit('waiting')[id]
   }
 
-  /** is this message about the open workspace (and, for read marks, about you)? */
+  /** is this message about the open workspace (and, for read marks and favourites, about you)? */
   private ours(t: LiveTable, row: Loose): boolean {
     if (t === 'workspaces') return row.id === this.ctx.workspaceId
     if ('workspace_id' in row && row.workspace_id !== this.ctx.workspaceId) return false
-    if (t === 'read_state' && row.profile_id !== this.ctx.meId) return false
+    if ((t === 'read_state' || t === 'favourites') && row.profile_id !== this.ctx.meId) return false
     return true
   }
 
@@ -292,8 +296,8 @@ export class Intake {
     const old = this.mirror.get(t, key)
     const at = stampOf(row)
     if (!old) {
-      // the whole inbox is loaded, and notes from your other workspaces come on the same channel
-      if (t === 'inbox') return
+      // the whole inbox and all your favourites are loaded, and your other workspaces' come on the same channel
+      if (t === 'inbox' || t === 'favourites') return
       this.advance(at)
       const gone = this.live.gone[k]
       if (gone !== undefined && compareStamp(at, gone) <= 0) return

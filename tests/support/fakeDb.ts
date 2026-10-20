@@ -9,9 +9,9 @@
  *   to people outside the workspace, or the same note again within ten minutes) and check_people;
  * - statuses: an issue's category follows its status, and a status follows a category set alone (follow_status); a
  *   note's status (note_status); each category keeps a shown status (keep_a_status); names unique per kind;
- * - the rules: only the author edits a comment, only admins delete a team or rename the workspace, your inbox is
- *   yours (an insert that asks other people's notes back fails, E54), and refusals of updates and deletes come back
- *   empty;
+ * - the rules: only the author edits a comment, only admins delete a team or rename the workspace, your inbox,
+ *   read marks and favourites are yours (an insert that asks other people's notes back fails, E54), and refusals of
+ *   updates and deletes come back empty;
  * - cascades and set-nulls when a row goes, and the realtime messages a teammate would hear.
  * On top, the transport can be held, made to fail, or lose an answer.
  */
@@ -94,7 +94,11 @@ const GRANTS: Partial<Record<LiveTable, { insert: string[]; update: string[] }>>
   views: { insert: ['id', 'workspace_id', 'team_id', 'name', 'emoji', 'description', 'filters', 'display', 'extra'], update: ['name', 'emoji', 'description', 'filters', 'display', 'extra'] },
   inbox: { insert: ['id', 'workspace_id', 'recipient_id', 'type', 'issue_id', 'comment_id', 'status', 'status_id', 'extra'], update: ['read_at'] },
   read_state: { insert: ['profile_id', 'workspace_id', 'read_until', 'extra'], update: ['profile_id', 'workspace_id', 'read_until', 'extra'] },
+  favourites: { insert: ['profile_id', 'workspace_id', 'kind', 'item_id', 'sort_order', 'extra'], update: ['sort_order', 'extra'] },
 }
+
+/** a favourite points at a project or a view, by its kind (20261021160000_favourites.sql) */
+const STARRED: Record<string, LiveTable> = { project: 'projects', view: 'views' }
 
 /** foreign keys (20261019000001_tables.sql): [column, the table it points at] */
 const FKS: Partial<Record<LiveTable, [string, LiveTable][]>> = {
@@ -300,7 +304,7 @@ export class FakeDb {
   /** what the select rule shows you */
   private visible(table: LiveTable, row: Loose): boolean {
     if (table === 'inbox') return row.recipient_id === this.actor()
-    if (table === 'read_state') return row.profile_id === this.actor()
+    if (table === 'read_state' || table === 'favourites') return row.profile_id === this.actor()
     return true
   }
 
@@ -308,7 +312,7 @@ export class FakeDb {
   private mine(table: LiveTable, op: 'update' | 'delete', row: Loose): boolean {
     if (table === 'comments') return row.author_id === this.actor()
     if (table === 'inbox') return row.recipient_id === this.actor()
-    if (table === 'read_state') return row.profile_id === this.actor()
+    if (table === 'read_state' || table === 'favourites') return row.profile_id === this.actor()
     if (table === 'profiles') return row.id === this.actor()
     if (table === 'teams' && op === 'delete') return this.admin()
     if (table === 'workspaces') return op === 'update' ? this.admin() : this.role() === 'owner'
@@ -357,7 +361,14 @@ export class FakeDb {
     const plan: { row: Loose; there?: Loose }[] = []
     for (const row of q.rows) {
       if (Object.keys(row).some((c) => !allowed.has(c))) return failed('42501', `permission denied for table ${t}`, 403)
-      if (t === 'read_state' && row.profile_id !== this.actor()) return failed('42501', 'new row violates row-level security policy for table "read_state"', 403)
+      if ((t === 'read_state' || t === 'favourites') && row.profile_id !== this.actor()) return failed('42501', `new row violates row-level security policy for table "${t}"`, 403)
+      if (t === 'favourites') {
+        const to = STARRED[String(row.kind)]
+        if (!to) return failed('23514', 'new row for relation "favourites" violates check constraint "favourites_kind_check"')
+        if (!this.get(to, { id: row.item_id })) {
+          return failed('23503', `insert or update on table "favourites" violates foreign key constraint "favourites_workspace_id_${String(row.kind)}_id_fkey"`)
+        }
+      }
       const ks = keyString(t, row)
       const there = this.get(t, row)
       const twice = plan.some((p) => keyString(t, p.row) === ks)
@@ -495,6 +506,8 @@ export class FakeDb {
         return { comment_id: null, status: null, status_id: null, extra: {}, ...row, actor_id: me, at, read_at: null }
       case 'read_state':
         return { extra: {}, ...row }
+      case 'favourites':
+        return { extra: {}, ...row, project_id: row.kind === 'project' ? row.item_id : null, view_id: row.kind === 'view' ? row.item_id : null }
       default:
         return row
     }
@@ -589,7 +602,10 @@ export class FakeDb {
       for (const t of ['issues', 'views', 'team_members', 'project_teams'] as const) each(t, (r) => r.team_id === id)
     } else if (table === 'projects') {
       each('project_teams', (r) => r.project_id === id)
+      each('favourites', (r) => r.project_id === id)
       nulls('issues', 'project_id')
+    } else if (table === 'views') {
+      each('favourites', (r) => r.view_id === id)
     } else if (table === 'labels') {
       each('issue_labels', (r) => r.label_id === id)
     } else if (table === 'comments') {

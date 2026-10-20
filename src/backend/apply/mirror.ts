@@ -37,6 +37,8 @@ export interface Mirror {
   inbox: Rec<Row<'inbox'>>
   /** by keyString */
   read_state: Rec<Row<'read_state'>>
+  /** profile_id → item_id → row (only yours are read) */
+  favourites: Rec<Rec<Row<'favourites'>>>
 }
 
 export const emptyMirror = (): Mirror => ({
@@ -58,6 +60,7 @@ export const emptyMirror = (): Mirror => ({
   views: {},
   inbox: {},
   read_state: {},
+  favourites: {},
 })
 
 /** tables kept in groups by their parent: [the parent column, the column within the group] */
@@ -68,6 +71,7 @@ export const GROUPED = {
   issue_followers: ['issue_id', 'profile_id'],
   comments: ['issue_id', 'id'],
   issue_pull_requests: ['issue_id', 'pull_request_id'],
+  favourites: ['profile_id', 'item_id'],
 } as const
 export type Grouped = keyof typeof GROUPED
 export const isGrouped = (t: LiveTable): t is Grouped => t in GROUPED

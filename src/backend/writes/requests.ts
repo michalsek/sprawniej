@@ -29,6 +29,11 @@ export const PARENTS: Partial<Record<LiveTable, readonly (readonly [string, Live
   issue_followers: [['issue_id', 'issues']],
   comments: [['issue_id', 'issues']],
   views: [['team_id', 'teams']],
+  // a favourite is a project or a view: only the one being made holds it
+  favourites: [
+    ['item_id', 'projects'],
+    ['item_id', 'views'],
+  ],
 }
 
 /** one row's waiting work, as far as making requests goes */

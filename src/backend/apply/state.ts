@@ -21,7 +21,7 @@ import type { DataState } from '@/data/store'
 
 export type StoreSlice = Pick<
   DataState,
-  'workspace' | 'me' | 'people' | 'members' | 'labels' | 'statuses' | 'teams' | 'issues' | 'archive' | 'projects' | 'views' | 'comments' | 'pullRequests' | 'inbox' | 'readState'
+  'workspace' | 'me' | 'people' | 'members' | 'labels' | 'statuses' | 'teams' | 'issues' | 'archive' | 'projects' | 'views' | 'comments' | 'pullRequests' | 'inbox' | 'readState' | 'favourites'
 >
 
 type Rec<V> = Readonly<Record<string, V>>

@@ -25,6 +25,7 @@ export const LIVE_TABLES = [
   'views',
   'inbox',
   'read_state',
+  'favourites',
 ] as const
 export type LiveTable = (typeof LIVE_TABLES)[number]
 export const isLiveTable = (name: unknown): name is LiveTable => (LIVE_TABLES as readonly unknown[]).includes(name)
@@ -52,6 +53,7 @@ export const KEYS = {
   views: ['id'],
   inbox: ['id'],
   read_state: ['profile_id', 'workspace_id'],
+  favourites: ['profile_id', 'item_id'],
 } as const satisfies Record<LiveTable, readonly string[]>
 export type KeyOf<N extends LiveTable> = { [K in (typeof KEYS)[N][number]]: string }
 

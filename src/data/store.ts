@@ -3,7 +3,7 @@
  * they never change it directly. All changes go through `actions.ts` (see CLAUDE.md, golden rules).
  */
 import { create } from 'zustand'
-import { TEAM_KEY, type ArchivedIssue, type Comment, type InboxItem, type Issue, type Label, type Member, type Person, type Project, type PullRequest, type ReadState, type Status, type Team, type View, type Workspace } from '@/model/schema'
+import { TEAM_KEY, type ArchivedIssue, type Comment, type Favourite, type InboxItem, type Issue, type Label, type Member, type Person, type Project, type PullRequest, type ReadState, type Status, type Team, type View, type Workspace } from '@/model/schema'
 
 export interface DataState {
   workspace: Workspace | null
@@ -29,6 +29,8 @@ export interface DataState {
   /** my inbox, newest first */
   inbox: InboxItem[]
   readState: ReadState
+  /** my favourites in this workspace, in my order (sortOrder, then id); may name things that are gone (src/data/favourites.ts) */
+  favourites: Favourite[]
 }
 
 export const EMPTY: DataState = {
@@ -48,6 +50,7 @@ export const EMPTY: DataState = {
   pullRequests: {},
   inbox: [],
   readState: { readUntil: null },
+  favourites: [],
 }
 
 export const useData = create<DataState>()(() => ({ ...EMPTY }))

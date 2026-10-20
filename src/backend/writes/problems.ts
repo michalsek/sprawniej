@@ -83,6 +83,7 @@ const POINTS_AT: [RegExp, string][] = [
   [/_label_id_fkey$/, MESSAGES.goneLabelAdded],
   [/_project_id_fkey$/, MESSAGES.goneProject],
   [/_team_id_fkey$/, MESSAGES.goneTeam],
+  [/_view_id_fkey$/, MESSAGES.goneView],
   [/_(issue_id|parent_id|duplicate_of)_fkey$/, MESSAGES.goneIssue],
 ]
 

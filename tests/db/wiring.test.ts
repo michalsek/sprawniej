@@ -174,6 +174,22 @@ describe.skipIf(!enabled)('every shared table is wired the same way', () => {
     expect(await ok(w.ana.db.from('deletions').select().eq('workspace_id', w.ws).eq('table_name', 'inbox'))).toEqual([])
   })
 
+  test('favourites come and go on their owner’s channel, without deletion notes', async () => {
+    const mine = await listen(w.bob, `me:${w.bob.profileId}`)
+    expect(mine.status).toBe('SUBSCRIBED')
+    const key = { profile_id: w.bob.profileId, item_id: await projectId() }
+    const stamp = async () => (await ok(w.bob.db.from('favourites').select('changed_at').match(key).single())).changed_at
+    await ok(w.bob.db.from('favourites').insert({ ...key, workspace_id: w.ws, kind: 'project', sort_order: 'a0' }))
+    const first = await stamp()
+    await ok(w.bob.db.from('favourites').update({ sort_order: 'a1' }).match(key))
+    expect((await stamp()) > first).toBe(true)
+    await ok(w.bob.db.from('favourites').delete().match(key))
+    for (const op of ['INSERT', 'UPDATE', 'DELETE']) expect(await mine.waitFor(about('favourites', op, key))).toBeDefined()
+    expect(await ok(w.ana.db.from('deletions').select().eq('workspace_id', w.ws).eq('table_name', 'favourites'))).toEqual([])
+    // teammates hear nothing about them
+    expect(heard.got.filter((m) => m.table === 'favourites')).toEqual([])
+  })
+
   test('a person from Linear who goes leaves a note in their workspace', async () => {
     const guest = crypto.randomUUID()
     await ok(w.ana.db.rpc('import_rows', { p_ws: w.ws, p_table: 'profiles', p_rows: [{ id: guest, login: `~dbt-${RUN}-g5`, name: 'Guest Five' }] }))

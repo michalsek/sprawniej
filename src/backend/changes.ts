@@ -44,6 +44,7 @@ interface Grants {
   }
   inbox: { insert: 'id' | 'workspace_id' | 'recipient_id' | 'type' | 'issue_id' | 'comment_id' | 'status' | 'status_id' | 'extra'; update: 'read_at' }
   read_state: { insert: 'profile_id' | 'workspace_id' | 'read_until' | 'extra'; update: 'profile_id' | 'workspace_id' | 'read_until' | 'extra' }
+  favourites: { insert: 'profile_id' | 'workspace_id' | 'kind' | 'item_id' | 'sort_order' | 'extra'; update: 'sort_order' | 'extra' }
 }
 
 /** what a signed-in person may send for this table */

@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { INBOX_KEEP } from '@/data/actions'
 import { STATUS_COLORS } from '@/model/colors'
-import { AUTO_ARCHIVE_MONTHS, inboxItemSchema, PROJECT_STATUSES, TEAM_KEY_PATTERN } from '@/model/schema'
+import { AUTO_ARCHIVE_MONTHS, FAVOURITE_KINDS, inboxItemSchema, PROJECT_STATUSES, TEAM_KEY_PATTERN } from '@/model/schema'
 import { NOTION_URL_PATTERN, PAGE_ID_PATTERN, UUID_PATTERN } from '@/model/notion'
 import { PRIORITY_IDS, ISSUE_CATEGORIES, CATEGORIES } from '@/model/status'
 
@@ -58,6 +58,10 @@ describe('database lists match src/model', () => {
 
   test('inbox note types', () => {
     for (const list of lists('inbox-types')) expect(list).toEqual([...inboxItemSchema.shape.type.options])
+  })
+
+  test('what can be starred', () => {
+    for (const list of lists('favourite-kinds')) expect(list).toEqual([...FAVOURITE_KINDS])
   })
 
   test('statuses that count as finished (completed_at) and closed (auto-archive)', () => {
