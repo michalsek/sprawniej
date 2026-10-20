@@ -67,6 +67,14 @@ and history stay yours. What changes:
   and they hear about those issues (new comments and status changes), just as if they had been mentioned there.
 - Signing in doesn't change: your email, password and GitHub work as before.
 
+### Light or dark
+
+Sprawniej comes in a light look and a dark one. At first it follows your device: light by day, dark at night, if
+your device switches. To pick one yourself, press `⌘` `K` (or `Ctrl` `K`) and type **light** or **dark**: **Use
+light appearance** and **Use dark appearance** keep that look whatever your device does, and **Follow the system
+appearance** goes back to following it. Your choice saves by itself and follows you to every device you sign in on.
+Only you see it.
+
 ### Ways to sign in
 
 **Settings › Ways to sign in** lists how you can sign in:
@@ -410,6 +418,7 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
 
 - `⌘` `K` (or `Ctrl` `K`), or `/`: search issues and jump anywhere.
 - `C`: new issue.
+- `⌘` `K`, then **light** or **dark**: switch between the light and the dark look.
 - `S`: change the status of the issue under the mouse (or the open one).
 - `P`: change the priority.
 - `A`: change who it's assigned to.

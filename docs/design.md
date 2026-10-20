@@ -1,26 +1,37 @@
 # Design
 
-Sprawniej looks like our internal tools (Punchcard): calm, dark, neutral grey, with roomy controls. Inside that
+Sprawniej looks like our internal tools (Punchcard): calm, neutral grey, with roomy controls, in a light and a dark
+look (each person picks System, Light or Dark). Inside that
 frame the issue screens are dense and quick: compact rows, clear status and priority icons, keyboard shortcuts for
 everything common.
 
 ## Colours
 
-All colours are CSS variables in `src/index.css`, on shadcn's zinc scale. Use the Tailwind names
-(`bg-background`, `text-muted-foreground`, `border`…), never raw hex values in components.
+All colours are CSS variables in `src/index.css`, on shadcn's zinc scale: Light in `:root`, Dark in `.dark`. Use the
+Tailwind names (`bg-background`, `text-muted-foreground`, `border`…), never raw hex values in components, and never
+assume the page is dark (a `#18181b` that reads on dark vanishes on light). A colour that has to differ between the
+two looks gets a token of its own.
 
-| Use | Token | Value |
-| --- | --- | --- |
-| Page background | `background` | `#1c1c1f` |
-| Sidebar | `sidebar` | `#161618` |
-| Hover, selected item | `accent` | `#2a2a2e` |
-| Lines and borders | `border` | `#2e2e33` |
-| Text | `foreground` | `#f4f4f5` |
-| Quiet text (labels, dates, IDs) | `muted-foreground` | `#a1a1aa` |
-| Main button | `primary` | white with dark text |
+| Use | Token | Light | Dark |
+| --- | --- | --- | --- |
+| Page background | `background` | `#fafafa` (soft off-white) | `#1c1c1f` |
+| Menus, popups | `popover` | `#ffffff` (lifts above the page) | `#222226` |
+| Sidebar | `sidebar` | `#f2f2f4` | `#161618` |
+| Hover, selected item | `accent` | `#ededf0` | `#2a2a2e` |
+| Lines and borders | `border` | `#e4e4e7` | `#2e2e33` |
+| Text | `foreground` | `#18181b` | `#f4f4f5` |
+| Quiet text (labels, dates, IDs) | `muted-foreground` | `#63636b` | `#a1a1aa` |
+| Main button | `primary` | near-black with white text | white with dark text |
+
+The light page colour is also in `src/lib/theme.ts` (`THEME_COLORS`) and index.html's `theme-color`; change all three
+together (`tests/themeScript.test.ts` checks). `tests/contrast.test.ts` checks every text pair is 4.5:1 and every
+meaning colour 3:1 in both looks: when a colour fails, darken the colour, don't change the page.
 
 Colour only means something. Status colours (`status-*`), the orange of Urgent, and label colours are the only
-bright colours on screen. Everything else is grey.
+bright colours on screen. Everything else is grey. In Light, In Progress is a deeper gold and Urgent a deeper orange,
+so they read on a light page; the check, cross and "!" inside the icons are `status-mark` and `urgent-mark`. Label
+dots (`LabelDot` in `src/components/LabelChip.tsx`) get a thin edge in Light, so yellow, pink and white labels still
+show. Code in descriptions uses the `code-*` colours.
 
 | Status | Icon |
 | --- | --- |
@@ -46,8 +57,8 @@ Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
   (*Workspace*, *Your teams*); your picture, name and @handle at the bottom with a menu.
 - **Top bar**: sidebar toggle, a thin divider, breadcrumbs (`Sprawniej / 🛠️ Engineering / Issues`), the save chip,
   and the search box with `⌘K`.
-- **Buttons**: outlined by default (like Punchcard's `Today`). One white filled button per screen at most, for the
-  main action (like `+ Track time`). Icon buttons are square.
+- **Buttons**: outlined by default (like Punchcard's `Today`). One filled button per screen at most (white in Dark,
+  near-black in Light), for the main action (like `+ Track time`). Icon buttons are square.
 - **Switches between options** (List / Board): joined buttons where the chosen one has a light border and a
   raised background (`src/components/Segmented.tsx`), like Punchcard's Day / Week / Month.
 - **Tabs that are pages** (Active / Backlog / All issues): separate outlined buttons (`src/components/Tabs.tsx`).

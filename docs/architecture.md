@@ -62,11 +62,21 @@ up). Without a copy, it reads everything except the archive.
   anything that can't), ends the sign-in in this browser, deletes the copies of your workspaces
   (`sprawniej-cache`), and forgets what the browser remembers for you (the tour, skipped teams, comment drafts, display
   choices). What stays says nothing about the person or the work: `sprawniej-chrome` (whether the sidebar is open),
+  `sprawniej-theme` (light or dark, so the sign-in screen keeps the look),
   `sprawniej-session-v2` (emptied: no workspace open, none remembered), `sprawniej:old-copies-gone` (the earlier
   version's leftovers are already removed) and `sprawniej:signing-out`, the mark that tells the other tabs it was on
   purpose, so they start over too.
 - At start, `forgetOldVersion()` removes once what the earlier version kept in this browser (its session with a
   GitHub key, and its copies of workspaces).
+- **Light or dark** is each person's (System, Light or Dark) and kept in two places: this browser (`sprawniej-theme`),
+  so a small script in `index.html` puts the right look on before the first frame, and the account's own metadata
+  (`auth.updateUser({ data: { theme } })`, which keeps the rest of it), so it follows you to other devices. No
+  migration and no table: teammates never see it. The rules are `src/lib/theme.ts` (tested); `src/app/theme.ts` follows
+  the device, other tabs (the storage event) and the account; `setTheme` in `src/data/actions.ts` saves it, quietly
+  and outside the save chip. The account's choice wins when you sign in, except a choice made here that couldn't be
+  sent yet (`sprawniej:theme-unsent` holds whose it is); that one is sent when you're back online, the sign-in renews,
+  or next start. After start, `startAuth` asks once for a fresh copy of you, since the kept sign-in's can be an hour
+  old.
 
 ## Workspaces, members and roles
 
@@ -378,7 +388,7 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 
 | Folder | What's inside |
 | --- | --- |
-| `src/app` | The frame (sidebar, top bar), the way in (`Gate.tsx`), routes, the save chip, sign-out, new versions |
+| `src/app` | The frame (sidebar, top bar), the way in (`Gate.tsx`), routes, the save chip, sign-out, new versions, light or dark as it runs (`theme.ts`) |
 | `src/model` | The app's shapes (zod), the fixed statuses and priorities, team keys |
 | `src/data` | The store, pure selectors (filter, group, sort), `actions.ts`, inbox rules, history lines, roles |
 | `src/backend` | Every call to Supabase: sign-in, profiles, workspaces and invites, opening, the copy in this browser, live changes, saving, pictures, history, saving imports |
@@ -391,7 +401,7 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | `src/features/settings/pages.tsx` | The one list of settings pages: the routes, the settings menu and ⌘K follow it (rules in `nav.ts`) |
 | `src/components` | Small shared pieces (avatar, empty state, segmented switch) |
 | `src/ui` | shadcn/ui components |
-| `src/lib` | Small helpers with no app knowledge (search that ignores Polish letters, `cn`, hooks) |
+| `src/lib` | Small helpers with no app knowledge (search that ignores Polish letters, `cn`, hooks, the light or dark rules in `theme.ts`) |
 | `src/config.ts` | The app's public address (invite links) and where sign-in comes back to |
 | `src/version.ts` | The version and the What's new notes (`CHANGELOG`) |
 | `src/session.ts` | Which workspace is open and the ones you opened before (localStorage) |
