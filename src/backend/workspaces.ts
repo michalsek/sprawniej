@@ -67,6 +67,7 @@ export const RULES = {
   notEnder: 'Only admins and owners can end invite links.',
   notLinker: 'Only admins and owners can link people.',
   notGitHub: 'Only admins and owners can connect repositories.',
+  notNotion: 'Only admins and owners can connect Notion.',
 }
 
 export interface InviteInfo {
