@@ -145,7 +145,7 @@ the app or by an import still write none. `private.issue_history` is unchanged.
 | 2 | `c` missing or not a uuid | 404, no database call |
 | 3 | no key: `k` when it is 64 hex digits, otherwise the `X-Sprawniej-Secret` header's | 401 |
 | 4 | the project settings missing | 500 |
-| 5 | over 1 MB (by `content-length`, then by what arrived) | 413 |
+| 5 | over 1 MB (read to its end first: Supabase holds an answer back until the request is read) | 413 |
 | 6 | `notion_lookup` with the key's sha256 | `unknown` 404 ("Notion was disconnected"), `wrong_key` 401 ("This address was replaced") |
 | 7 | not JSON, or not a page (said only after the key is checked; properties of a shape Notion never sends read as nothing) | 400 |
 | 8 | the page is in the trash or archived | 200 `{"skipped": …}`, nothing made |
