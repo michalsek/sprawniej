@@ -10,9 +10,10 @@
 import { generateKeyBetween } from 'fractional-indexing'
 import { ulid } from 'ulid'
 import { plainName } from '@/lib/plain'
+import { UUID } from '@/model/notion'
 import { keyFrom, sha256Hex } from './key'
 import { notesFor } from './notes'
-import { issueFromPage, readPage } from './page'
+import { issueFromPage, readPage, type Page, type PageIssue } from './page'
 
 export interface Env {
   /** the project's address and its service key, which Supabase gives every function */
@@ -23,8 +24,6 @@ export interface Env {
 
 /** a page's properties are a few kB */
 export const MAX_BODY = 1_000_000
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -46,7 +45,7 @@ export type Lookup =
     }
 
 /** what notion_apply says */
-export type Applied = { issue: string; new: boolean; archived?: boolean } | { problem: 'team' | 'busy' }
+type Applied = { issue: string; new: boolean; archived?: boolean } | { problem: 'team' | 'busy' }
 
 /** a place before every issue in the team, as a new issue made in the app gets */
 function topOf(first: string | null): string {
@@ -75,8 +74,16 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   } catch {
     // said after the key is checked, so a stranger learns nothing
   }
-  const page = readPage(payload)
-  const fields = page && issueFromPage(page)
+  let page: Page | null = null
+  let fields: PageIssue | null = null
+  try {
+    page = readPage(payload)
+    fields = page && issueFromPage(page)
+  } catch {
+    // a page shaped like nothing Notion sends: "not a page", once the key is checked
+    page = null
+    fields = null
+  }
 
   const call = async <T>(fn: string, args: Record<string, unknown>): Promise<T> => {
     const headers: Record<string, string> = { apikey: env.key ?? '', 'Content-Type': 'application/json' }
@@ -100,8 +107,14 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   })
   if (found.state === 'unknown') return json(404, { error: "This address doesn't work any more: Notion was disconnected in Settings." })
   if (found.state !== 'ok') return json(401, { error: 'This address was replaced. Paste the new one from Settings › Notion.' })
-  if (!page || !fields) return json(400, { error: "That isn't a Notion page." })
-  if (page.trashed) return json(200, { skipped: 'The page is in the trash.' })
+  if (!page || !fields) {
+    console.log('notion', { refused: 'not a page' })
+    return json(400, { error: "That isn't a Notion page." })
+  }
+  if (page.trashed) {
+    console.log('notion', { skipped: 'trash' })
+    return json(200, { skipped: 'The page is in the trash.' })
+  }
 
   const member = new Map(found.emails.map((e) => [e.email.toLowerCase(), e.profile_id]))
   const actor = (fields.authorEmail && member.get(fields.authorEmail)) || null
@@ -130,6 +143,7 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     p_notes: notesFor({ description: fields.description, assignee, actor, people: found.people }),
   })
   if ('problem' in r) {
+    console.log('notion', { problem: r.problem })
     return r.problem === 'team'
       ? json(409, { error: 'Pick a team for Notion pages in Settings › Notion.' })
       : json(429, { error: 'Too many pages at once. Resume the automation in a few minutes.' })

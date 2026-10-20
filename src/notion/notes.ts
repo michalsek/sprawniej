@@ -7,7 +7,7 @@ import { ulid } from 'ulid'
 import { issueNotes } from '@/data/notify'
 import type { Issue, Person } from '@/model/schema'
 
-export interface NewIssueNote {
+interface NewIssueNote {
   id: string
   /** a profile id */
   to: string

@@ -5,12 +5,13 @@
  * the Edge Function (handler.ts) runs it. Nothing here runs in the browser.
  */
 import { plainName } from '@/lib/plain'
+import { PAGE_ID, pageUrl } from '@/model/notion'
 import type { Priority, StatusId } from '@/model/status'
-import { descriptionFor, type RichText } from './markdown'
+import { cut, descriptionFor, type RichText } from './markdown'
 
 // ---------- the payload ----------
 
-export interface NotionUser {
+interface NotionUser {
   object?: string
   id?: string
   name?: string
@@ -20,6 +21,7 @@ export interface NotionUser {
   person?: { email?: string }
 }
 
+/** a property as Notion sends it; the readers below check every part, so another shape reads as nothing */
 export interface Property {
   id?: string
   type?: string
@@ -41,13 +43,13 @@ export interface Page {
   url: string
   /** in the trash, or archived: nothing is made */
   trashed: boolean
-  properties: Record<string, Property>
+  /** as Notion sent them: each is read as a Property, and anything of another shape as nothing */
+  properties: Record<string, unknown>
 }
 
-const isRecord = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x)
+type Data = Record<string, unknown>
 
-/** Notion's own addresses: www.notion.so, notion.so and a team's *.notion.site */
-export const NOTION_URL = /^https:\/\/([a-z0-9-]+\.)*notion\.(so|site)\//
+const isRecord = (x: unknown): x is Data => !!x && typeof x === 'object' && !Array.isArray(x)
 
 /** the page in a delivery (`{"source": …, "data": {"object": "page", …}}`); null when it isn't one */
 export function readPage(json: unknown): Page | null {
@@ -55,20 +57,19 @@ export function readPage(json: unknown): Page | null {
   const d = json.data
   if (d.object !== 'page' || typeof d.id !== 'string') return null
   const id = d.id.replace(/-/g, '').toLowerCase()
-  if (!/^[0-9a-f]{32}$/.test(id)) return null
-  const url = typeof d.url === 'string' && d.url.length <= 2000 && NOTION_URL.test(d.url) ? d.url : `https://www.notion.so/${id}`
+  if (!PAGE_ID.test(id)) return null
   return {
     id,
-    url,
+    url: pageUrl(d.url, id),
     trashed: d.in_trash === true || d.archived === true,
-    properties: isRecord(d.properties) ? (d.properties as Record<string, Property>) : {},
+    properties: isRecord(d.properties) ? d.properties : {},
   }
 }
 
 // ---------- which property is which ----------
 
 /** the names each field is found under (as plainName gives them) */
-export const NAMES = {
+const NAMES = {
   status: ['status'],
   priority: ['priority'],
   assignee: ['assignee', 'assignees', 'assignedto', 'owner'],
@@ -79,32 +80,37 @@ export const NAMES = {
 }
 
 /** the first property called one of `names` that has one of `types` */
-function named(props: Record<string, Property>, names: string[], types: string[]): Property | undefined {
+function named(props: Data, names: string[], types: string[]): Data | undefined {
   for (const [name, p] of Object.entries(props)) {
-    if (typeof p?.type === 'string' && names.includes(plainName(name)) && types.includes(p.type)) return p
+    if (isRecord(p) && typeof p.type === 'string' && types.includes(p.type) && names.includes(plainName(name))) return p
   }
   return undefined
 }
 
 /** the first property of a type, whatever it's called */
-function ofType(props: Record<string, Property>, type: string): Property | undefined {
-  return Object.values(props).find((p) => p?.type === type)
+function ofType(props: Data, type: string): Data | undefined {
+  return Object.values(props).find((p): p is Data => isRecord(p) && p.type === type)
 }
 
-const plainText = (parts: RichText[] | undefined) => (Array.isArray(parts) ? parts.map((p) => p?.plain_text ?? '').join('') : '')
+const text = (x: unknown): string => (typeof x === 'string' ? x : '')
+
+const plainText = (parts: unknown) => (Array.isArray(parts) ? parts.map((p) => (isRecord(p) ? text(p.plain_text) : '')).join('') : '')
+
+/** an option's name (a select's, a status's, one of a multi-select's) */
+const nameOf = (o: unknown): string => (isRecord(o) ? text(o.name) : '')
 
 /** a select's or a status's value */
-const choice = (p: Property | undefined): string => (p?.type === 'status' ? p.status?.name : p?.select?.name) ?? ''
+const choice = (p: Data | undefined): string => nameOf(p?.type === 'status' ? p.status : p?.select)
 
-const emailOf = (u: NotionUser | undefined): string | null => {
-  const e = u?.person?.email
+function emailOf(u: unknown): string | null {
+  const e = isRecord(u) && isRecord(u.person) ? u.person.email : undefined
   return typeof e === 'string' && e.includes('@') ? e.trim().toLowerCase() : null
 }
 
 // ---------- the values ----------
 
 /** status names, as plainName gives them; anything else is Todo */
-export const STATUS_WORDS: Record<StatusId, string[]> = {
+const STATUS_WORDS: Record<StatusId, string[]> = {
   backlog: ['backlog', 'icebox', 'later'],
   todo: ['todo', 'notstarted', 'new', 'open', 'ready', 'planned'],
   in_progress: ['inprogress', 'doing', 'started', 'wip', 'active'],
@@ -115,7 +121,7 @@ export const STATUS_WORDS: Record<StatusId, string[]> = {
 }
 
 /** priority names; anything else is No priority */
-export const PRIORITY_WORDS: Record<Exclude<Priority, 0>, string[]> = {
+const PRIORITY_WORDS: Record<Exclude<Priority, 0>, string[]> = {
   1: ['urgent', 'critical', 'highest', 'p0'],
   2: ['high', 'p1'],
   3: ['medium', 'normal', 'p2'],
@@ -127,22 +133,22 @@ export function statusFrom(name: string): StatusId {
   return (Object.keys(STATUS_WORDS) as StatusId[]).find((s) => STATUS_WORDS[s].includes(word)) ?? 'todo'
 }
 
-export function priorityFrom(name: string): Priority {
+function priorityFrom(name: string): Priority {
   const word = plainName(name)
-  return (([1, 2, 3, 4] as const).find((p) => PRIORITY_WORDS[p].includes(word)) ?? 0) as Priority
+  return ([1, 2, 3, 4] as const).find((p) => PRIORITY_WORDS[p].includes(word)) ?? 0
 }
 
 /** "2026-10-20", also from "2026-10-20T10:00:00.000+02:00"; null when it isn't a real day */
-export function dayFrom(start: string | null | undefined): string | null {
+function dayFrom(start: unknown): string | null {
   const day = typeof start === 'string' ? start.slice(0, 10) : ''
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
   const d = new Date(`${day}T00:00:00Z`)
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === day ? day : null
 }
 
-export const MAX_TITLE = 500
-export const MAX_LABELS = 20
-export const MAX_EMAILS = 20
+const MAX_TITLE = 500
+const MAX_LABELS = 20
+const MAX_EMAILS = 20
 
 /** what the page says about the issue; people are emails here, the database knows who they are */
 export interface PageIssue {
@@ -166,7 +172,7 @@ export interface PageIssue {
 
 export function issueFromPage(page: Page): PageIssue {
   const props = page.properties
-  const title = plainText(ofType(props, 'title')?.title).replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || 'Untitled'
+  const title = cut(plainText(ofType(props, 'title')?.title).replace(/\s+/g, ' ').trim(), MAX_TITLE) || 'Untitled'
 
   const statusProp = named(props, NAMES.status, ['status', 'select']) ?? ofType(props, 'status')
   const priorityProp = named(props, NAMES.priority, ['select', 'status'])
@@ -176,13 +182,13 @@ export function issueFromPage(page: Page): PageIssue {
   const authorEmail = emailOf(ofType(props, 'created_by')?.created_by)
 
   const labelsProp = named(props, NAMES.labels, ['multi_select', 'select'])
-  const labelNames = labelsProp?.type === 'multi_select'
-    ? (Array.isArray(labelsProp.multi_select) ? labelsProp.multi_select : []).map((o) => o?.name ?? '')
-    : [choice(labelsProp)]
+  const options = labelsProp?.multi_select
+  const labelNames = labelsProp?.type === 'multi_select' ? (Array.isArray(options) ? options : []).map(nameOf) : [choice(labelsProp)]
 
   const teamProp = named(props, NAMES.team, ['select', 'status', 'rich_text'])
   const teamHint = (teamProp?.type === 'rich_text' ? plainText(teamProp.rich_text) : choice(teamProp)).trim() || null
 
+  const due = named(props, NAMES.due, ['date'])?.date
   return {
     title,
     description: descriptionFor(named(props, NAMES.description, ['rich_text'])?.rich_text, page.url),
@@ -190,7 +196,7 @@ export function issueFromPage(page: Page): PageIssue {
     priority: priorityFrom(choice(priorityProp)),
     assigneeEmails,
     authorEmail,
-    dueDate: dayFrom(named(props, NAMES.due, ['date'])?.date?.start),
+    dueDate: dayFrom(isRecord(due) ? due.start : null),
     labelNames: [...new Set(labelNames.map((n) => n.trim()).filter(Boolean))].slice(0, MAX_LABELS),
     teamHint,
     emails: [...new Set([authorEmail, ...assigneeEmails].filter((e): e is string => !!e))].slice(0, MAX_EMAILS),

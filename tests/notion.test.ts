@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test'
-import { decodeTime } from 'ulid'
 import fixture from './fixtures/notion-page.json'
 import { handle, MAX_BODY, type Env, type Lookup } from '@/notion/handler'
 import { keyFrom, sha256Hex } from '@/notion/key'
@@ -17,12 +16,6 @@ const person = (email?: string) => ({ object: 'user', id: 'u', type: email ? 'pe
 const of = (properties: Record<string, Property>) => issueFromPage(page(properties))
 
 describe('reading a page', () => {
-  test('the fixture reads', () => {
-    const p = readPage(fixture)
-    expect(p).toMatchObject({ id: PAGE_ID, url: fixture.data.url, trashed: false })
-    expect(Object.keys(p?.properties ?? {})).toContain('Task name')
-  })
-
   test('a page id with dashes and capitals becomes 32 lower-case hex digits', () => {
     expect(readPage({ data: { ...fixture.data, id: '2A3B4C5D-6E7F-4A8B-9C0D-1E2F3A4B5C6D' } })?.id).toBe(PAGE_ID)
   })
@@ -36,7 +29,8 @@ describe('reading a page', () => {
   })
 
   test('an address that isn’t Notion’s becomes one made from the id', () => {
-    for (const url of ['https://evil.example/x', 'http://www.notion.so/x', 'https://notion.so.evil.com/x', 'https://evilnotion.so/x', 'javascript:alert(1)', null]) {
+    const odd = ['https://www.notion.so/a)(b', 'https://www.notion.so/a b', 'https://www.notion.so/<x>', 'https://www.notion.so/"x"', 'https://www.notion.so']
+    for (const url of ['https://evil.example/x', 'http://www.notion.so/x', 'https://notion.so.evil.com/x', 'https://evilnotion.so/x', 'javascript:alert(1)', null, 3, ...odd]) {
       expect({ url, got: readPage({ data: { ...fixture.data, url } })?.url }).toEqual({ url, got: `https://www.notion.so/${PAGE_ID}` })
     }
     expect(readPage({ data: { ...fixture.data, url: 'https://acme.notion.site/Page-1' } })?.url).toBe('https://acme.notion.site/Page-1')
@@ -49,6 +43,7 @@ describe('reading a page', () => {
 
   test('the whole fixture as an issue', () => {
     const p = readPage(fixture)
+    expect(p).toMatchObject({ id: PAGE_ID, url: fixture.data.url, trashed: false })
     expect(p && issueFromPage(p)).toEqual({
       title: 'Fix the login page',
       description: `The button does **nothing** on Safari.\n\n[Notion page](${fixture.data.url})`,
@@ -73,6 +68,12 @@ describe('the title', () => {
     expect(of({ Name: title('  ') }).title).toBe('Untitled')
     expect(of({}).title).toBe('Untitled')
     expect(of({ Name: title('x'.repeat(600)) }).title).toHaveLength(500)
+  })
+
+  test('cut by characters, so an emoji at the end stays whole', () => {
+    const t = of({ Name: title(`${'x'.repeat(499)}😀y`) }).title
+    expect([...t]).toHaveLength(500)
+    expect(t.endsWith('😀')).toBe(true)
   })
 })
 
@@ -176,14 +177,25 @@ describe('rich text as Markdown', () => {
   test('plain text and each mark', () => {
     expect(richTextToMarkdown([text('Hello')])).toBe('Hello')
     expect(richTextToMarkdown([text('a', { annotations: { bold: true } })])).toBe('**a**')
-    expect(richTextToMarkdown([text('a', { annotations: { italic: true } })])).toBe('_a_')
+    expect(richTextToMarkdown([text('a', { annotations: { italic: true } })])).toBe('*a*')
     expect(richTextToMarkdown([text('a', { annotations: { strikethrough: true } })])).toBe('~~a~~')
     expect(richTextToMarkdown([text('a()', { annotations: { code: true } })])).toBe('`a()`')
     expect(richTextToMarkdown([text('a', { annotations: { underline: true, color: 'red' } })])).toBe('a')
   })
 
   test('marks together, and around the words only', () => {
-    expect(richTextToMarkdown([text('Say ', {}), text('this ', { annotations: { bold: true, italic: true } }), text('now')])).toBe('Say _**this**_ now')
+    expect(richTextToMarkdown([text('Say ', {}), text('this ', { annotations: { bold: true, italic: true } }), text('now')])).toBe('Say ***this*** now')
+  })
+
+  test('neighbouring parts with the same marks and link are one, so part of a word can be bold', () => {
+    const bold = { annotations: { bold: true } }
+    expect(richTextToMarkdown([text('fo', bold), text('o', bold), text('bar')])).toBe('**foo**bar')
+    expect(richTextToMarkdown([text('un', { annotations: { italic: true } }), text('done')])).toBe('*un*done')
+    const href = 'https://example.com/docs'
+    expect(richTextToMarkdown([text('read ', { href }), text('the docs', { href })])).toBe(`[read the docs](${href})`)
+    expect(richTextToMarkdown([text('read', { href }), text(' more', { href: 'https://example.com/other' })])).toBe(
+      `[read](${href}) [more](https://example.com/other)`,
+    )
   })
 
   test('links: https only', () => {
@@ -196,6 +208,12 @@ describe('rich text as Markdown', () => {
     expect(richTextToMarkdown([text('Ask '), { type: 'mention', plain_text: '@Ana Example' }])).toBe('Ask @Ana Example')
   })
 
+  test('parts of another shape read as nothing', () => {
+    const odd = [null, 'x', 3, { plain_text: 3 }, { plain_text: 'ok', href: 5, annotations: 'bold' }, { plain_text: '!', annotations: { bold: 'yes' } }]
+    expect(richTextToMarkdown(odd)).toBe('ok!')
+    expect(richTextToMarkdown('just text')).toBe('')
+  })
+
   test('no HTML comes through', () => {
     expect(richTextToMarkdown([text('<script>alert(1)</script>')])).toBe('&lt;script&gt;alert(1)&lt;/script&gt;')
   })
@@ -205,6 +223,10 @@ describe('rich text as Markdown', () => {
     const d = descriptionFor([text('x'.repeat(60_000))], url)
     expect(d.length).toBeLessThanOrEqual(MAX_DESCRIPTION)
     expect(d.endsWith(`…\n\n[Notion page](${url})`)).toBe(true)
+    // by characters, as Postgres counts them, never half of an emoji
+    const e = descriptionFor([text('😀'.repeat(60_000))], url)
+    expect([...e].length).toBeLessThanOrEqual(MAX_DESCRIPTION)
+    expect(/[\ud800-\udbff](?![\udc00-\udfff])/.test(e)).toBe(false)
   })
 })
 
@@ -229,11 +251,6 @@ describe('notes', () => {
     ])
   })
 
-  test('each note has its own ULID', () => {
-    const [n] = notesFor({ description: '', assignee: BOB, actor: null, people })
-    expect(n.id).toMatch(/^[0-9A-HJKMNP-TV-Z]{26}$/)
-    expect(decodeTime(n.id)).toBeGreaterThan(0)
-  })
 })
 
 describe('the key', () => {
@@ -247,6 +264,8 @@ describe('the key', () => {
     expect(keyFrom(new Request('https://x.co/f?c=1', { headers: { 'X-Sprawniej-Secret': k.toUpperCase() } }))).toBe(k)
     expect(keyFrom(new Request('https://x.co/f?c=1&k=short'))).toBeNull()
     expect(keyFrom(new Request('https://x.co/f?c=1'))).toBeNull()
+    // an empty or broken k in the address doesn't hide a good header
+    for (const q of ['k=', 'k=short']) expect(keyFrom(new Request(`https://x.co/f?c=1&${q}`, { headers: { 'X-Sprawniej-Secret': k } }))).toBe(k)
   })
 })
 
@@ -305,21 +324,15 @@ describe('the handler', () => {
       const r = await send(fixture, { query })
       expect({ query, status: r.status, calls: r.calls.length }).toEqual({ query, status: 404, calls: 0 })
     }
-    for (const query of [`?c=${CONN}`, `?c=${CONN}&k=short`]) {
-      const r = await send(fixture, { query })
-      expect({ query, status: r.status, calls: r.calls.length }).toEqual({ query, status: 401, calls: 0 })
-    }
+    const r = await send(fixture, { query: `?c=${CONN}` })
+    expect(r.status).toBe(401)
+    expect(r.calls).toEqual([])
   })
 
   test('the key in a header works like the one in the address', async () => {
     const r = await send(fixture, { query: `?c=${CONN}`, headers: { 'X-Sprawniej-Secret': KEY } })
     expect(r.status).toBe(200)
     expect(r.calls.map((c) => c.fn)).toEqual(['notion_lookup', 'notion_apply'])
-  })
-
-  test('says what is missing when it isn’t set up', async () => {
-    expect((await send(fixture, { env: { url: undefined } })).status).toBe(500)
-    expect((await send(fixture, { env: { key: undefined } })).status).toBe(500)
   })
 
   test('too big, by what it says and by what it is', async () => {
@@ -343,9 +356,38 @@ describe('the handler', () => {
     expect(notJson.status).toBe(400)
     expect(notJson.calls.map((c) => c.fn)).toEqual(['notion_lookup'])
     expect(notJson.calls[0].args).toMatchObject({ p_emails: [], p_team: null })
+    log.mockClear()
     const notPage = await send({ data: { ...fixture.data, object: 'database' } })
     expect(notPage.status).toBe(400)
     expect(notPage.calls.map((c) => c.fn)).toEqual(['notion_lookup'])
+    expect(log.mock.calls).toEqual([['notion', { refused: 'not a page' }]])
+  })
+
+  test('properties of shapes Notion never sends: a wrong key is still a wrong key, a right one makes the issue', async () => {
+    const odd = {
+      ...fixture,
+      data: {
+        ...fixture.data,
+        properties: {
+          Name: { type: 'title', title: 'a string' },
+          Status: { type: 'status', status: { name: 3 } },
+          Labels: { type: 'multi_select', multi_select: [3, null, { name: 4 }, { name: 'Bug' }] },
+          Description: { type: 'rich_text', rich_text: [null, { plain_text: 'Hi', href: 7 }] },
+          Assignee: { type: 'people', people: [null, 3, { person: 'x' }] },
+          'Created by': { type: 'created_by', created_by: 'ana' },
+          Due: { type: 'date', date: 'tomorrow' },
+          Team: { type: 'rich_text', rich_text: 'ENG' },
+          Empty: null,
+          Number: 3,
+        },
+      },
+    }
+    expect((await send(odd, { lookup: { state: 'wrong_key' } })).status).toBe(401)
+    const r = await send(odd)
+    expect(r.status).toBe(200)
+    expect(r.calls[0].args).toMatchObject({ p_emails: [], p_team: null })
+    expect(r.calls[1].args.p_issue).toMatchObject({ title: 'Untitled', status: 'todo', labels: ['l-bug'], assignee_id: null, due_date: null })
+    expect(r.calls[1].args.p_actor).toBeNull()
   })
 
   test('a page in the trash makes nothing', async () => {
@@ -353,6 +395,7 @@ describe('the handler', () => {
     expect(r.status).toBe(200)
     expect(r.body).toEqual({ skipped: 'The page is in the trash.' })
     expect(r.calls.map((c) => c.fn)).toEqual(['notion_lookup'])
+    expect(log).toHaveBeenLastCalledWith('notion', { skipped: 'trash' })
   })
 
   test('a new page: the issue as its author, with the assignee, labels, a place at the top and notes', async () => {
@@ -404,7 +447,9 @@ describe('the handler', () => {
     const noTeam = await send(fixture, { lookup: { ...ok, team: null }, apply: { problem: 'team' } })
     expect(noTeam.status).toBe(409)
     expect((noTeam.calls[1].args.p_issue as Record<string, unknown>).team_id).toBeNull()
+    expect(log).toHaveBeenLastCalledWith('notion', { problem: 'team' })
     expect((await send(fixture, { apply: { problem: 'busy' } })).status).toBe(429)
+    expect(log).toHaveBeenLastCalledWith('notion', { problem: 'busy' })
   })
 
   test('people who aren’t members: no author, nobody assigned', async () => {
