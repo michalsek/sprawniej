@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import type { Lookup } from '@/notion/handler'
 import { sha256Hex } from '@/notion/key'
 import {
   addMember,
@@ -27,16 +28,6 @@ import {
 // the two functions for admins and the two only the webhook may call
 // (supabase/migrations/20261020160000_notion.sql, docs/notion.md).
 
-interface Lookup {
-  state: string
-  connection?: string
-  workspace?: string
-  team?: { id: string; key: string; first_sort: string | null } | null
-  people?: { id: string; login: string }[]
-  emails?: { email: string; profile_id: string }[]
-  labels?: { id: string; name: string }[]
-}
-
 type Applied = { issue?: string; new?: boolean; archived?: boolean; problem?: string }
 
 const textArray = (xs: string[]) => `{${xs.map((x) => `"${x.replace(/["\\]/g, '\\$&')}"`).join(',')}}`
@@ -55,6 +46,19 @@ const apply = async (o: { connection: string; hash: string; page: unknown; actor
         `${o.actor ? `${lit(o.actor)}::uuid` : 'null'}, ${lit({ id: ulid(), sort_order: 'a0', ...o.issue })}::jsonb, ${lit(o.notes ?? [])}::jsonb) as r`,
     )
   )[0].r
+
+/** the lookup's answer with the right key */
+async function found(...args: Parameters<typeof lookup>) {
+  const r = await lookup(...args)
+  if (r.state !== 'ok') throw new Error(`The lookup said ${r.state}.`)
+  return r
+}
+
+/** the function exists, but this caller may not run it (Postgres refuses before it starts) */
+async function expectNoGrant(call: PromiseLike<{ error: { message: string; code?: string } | null }>) {
+  const { error } = await call
+  expect(error?.message).toMatch(/permission denied for function/)
+}
 
 /** a Notion page id nobody has */
 const pageId = () => crypto.randomUUID().replaceAll('-', '')
@@ -116,13 +120,13 @@ describe.skipIf(!enabled)('Notion', () => {
   test('people who are signed in, or not, can call neither webhook function', async () => {
     const anon = client()
     for (const db of [ana.db, anon]) {
-      const l = await db.rpc('notion_lookup', { p_connection: crypto.randomUUID(), p_secret_hash: '0'.repeat(64), p_emails: [], p_team: '' })
-      expect(l.error).not.toBeNull()
-      const a = await db.rpc('notion_apply', { p_connection: crypto.randomUUID(), p_secret_hash: '0'.repeat(64), p_page: {}, p_actor: ana.profileId, p_issue: {}, p_notes: [] })
-      expect(a.error).not.toBeNull()
+      await expectNoGrant(db.rpc('notion_lookup', { p_connection: crypto.randomUUID(), p_secret_hash: '0'.repeat(64), p_emails: [], p_team: '' }))
+      await expectNoGrant(
+        db.rpc('notion_apply', { p_connection: crypto.randomUUID(), p_secret_hash: '0'.repeat(64), p_page: {}, p_actor: ana.profileId, p_issue: {}, p_notes: [] }),
+      )
     }
-    expect((await anon.rpc('notion_connect', { p_workspace: w.ws, p_team: w.eng })).error).not.toBeNull()
-    expect((await anon.rpc('notion_new_secret', { p_connection: crypto.randomUUID() })).error).not.toBeNull()
+    await expectNoGrant(anon.rpc('notion_connect', { p_workspace: w.ws, p_team: w.eng }))
+    await expectNoGrant(anon.rpc('notion_new_secret', { p_connection: crypto.randomUUID() }))
   })
 
   test('the lookup: nothing without the right key; members, matching emails, labels and the team with it', async () => {
@@ -143,22 +147,22 @@ describe.skipIf(!enabled)('Notion', () => {
     await addMember(ana, una, ws)
     await ownerSql(`update auth.users set email_confirmed_at = null where id = ${lit(una.userId)}`)
 
-    const found = await lookup(conn, hash, [testEmail('ana').toUpperCase(), testEmail('bob'), testEmail('dee'), testEmail('cy'), testEmail('notion-unconfirmed')])
-    expect(found.state).toBe('ok')
-    expect(found.workspace).toBe(ws)
-    expect(found.team).toEqual({ id: eng, key: 'ENG', first_sort: first.sort_order })
-    expect(found.emails?.map((e) => e.profile_id).sort()).toEqual([ana.profileId, bob.profileId].sort())
-    expect(found.people?.map((p) => p.id).sort()).toEqual([ana.profileId, bob.profileId, una.profileId].sort())
-    expect(found.labels?.map((l) => l.name)).toEqual(['Bug'])
+    const got = await found(conn, hash, [testEmail('ana').toUpperCase(), testEmail('bob'), testEmail('dee'), testEmail('cy'), testEmail('notion-unconfirmed')])
+    expect(got.workspace).toBe(ws)
+    expect(got.team).toEqual({ id: eng, key: 'ENG', first_sort: first.sort_order })
+    expect(got.emails.map((e) => e.profile_id).sort()).toEqual([ana.profileId, bob.profileId].sort())
+    expect(got.people.map((p) => p.id).sort()).toEqual([ana.profileId, bob.profileId, una.profileId].sort())
+    expect(got.labels.map((l) => l.name)).toEqual(['Bug'])
 
     // the Team property: by key or name; never another workspace's; anything else is the connection's
-    expect((await lookup(conn, hash, [], 'des'))?.team?.id).toBe(des)
-    expect((await lookup(conn, hash, [], ' design '))?.team?.id).toBe(des)
-    expect((await lookup(conn, hash, [], 'Engineering'))?.team?.id).toBe(eng)
-    expect((await lookup(conn, hash, [], 'Nope'))?.team?.id).toBe(eng)
+    const teamFor = async (hint: string) => (await found(conn, hash, [], hint)).team?.id
+    expect(await teamFor('des')).toBe(des)
+    expect(await teamFor(' design ')).toBe(des)
+    expect(await teamFor('Engineering')).toBe(eng)
+    expect(await teamFor('Nope')).toBe(eng)
     const { ws: other } = await newWorkspace(w.cy, 'notion-other')
     await newTeam(w.cy, other, 'OTH')
-    expect((await lookup(conn, hash, [], 'OTH'))?.team?.id).toBe(eng)
+    expect(await teamFor('OTH')).toBe(eng)
   })
 
   test('a new address: the old one stops working at once', async () => {
@@ -170,7 +174,7 @@ describe.skipIf(!enabled)('Notion', () => {
     expect(secret).toMatch(/^[0-9a-f]{64}$/)
     expect(await lookup(conn, hash)).toEqual({ state: 'wrong_key' })
     await expect(apply({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: eng } })).rejects.toThrow(/This address was replaced/)
-    expect((await lookup(conn, await sha256Hex(secret))).state).toBe('ok')
+    await found(conn, await sha256Hex(secret))
     const after = await ok(ana.db.from('notion_connections').select('secret_set_at').eq('id', conn).single())
     expect(after.secret_set_at > before.secret_set_at).toBe(true)
   })
@@ -265,7 +269,7 @@ describe.skipIf(!enabled)('Notion', () => {
     await ok(ana.db.from('notion_connections').update({ team_id: des }).eq('id', conn))
     await ok(ana.db.from('teams').delete().eq('id', des))
     expect((await ok(ana.db.from('notion_connections').select('team_id').eq('id', conn).single())).team_id).toBeNull()
-    expect((await lookup(conn, hash)).team).toBeNull()
+    expect((await found(conn, hash)).team).toBeNull()
     expect(await apply({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: null, title: 'Lost' } })).toEqual({ problem: 'team' })
     // a team of another workspace is no team
     expect(await apply({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: w.eng, title: 'Lost' } })).toEqual({ problem: 'team' })
