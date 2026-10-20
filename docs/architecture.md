@@ -110,8 +110,11 @@ Only admins and owners see a workspace's invites (they hold the tokens), so invi
   (`move_person`, below). Everything that counts or changes a link's places (`accept_invite`, making an account with
   it, `end_invite`) takes the invite's row lock first, so two people at the last place can't both get in: the second
   one counts after the first is saved and is told the link is full.
-- Settings › Invite links makes the links (`InviteDialog.tsx`), with an optional email "so you remember where to send it"
-  and a role (member or admin). People send them themselves: Sprawniej sends no email.
+- Settings › Invite links makes the links (`InviteDialog.tsx`): who can use it (one person, up to a number, anyone),
+  how long (1 week, 2 weeks, or 1 to 28 days; the browser sends `expires_at` only for a length other than 14 days),
+  an optional email "so you remember where to send it" (one person only) and a role (member or admin). People send
+  them themselves: Sprawniej sends no email. `InviteLinks.tsx` lists them with who joined (`invite_uses`), ends them
+  (`end_invite`) and deletes them.
 - Links point at the app's public address (`publicAppUrl` in `src/config.ts`: `VITE_PUBLIC_URL` at build time, or the
   address it is served from). On localhost a link only works on this computer, and the dialog says so.
 - `JoinFlow.tsx` walks through it: the invite, **Join workspace**, an account if you have none (the press of Join is

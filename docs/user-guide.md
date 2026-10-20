@@ -14,8 +14,9 @@ Press **Join workspace**, then:
 2. **Pick your name and handle** ("What should we call you?"). Teammates see your name on issues and comments, and
    @mention you by your handle. You can change the handle later.
 
-That's it: the workspace opens. Each invite link works once, for 14 days. If yours was already used or has
-expired, ask whoever invited you for a new one.
+That's it: the workspace opens. An invite link works for as long as whoever made it chose. Some are for one person,
+some for a few people or for anyone who has the link. If yours doesn't work any more, the page tells you why (see
+**Something went wrong?** below): ask whoever invited you for a new one.
 
 No invite link? Then you need a **sign-up code** to create an account: ask whoever looks after Sprawniej for one.
 Open Sprawniej, choose **Create an account** and type the code in with your email and password (with GitHub, you type
@@ -83,15 +84,29 @@ choose **Change password**. Otherwise, ask whoever looks after Sprawniej for hel
 ### Inviting someone
 
 Only owners and admins can invite. Open the menu under your name (bottom left), choose **Settings**, then **Invite
-links** (or **Invite people** on **Members**), and press **Create an invite link**. Make **one link for each
-person**: you can add their email (so you remember where to send it) and pick whether they join as a **Member** or an
-**Admin**. Press **Create link**, then **Copy message** gives you a ready-to-send note with the link, **Copy link**
-just the link, and **Write an email** (when you added their email) opens your own mail app. Sprawniej doesn't send
-anything itself: you send the link.
+links** (or **Invite people** on **Members**), and press **Create an invite link**. Then choose:
 
-Each link works once, for 14 days, and stays under **Invite links** until it's used; an expired one stays there too,
-greyed out, until you delete it. To stop a link from working (for example, if you sent it to the wrong person), open
-the **⋯** next to it and choose **Delete link**. **Copy message** is in the same menu.
+- **Who can use it**: **One person** (the usual choice), **Several people** (up to a number you pick, from 1 to
+  100), or **Anyone** who has the link. A link for anyone lets everyone who sees it create an account and join, so
+  share it only where the right people will see it, for example in your team's own chat.
+- **How long** it works: **1 week**, **2 weeks** (the usual choice) or **Custom**, from 1 to 28 days. Under the
+  choice you see the day and time it stops working.
+- Their **email** (optional, only for one person), so you remember where to send it, and whether they join as a
+  **Member** or an **Admin**.
+
+Press **Create link**, then **Copy message** gives you a ready-to-send note with the link, **Copy link** just the
+link, and **Write an email** (when you added their email) opens your own mail app. Sprawniej doesn't send anything
+itself: you send the link.
+
+**Invite links** lists every link that still works, and the ones that stopped. Each shows who it's for, the role, who
+made it and when it stops working. When people have joined with it, it says how many (**3 joined**): press that to see
+who, and on which day. A link for one person leaves the list once it's used; that person shows up under **Members**.
+
+To stop a link from working (for example, if you sent it to the wrong person, or the team has all joined), open the
+**⋯** next to it and choose **End link now**: nobody new can join with it, and the list still shows who joined.
+Ending can't be undone, but you can always make a new link. A link that ended, expired or is full stays in the list,
+greyed out, until you press **Delete link**. Deleting a link also forgets who joined with it (they stay in the
+workspace). **Copy message** is in the same menu.
 
 ### Members and roles
 
@@ -105,7 +120,8 @@ label, and make teams. On top of that:
 
 Owners and admins change someone's role with the menu next to their name, and remove someone with **⋯ › Remove from
 workspace**. Removed people can't open the workspace any more; their issues and comments stay, with their name. To
-bring them back, send them a new invite.
+bring them back, send them a new invite. Links made before someone left or was removed don't bring them back, so
+you don't need to end those links.
 
 ### Leaving a workspace
 
@@ -379,8 +395,9 @@ dropped), what came over so far stays: press **Try again** to bring over the res
 People who aren't in Sprawniej yet come over too, listed under **Settings › People from Linear**: their issues,
 comments and views stay theirs. Owners and admins have two ways to hand them their work:
 
-- **Invite**: makes an invite link just for that person (with their email from Linear, if known). When they join
-  with it, they become that person: everything that was theirs in Linear is theirs.
+- **Invite**: makes an invite link just for that person (with their email from Linear, if known). Such a link is
+  always for one person; you only choose how long it works. When they join with it, they become that person:
+  everything that was theirs in Linear is theirs.
 - **Link**: for someone who already joined under another name. Pick who they are here, and everything moves to them.
   Linking can't be undone, so check the name first.
 
@@ -418,9 +435,17 @@ twice is kept once. A grey space shows where a picture goes until it has loaded.
 
 ## Something went wrong?
 
-- **"This invite link doesn't work"**, **"This invite was already used"** or **"This invite has expired"**: each link
-  works once, for 14 days. Ask whoever invited you for a new one. **"This invite link is from an older Sprawniej"**
-  means the same: ask for a new link.
+- **An invite link that doesn't work**: the page says why, and the answer is always to ask whoever invited you for a
+  new link.
+  - **"This invite link doesn't work"**: it was deleted, or part of the link is missing.
+  - **"This invite was already used"**: it was for one person, who has joined.
+  - **"This invite link was ended"**: whoever made it ended it early.
+  - **"This invite link is full"**: as many people as it allows have joined with it.
+  - **"This invite has expired"**: its time is over.
+  - **"This invite link has no places left"**: people who are still creating their accounts hold its places. If you
+    already have an account, press **Sign in instead**.
+  - **"This link was made before you left"**: you left the workspace, or were removed, after it was made.
+  - **"This invite link is from an older Sprawniej"**: it's from before invite links worked the way they do now.
 - **"You're no longer in this workspace"** or **"This workspace isn't here any more"**: someone removed you, or the
   workspace was deleted. If that's a mistake, ask an owner or an admin for a new invite.
 - **"Not saved yet" for a long time**: check your internet connection and keep the tab open. Sprawniej keeps trying
