@@ -11,7 +11,7 @@ import { authRedirectUrl } from '@/config'
 import { parseTheme, type ThemeChoice } from '@/lib/theme'
 import { useSession } from '@/session'
 import { stopCaching } from './cacheStore'
-import { backendConfig, getClient, requireClient } from './client'
+import { backendConfig, getClient, requireClient, type Db } from './client'
 import { friendlyDbError, isUnreachable, UNREACHABLE } from './problem'
 
 export interface AuthUser {
@@ -162,7 +162,7 @@ function startOver() {
 const deliberate = () => Date.now() - Number(localStorage.getItem(SIGNING_OUT) ?? 0) < 10_000
 
 /** a copy of the same person from before a change that already arrived (the sign-in kept in this browser, say) */
-const older = (a: AuthUser, b: AuthUser | null) =>
+export const older = (a: AuthUser, b: AuthUser | null): boolean =>
   !!b && a.id === b.id && !!a.updatedAt && !!b.updatedAt && Date.parse(a.updatedAt) < Date.parse(b.updatedAt)
 
 function setUser(user: AuthUser | null, more: Partial<AuthState> = {}) {
@@ -404,8 +404,8 @@ export async function setPassword(password: string): Promise<void> {
 }
 
 /** keeps your light or dark with your account (the rest of what it keeps, like your name, stays as it is) */
-export async function saveTheme(theme: ThemeChoice): Promise<void> {
-  const { error } = await requireClient().auth.updateUser({ data: { theme } })
+export async function saveTheme(theme: ThemeChoice, db: Db = requireClient()): Promise<void> {
+  const { error } = await db.auth.updateUser({ data: { theme } })
   if (error) throw new AuthProblem(friendlyAuthError(error))
 }
 
