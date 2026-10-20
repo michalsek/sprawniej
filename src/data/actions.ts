@@ -1075,7 +1075,7 @@ export async function addImage(file: Blob, named?: (src: string) => void): Promi
 // ---------- light or dark ----------
 
 // what couldn't be sent stays marked, and goes again when you're back online, signed in again, or next time
-const themeSaver = makeThemeSaver(saveTheme, () => clearUnsent())
+const themeSaver = makeThemeSaver(saveTheme, () => readDevice() ?? 'system', () => clearUnsent())
 
 /** System, Light or Dark: shows at once, and saves by itself with your account (quietly, also when offline) */
 export function setTheme(choice: ThemeChoice) {
@@ -1084,11 +1084,11 @@ export function setTheme(choice: ThemeChoice) {
   const id = useAuth.getState().user?.id
   if (!id) return
   markUnsent(id)
-  themeSaver.save(choice)
+  themeSaver.save()
 }
 
 /** a choice made here that isn't with your account yet goes again */
 export function sendUnsentTheme() {
   const id = useAuth.getState().user?.id
-  if (id && readUnsent() === id) themeSaver.save(readDevice() ?? 'system')
+  if (id && readUnsent() === id) themeSaver.save()
 }

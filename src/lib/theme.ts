@@ -9,15 +9,19 @@ import { create } from 'zustand'
 export type ThemeChoice = 'system' | 'light' | 'dark'
 export type Resolved = 'light' | 'dark'
 
-export const THEME_CHOICES: readonly ThemeChoice[] = ['system', 'light', 'dark']
+const THEME_CHOICES: readonly ThemeChoice[] = ['system', 'light', 'dark']
 
-/** the page colour of each, for the browser's bar (index.html's theme-color metas and src/index.css agree; tested) */
+/**
+ * The browser bar's colour (theme-color) in each look: Light's is the page colour, Dark's the near-black the installed
+ * app also uses (the page itself is a little lighter). index.html's metas and script copy these, and Light's is
+ * src/index.css's page colour; tests/themeScript.test.ts checks all three.
+ */
 export const THEME_COLORS: Record<Resolved, string> = { light: '#fafafa', dark: '#18181b' }
 
 /** this browser's copy. No colon, so signing out keeps it (src/app/signOut.ts) and the sign-in screen keeps the look. */
 export const DEVICE_KEY = 'sprawniej-theme'
 /** whose choice made here isn't with their account yet (gone at sign-out, like everything of yours) */
-export const UNSENT_KEY = 'sprawniej:theme-unsent'
+const UNSENT_KEY = 'sprawniej:theme-unsent'
 
 /** anything that isn't a choice (missing, from an older version, typed by hand) means System */
 export const parseTheme = (v: unknown): ThemeChoice => (THEME_CHOICES.includes(v as ThemeChoice) ? (v as ThemeChoice) : 'system')
@@ -44,29 +48,35 @@ export function themeAfterSignIn(o: { account: ThemeChoice | undefined; device: 
 }
 
 /**
- * Sends choices one at a time. A choice made while one is on its way waits, and only the last of those is sent.
- * `saved` hears when the last choice made is with the account; an answer to an older one says nothing. A choice that
- * couldn't be sent is simply given again later (save it again).
+ * Sends the choice one request at a time, reading it (`current`) as it goes, so it's always the latest. Saving again
+ * while one is on its way sends once more after it, however many times it was asked. `saved` hears when the latest
+ * choice is with the account; an answer to an older one says nothing. What couldn't be sent waits until `save` is
+ * called again.
  */
-export function makeThemeSaver(send: (choice: ThemeChoice) => Promise<void>, saved: (choice: ThemeChoice) => void) {
+export function makeThemeSaver(send: (choice: ThemeChoice) => Promise<void>, current: () => ThemeChoice, saved: (choice: ThemeChoice) => void) {
   let busy = false
-  let next: ThemeChoice | null = null
+  let again = false
   async function run() {
     busy = true
-    while (next !== null) {
-      const choice = next
-      next = null
-      const ok = await send(choice).then(
-        () => true,
-        () => false,
-      )
-      if (ok && next === null) saved(choice)
+    try {
+      while (again) {
+        again = false
+        const choice = current()
+        let ok = true
+        try {
+          await send(choice)
+        } catch {
+          ok = false
+        }
+        if (ok && !again) saved(choice)
+      }
+    } finally {
+      busy = false
     }
-    busy = false
   }
   return {
-    save(choice: ThemeChoice) {
-      next = choice
+    save() {
+      again = true
       if (!busy) void run()
     },
   }
@@ -74,9 +84,9 @@ export function makeThemeSaver(send: (choice: ThemeChoice) => Promise<void>, sav
 
 // ---------- this browser's copy (any of these can fail: storage switched off, private windows) ----------
 
-export function readDevice(store: Pick<Storage, 'getItem'> = localStorage): ThemeChoice | null {
+export function readDevice(): ThemeChoice | null {
   try {
-    const v = store.getItem(DEVICE_KEY)
+    const v = localStorage.getItem(DEVICE_KEY)
     return v === null ? null : parseTheme(v)
   } catch {
     return null
@@ -119,7 +129,7 @@ export function clearUnsent() {
 
 export const DARK_QUERY = '(prefers-color-scheme: dark)'
 
-export const systemDark = (): boolean => typeof matchMedia === 'function' && matchMedia(DARK_QUERY).matches
+const systemDark = (): boolean => typeof matchMedia === 'function' && matchMedia(DARK_QUERY).matches
 
 /** what shows now: the choice, and the look it comes to on this device */
 export const useTheme = create<{ choice: ThemeChoice; resolved: Resolved }>()(() => ({ choice: 'system', resolved: 'dark' }))
@@ -128,7 +138,7 @@ export const useTheme = create<{ choice: ThemeChoice; resolved: Resolved }>()(()
  * Puts a look on the page: the class src/index.css reads, and the browser bar's colour. Both theme-color metas take
  * the chosen colour when it's forced, and their own when following the device. Nothing fades while it switches.
  */
-export function applyTheme(doc: Document, choice: ThemeChoice, resolved: Resolved) {
+function applyTheme(doc: Document, choice: ThemeChoice, resolved: Resolved) {
   const root = doc.documentElement
   if (root.classList.contains('dark') !== (resolved === 'dark')) {
     root.classList.add('theme-switching')
