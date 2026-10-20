@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { INBOX_KEEP } from '@/data/actions'
 import { STATUS_COLORS } from '@/model/colors'
 import { AUTO_ARCHIVE_MONTHS, inboxItemSchema, PROJECT_STATUSES, TEAM_KEY_PATTERN } from '@/model/schema'
+import { NOTION_URL_PATTERN, PAGE_ID_PATTERN, UUID_PATTERN } from '@/model/notion'
 import { PRIORITY_IDS, ISSUE_CATEGORIES, CATEGORIES } from '@/model/status'
 
 // The database checks copy the fixed lists from src/model. Each copy has a marker comment ("-- @list issue-statuses")
@@ -73,6 +74,19 @@ describe('database lists match src/model', () => {
   test('team keys', () => {
     const [line] = marked('regex', 'team-key')
     expect(quoted(line)).toEqual([TEAM_KEY_PATTERN.source])
+  })
+
+  test('Notion ids and addresses', () => {
+    // SQL literals, with '' for a quote inside
+    const literals = (line: string) => [...line.matchAll(/'((?:[^']|'')*)'/g)].map((m) => m[1].replaceAll("''", "'"))
+    const copies = (name: string) => {
+      const found = marked('regex', name).map(literals)
+      expect(found.length).toBeGreaterThan(0)
+      return found
+    }
+    for (const found of copies('notion-uuid')) expect(found).toEqual([UUID_PATTERN])
+    for (const found of copies('notion-page-id')) expect(found).toEqual([PAGE_ID_PATTERN])
+    for (const found of copies('notion-url')) expect(found).toEqual([NOTION_URL_PATTERN])
   })
 
   test('days before inbox notes are tidied away', () => {

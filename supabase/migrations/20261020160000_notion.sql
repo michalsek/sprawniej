@@ -50,7 +50,9 @@ grant delete on public.notion_connections to authenticated;
 -- deletes the row, so the page can be sent again; archiving keeps it. Never sent to browsers.
 create table private.notion_pages (
   workspace_id   uuid not null,
-  page_id        text not null check (page_id ~ '^[0-9a-f]{32}$'),   -- Notion's page id, lower case, no dashes
+  -- Notion's page id, lower case, no dashes
+  -- @regex notion-page-id
+  page_id        text not null check (page_id ~ '^[0-9a-f]{32}$'),
   issue_id       text not null,
   connection_id  uuid references public.notion_connections (id) on delete set null,
   url            text not null check (url ~ '^https://'),
@@ -61,6 +63,17 @@ create table private.notion_pages (
 create index notion_pages_issue on private.notion_pages (workspace_id, issue_id);
 create index notion_pages_recent on private.notion_pages (connection_id, created_at);
 revoke all on private.notion_pages from public, anon, authenticated;
+
+-- the issue a page made in a workspace, if it did: its ref, title and whether it's archived
+create function private.notion_page_issue(p_ws uuid, p_page text)
+returns table (ref text, title text, archived boolean)
+language sql stable security definer set search_path = '' as $$
+  select t.key || '-' || i.number, i.title, i.archived_at is not null
+    from private.notion_pages n
+    join public.issues i on i.workspace_id = n.workspace_id and i.id = n.issue_id
+    join public.teams t on t.id = i.team_id
+   where n.workspace_id = p_ws and n.page_id = p_page
+$$;
 
 -- ---------- for admins (Settings › Notion) ----------
 
@@ -164,6 +177,13 @@ create function public.notion_apply(p_connection uuid, p_secret_hash text, p_pag
 returns jsonb
 language plpgsql security definer set search_path = '' as $$
 declare
+  -- the patterns src/model/notion.ts has (tests/statusLists.test.ts compares them)
+  -- @regex notion-uuid
+  uuid_re constant text := '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
+  -- @regex notion-page-id
+  page_re constant text := '^[0-9a-f]{32}$';
+  -- @regex notion-url
+  url_re constant text := '^https://([a-z0-9-]+\.)*notion\.(so|site)/[A-Za-z0-9._~/?#@!$&''*+,;=%-]*$';
   c public.notion_connections;
   page text := lower(replace(coalesce(p_page ->> 'id', ''), '-', ''));
   link text := left(p_page ->> 'url', 2000);
@@ -182,15 +202,11 @@ begin
   if c.secret_hash is distinct from p_secret_hash then
     raise exception 'This address was replaced.' using errcode = '42501';
   end if;
-  if page !~ '^[0-9a-f]{32}$' then raise exception 'That isn''t a Notion page.' using errcode = '22023'; end if;
-  if link is null or link !~ '^https://([a-z0-9-]+\.)*notion\.(so|site)/' then link := 'https://www.notion.so/' || page; end if;
+  if page !~ page_re then raise exception 'That isn''t a Notion page.' using errcode = '22023'; end if;
+  if link is null or link !~ url_re then link := 'https://www.notion.so/' || page; end if;
 
   -- the same page again: the issue it made
-  select t.key || '-' || i.number as ref, i.title, i.archived_at is not null as archived into had
-    from private.notion_pages n
-    join public.issues i on i.workspace_id = n.workspace_id and i.id = n.issue_id
-    join public.teams t on t.id = i.team_id
-   where n.workspace_id = c.workspace_id and n.page_id = page;
+  select * into had from private.notion_page_issue(c.workspace_id, page);
   if found then
     update public.notion_connections
        set last_event_at = now(), last_event = jsonb_build_object('title', had.title, 'ref', had.ref, 'new', false)
@@ -205,7 +221,7 @@ begin
     return '{"problem": "busy"}';
   end if;
 
-  if p_issue ->> 'team_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+  if p_issue ->> 'team_id' ~* uuid_re then
     select t.id into team from public.teams t where t.workspace_id = c.workspace_id and t.id = (p_issue ->> 'team_id')::uuid;
   end if;
   if team is null then
@@ -234,7 +250,7 @@ begin
       due := null;
     end;
   end if;
-  if p_issue ->> 'assignee_id' ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+  if p_issue ->> 'assignee_id' ~* uuid_re then
     select m.profile_id into who from public.workspace_members m
      where m.workspace_id = c.workspace_id and m.profile_id = (p_issue ->> 'assignee_id')::uuid and m.removed_at is null;
   end if;
@@ -264,12 +280,10 @@ begin
       from jsonb_array_elements(coalesce(p_notes, '[]')) n
      where n ->> 'type' in ('assigned', 'mentioned');
   exception when unique_violation then
-    -- the same page in another delivery at the same moment (the row lock makes it rare): that one's issue
-    select t.key || '-' || i.number as ref, i.archived_at is not null as archived into had
-      from private.notion_pages n
-      join public.issues i on i.workspace_id = n.workspace_id and i.id = n.issue_id
-      join public.teams t on t.id = i.team_id
-     where n.workspace_id = c.workspace_id and n.page_id = page;
+    -- Two deliveries of one page wait for each other on the connection's row lock, so only two things get here: an
+    -- issue id that is already taken (raised again), or the same page made through another connection at the same
+    -- moment (Notion disconnected and connected again while a page came in), which the lock can't cover: that issue.
+    select * into had from private.notion_page_issue(c.workspace_id, page);
     if not found then raise; end if;
     perform set_config('sprawniej.via', '', true);
     perform set_config('sprawniej.actor', '', true);

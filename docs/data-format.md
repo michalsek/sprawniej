@@ -462,7 +462,8 @@ for rows that will only be updated (Postgres checks the proposed row before it f
   `keep_a_status` and `note_status` (the triggers below).
 - Who is asking: `my_profile_id()`, `my_workspaces()` (now, not the ones left), `my_admin_workspaces()`,
   `my_owner_workspaces()`, `my_people()`, `belongs(person, workspace)`, `actor_id()`.
-- `valid_login`, `is_completed`, `take_number`, `swap_login`, `move_person`, and the nightly jobs.
+- `valid_login`, `is_completed`, `take_number`, `swap_login`, `move_person`, `notion_page_issue` (the issue a Notion
+  page made, for `notion_apply`), and the nightly jobs.
 - Invites: `invite_state(invite, person)`, the state of a link (see invites).
 - Sign-up codes: `let_in` (the one rule), `before_user_created` (the Auth hook; only `supabase_auth_admin` may run it),
   `must_be_let_in` (the profiles trigger), and for the SQL editor `make_signup_code`, `switch_off_signup_code`.
