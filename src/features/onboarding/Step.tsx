@@ -27,10 +27,10 @@ export function Step({ step, of, title, children, footer, wide }: { step?: numbe
 }
 
 /** a short line of red text under a field, in plain words */
-export function Problem({ children }: { children?: ReactNode }) {
+export function Problem({ children, id }: { children?: ReactNode; id?: string }) {
   if (!children) return null
   return (
-    <p role="alert" className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+    <p id={id} role="alert" className="mt-3 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
       {children}
     </p>
   )

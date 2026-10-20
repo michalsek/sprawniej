@@ -6,13 +6,13 @@ import { useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
 import { CODE_KEY, giveSignupCode, signupCodeNeeded, useAuth } from '@/backend/auth'
 import { createProfile, LOGIN_PATTERN, ProfileProblem, suggestLogin, type MyProfile } from '@/backend/profiles'
+import { HandleInput } from '@/components/HandleInput'
 import { useSignOut } from '@/components/SignOut'
+import { HANDLE_WORDS } from '@/data/handles'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Problem, Step } from './Step'
 import { SignupCodeField } from './Welcome'
-
-const BAD_HANDLE = 'Use up to 39 letters, digits and dashes, starting with a letter or a digit.'
 
 /**
  * `initialName`: the name to start from when the sign-in has none (an invite for someone from Linear has theirs).
@@ -105,23 +105,21 @@ export function PickLogin({ onDone, initialName, invite }: { onDone: (p: MyProfi
           <label htmlFor="my-handle" className="mb-1.5 block text-sm font-medium">
             Handle
           </label>
-          <div className="flex h-10 overflow-hidden rounded-md border bg-input/30 text-[15px] focus-within:ring-2 focus-within:ring-ring/50">
-            <span className="flex items-center border-r bg-muted px-3 text-muted-foreground select-none">@</span>
-            <input
-              id="my-handle"
-              className="min-w-0 flex-1 bg-transparent px-3 outline-none"
-              autoComplete="username"
-              spellCheck={false}
-              value={login}
-              aria-invalid={bad}
-              onChange={(e) => {
-                setProblem(undefined)
-                setLogin(e.target.value.replace(/[\s@]/g, ''))
-              }}
-            />
-          </div>
-          <p className="mt-1.5 text-sm text-muted-foreground">Letters, digits and dashes. You can change it later in Settings.</p>
-          <Problem>{bad ? BAD_HANDLE : askCode ? undefined : problem}</Problem>
+          <HandleInput
+            id="my-handle"
+            autoComplete="username"
+            value={login}
+            aria-invalid={bad}
+            aria-describedby="my-handle-hint my-handle-problem"
+            onChange={(e) => {
+              setProblem(undefined)
+              setLogin(e.target.value.replace(/[\s@]/g, ''))
+            }}
+          />
+          <p id="my-handle-hint" className="mt-1.5 text-sm text-muted-foreground">
+            Letters, digits and dashes. You can change it later in Settings.
+          </p>
+          <Problem id="my-handle-problem">{bad ? HANDLE_WORDS.invalid : askCode ? undefined : problem}</Problem>
         </div>
         {askCode && (
           <div>
