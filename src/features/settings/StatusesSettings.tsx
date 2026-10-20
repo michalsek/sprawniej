@@ -6,7 +6,7 @@
  * On screen this says "group", never "category" (CLAUDE.md, writing). One component for every kind of status; what
  * differs per kind (issues, projects) is in KIND_TEXT.
  */
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactElement } from 'react'
 import { DndContext, KeyboardSensor, MouseSensor, TouchSensor, useSensor, useSensors, type Announcements, type DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, arrayMove, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
@@ -130,14 +130,7 @@ function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, belo
           {isDefault && <Hint text={text.defaultHint}>Default</Hint>}
         </span>
         <span className={cn('w-16 shrink-0 text-right text-sm text-muted-foreground tabular-nums sm:w-20', dim)}>{text.count(uses)}</span>
-        {hideable ? (
-          hide
-        ) : (
-          <Tooltip>
-            <TooltipTrigger asChild>{hide}</TooltipTrigger>
-            <TooltipContent>{CANT_HIDE}</TooltipContent>
-          </Tooltip>
-        )}
+        {hideable ? hide : <Reason text={CANT_HIDE}>{hide}</Reason>}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground" aria-label={`More for ${status.name}`}>
@@ -160,6 +153,19 @@ function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, belo
         </p>
       )}
     </li>
+  )
+}
+
+/** why a button can't be used, in a tooltip that opens on keyboard focus as surely as on hover */
+function Reason({ text, children }: { text: string; children: ReactElement }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Tooltip open={open} onOpenChange={setOpen}>
+      <TooltipTrigger asChild onFocus={() => setOpen(true)} onBlur={() => setOpen(false)}>
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{text}</TooltipContent>
+    </Tooltip>
   )
 }
 

@@ -90,9 +90,11 @@ const iconButton = 'rounded-md p-1 text-muted-foreground hover:bg-accent hover:t
 
 function Column({ column, ids, projectOf, issues, onAdd }: { column: ProjectColumn; ids: string[]; projectOf: (id: string) => Project | undefined; issues: Issue[]; onAdd?: (statusId: string) => void }) {
   const { status } = column
-  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(status.id), disabled: status.hidden })
+  // a hidden status's column takes nothing, but stays a droppable, so a project let go over it goes back where it came
+  // from (useProjectDrag) instead of into the column next to it
+  const { setNodeRef, isOver } = useDroppable({ id: columnDropId(status.id) })
   return (
-    <section ref={setNodeRef} aria-label={status.name} className={cn('flex w-[21rem] shrink-0 flex-col rounded-xl bg-accent/30 transition-colors', isOver && 'bg-accent/50')}>
+    <section ref={setNodeRef} aria-label={status.name} className={cn('flex w-[21rem] shrink-0 flex-col rounded-xl bg-accent/30 transition-colors', isOver && !status.hidden && 'bg-accent/50')}>
       <header className="flex h-12 items-center gap-2.5 px-4 text-[15px] font-medium">
         <StatusDot status={status} />
         <span className="truncate">{status.name}</span>

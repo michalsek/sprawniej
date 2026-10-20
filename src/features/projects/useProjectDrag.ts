@@ -9,6 +9,7 @@ import { moveProject } from '@/data/actions'
 import type { ProjectColumn } from '@/data/select'
 import type { Project } from '@/model/schema'
 import { useColumnsDrag } from '@/features/board/columnsDrag'
+import { dropMove } from './drop'
 
 export function useProjectDrag(columns: ProjectColumn[]) {
   const base = useMemo(() => Object.fromEntries(columns.map((c) => [c.status.id, c.projects.map((p) => p.id)])), [columns])
@@ -25,11 +26,8 @@ export function useProjectDrag(columns: ProjectColumn[]) {
     const to = cols.columnOf(active.id)
     cols.ended()
     if (over && from && to && projects.has(id)) {
-      const ids = cols.finalOrder(id, over.id, to)
-      const at = ids.indexOf(id)
-      if (from !== to || at !== (base[from]?.indexOf(id) ?? -1)) {
-        moveProject(id, { ...(from !== to && { statusId: to }), place: { prev: ids[at - 1] ?? null, next: ids[at + 1] ?? null } })
-      }
+      const move = dropMove({ id, from, to, ids: cols.finalOrder(id, over.id, to), was: base[from]?.indexOf(id) ?? -1, over: cols.columnOf(over.id), closed })
+      if (move) moveProject(id, move)
     }
     cols.reset()
   }

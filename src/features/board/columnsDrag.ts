@@ -18,6 +18,7 @@ import {
   useSensors,
   type CollisionDetection,
   type DragOverEvent,
+  type KeyboardCoordinateGetter,
   type UniqueIdentifier,
 } from '@dnd-kit/core'
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable'
@@ -34,13 +35,28 @@ export const columnKey = (id: UniqueIdentifier) => String(id).slice(COLUMN.lengt
 /** scroll only when the pointer is close to the edge (dnd-kit's default, 20%, scrolls a wide board too eagerly) */
 export const AUTO_SCROLL = { threshold: { x: 0.08, y: 0.12 } }
 
+/**
+ * The column beside the one a card is in, on one side (-1 left, 1 right): the nearest by its left edge, and among
+ * columns stacked at that edge, the one nearest in height to `top`. Undefined when there is none (a list: the
+ * groups are stacked, so there is no side).
+ */
+export function columnBeside(columns: readonly { key: string; left: number; top: number }[], from: { left: number }, side: -1 | 1, top: number): string | undefined {
+  const there = columns.filter((c) => (side < 0 ? c.left < from.left - 1 : c.left > from.left + 1))
+  return there.sort((a, b) => Math.abs(a.left - from.left) - Math.abs(b.left - from.left) || Math.abs(a.top - top) - Math.abs(b.top - top))[0]?.key
+}
+
+/** the card nearest in height to `top` (a card moved sideways lands next to it), undefined in an empty column */
+export function nearestCard(cards: readonly { id: string; top: number }[], top: number): string | undefined {
+  return [...cards].sort((a, b) => Math.abs(a.top - top) - Math.abs(b.top - top))[0]?.id
+}
+
 /** mouse, touch (press and hold; a quick swipe still scrolls) and keyboard (Space; Enter still opens the card) */
-export function useBoardSensors() {
+export function useBoardSensors(coordinateGetter: KeyboardCoordinateGetter = sortableKeyboardCoordinates) {
   return useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
     useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
+      coordinateGetter,
       keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space'] },
     }),
   )
@@ -68,12 +84,46 @@ export function useColumnsDrag(base: ColumnOrder, closed: ReadonlySet<string>) {
     requestAnimationFrame(() => (movedColumn.current = false))
   }, [live])
 
-  const sensors = useBoardSensors()
-
   const columnOf = useCallback((id: UniqueIdentifier): string | undefined => {
     if (isColumnId(id)) return columnKey(id)
     return Object.keys(orderRef.current).find((k) => orderRef.current[k].includes(String(id)))
   }, [])
+
+  // Left and right go to the column beside, next to the card nearest in height. dnd-kit's own arrow keys pick the
+  // nearest droppable on that side, and the card's own column starts a little left of the card, so Left stayed put.
+  // Up and Down, and a list (no columns side by side), keep dnd-kit's.
+  const closedRef = useRef(closed)
+  useEffect(() => {
+    closedRef.current = closed
+  })
+  const coordinateGetter: KeyboardCoordinateGetter = useCallback(
+    (event, args) => {
+      const side = event.code === 'ArrowLeft' ? -1 : event.code === 'ArrowRight' ? 1 : 0
+      const { active, collisionRect, droppableRects } = args.context
+      const here = active ? columnOf(active.id) : undefined
+      const from = here !== undefined ? droppableRects.get(columnDropId(here)) : undefined
+      if (side && collisionRect && from) {
+        const columns = Object.keys(orderRef.current).flatMap((key) => {
+          const rect = closedRef.current.has(key) ? undefined : droppableRects.get(columnDropId(key))
+          return rect ? [{ key, left: rect.left, top: rect.top }] : []
+        })
+        const to = columnBeside(columns, from, side, collisionRect.top)
+        if (to !== undefined) {
+          event.preventDefault()
+          const cards = orderRef.current[to].flatMap((id) => {
+            const rect = droppableRects.get(id)
+            return rect ? [{ id, top: rect.top }] : []
+          })
+          const card = nearestCard(cards, collisionRect.top)
+          const rect = droppableRects.get(card ?? columnDropId(to))
+          if (rect) return { x: rect.left, y: rect.top }
+        }
+      }
+      return sortableKeyboardCoordinates(event, args)
+    },
+    [columnOf],
+  )
+  const sensors = useBoardSensors(coordinateGetter)
 
   /** the pointer's column, then the closest card in it (dnd-kit's multiple-containers recipe) */
   const collisionDetection: CollisionDetection = useCallback((args) => {
