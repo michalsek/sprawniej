@@ -864,10 +864,46 @@ export type Database = {
           },
         ]
       }
+      profile_emails: {
+        Row: {
+          changed_at: string
+          created_at: string
+          email: string
+          id: string
+          profile_id: string
+          visible: boolean
+        }
+        Insert: {
+          changed_at?: string
+          created_at?: string
+          email: string
+          id?: string
+          profile_id?: string
+          visible?: boolean
+        }
+        Update: {
+          changed_at?: string
+          created_at?: string
+          email?: string
+          id?: string
+          profile_id?: string
+          visible?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_emails_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string
           changed_at: string
+          contact_email: string | null
           created_at: string
           extra: Json
           github_id: number | null
@@ -883,6 +919,7 @@ export type Database = {
         Insert: {
           avatar_url?: string
           changed_at?: string
+          contact_email?: string | null
           created_at?: string
           extra?: Json
           github_id?: number | null
@@ -898,6 +935,7 @@ export type Database = {
         Update: {
           avatar_url?: string
           changed_at?: string
+          contact_email?: string | null
           created_at?: string
           extra?: Json
           github_id?: number | null
@@ -1359,6 +1397,7 @@ export type Database = {
         Returns: {
           avatar_url: string
           changed_at: string
+          contact_email: string | null
           created_at: string
           extra: Json
           github_id: number | null
@@ -1393,6 +1432,7 @@ export type Database = {
         Returns: {
           avatar_url: string
           changed_at: string
+          contact_email: string | null
           created_at: string
           extra: Json
           github_id: number | null
@@ -1579,6 +1619,7 @@ export type Database = {
         Returns: {
           avatar_url: string
           changed_at: string
+          contact_email: string | null
           created_at: string
           extra: Json
           github_id: number | null
@@ -1598,6 +1639,7 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      show_email: { Args: { p_email?: string }; Returns: undefined }
       signup_code_needed: { Args: never; Returns: boolean }
       use_signup_code: {
         Args: { p_code?: string; p_invite?: string }

@@ -24,6 +24,7 @@ import { backend } from '@/backend'
 import { PictureError, pictures, type PictureProblem } from '@/backend/pictures'
 import { connectRepo as addRepo, disconnectRepo as removeRepo, repoFromInput } from '@/backend/github'
 import { saveTheme, useAuth } from '@/backend/auth'
+import { addMyEmail, changeMyEmail, listMyEmails, removeMyEmail, showMyEmail } from '@/backend/profiles'
 import {
   connectNotion as addNotion,
   disconnectNotion as removeNotion,
@@ -50,6 +51,7 @@ import type { Comment, Display, FavouriteKind, Filters, Issue, Label, Project, S
 import { AUTO_ARCHIVE_MONTHS, handleOf } from '@/model/schema'
 import { LABEL_COLORS } from '@/model/colors'
 import { categoryOf, KIND_CATEGORIES, seedColor, type StatusKind } from '@/model/status'
+import { changeProblem, emailProblem, type ContactEmail } from '@/model/contactEmail'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
 import { clearUnsent, makeThemeSaver, markUnsent, readUnsent, showTheme, useTheme, writeDevice, type ThemeChoice } from '@/lib/theme'
@@ -1345,6 +1347,43 @@ export function renameWorkspace(name: string) {
     return
   }
   write({ changes: [upd('workspaces', { id: c.workspaceId }, { name: name.trim() })] })
+}
+
+// ---------- your contact emails ----------
+// Yours alone, and not part of a workspace, so they need none open. Awaited like invites: each throws an Error whose
+// message can be shown as it is, and checks what it can before asking. The one you show reaches your teammates with
+// your profile; catching up brings it into the open workspace at once instead of waiting for the message.
+
+/** your emails, oldest first */
+export const myContactEmails = (): Promise<ContactEmail[]> => listMyEmails()
+
+/** a new email, not shown to anyone until you pick it; `existing` is your list as the screen has it. Returns its id. */
+export async function addContactEmail(email: string, existing: readonly ContactEmail[]): Promise<string> {
+  const why = emailProblem(email, existing)
+  if (why) throw new Error(why)
+  return addMyEmail(email)
+}
+
+/** Changing the one you show changes what teammates see. The same text as it is: nothing happens. */
+export async function changeContactEmail(id: string, email: string, existing: readonly ContactEmail[]): Promise<void> {
+  const mine = existing.find((e) => e.id === id)
+  if (mine?.email === email.trim()) return
+  const why = changeProblem(id, email, existing)
+  if (why) throw new Error(why)
+  await changeMyEmail(id, email)
+  if (mine?.visible) void backend.catchUp()
+}
+
+/** removing the one you show means teammates see none; `existing` is your list as the screen has it */
+export async function removeContactEmail(id: string, existing: readonly ContactEmail[]): Promise<void> {
+  await removeMyEmail(id)
+  if (existing.find((e) => e.id === id)?.visible) void backend.catchUp()
+}
+
+/** the email teammates see; null shows none */
+export async function showContactEmail(id: string | null): Promise<void> {
+  await showMyEmail(id)
+  void backend.catchUp()
 }
 
 // ---------- pictures ----------

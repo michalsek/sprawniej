@@ -24,6 +24,7 @@ const profile = (id: string, login: string, more: Partial<Row<'profiles'>> = {})
   name: login,
   avatar_url: '',
   name_set_here: false,
+  contact_email: null,
   guest_of: null,
   handle: null,
   linear_ids: [],

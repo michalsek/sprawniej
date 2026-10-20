@@ -1,6 +1,6 @@
 /**
- * Settings › Profile: your picture, name and @handle as teammates see them, light or dark, switching workspace and
- * signing out.
+ * Settings › Profile: your picture, name, @handle and contact email as teammates see them, light or dark, switching
+ * workspace and signing out.
  */
 import { useState } from 'react'
 import { Loader2, LogOut, Repeat } from 'lucide-react'
@@ -12,6 +12,7 @@ import type { Person } from '@/model/schema'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
+import { ContactEmails } from '../ContactEmails'
 import { MyHandle } from '../MyHandle'
 import { Appearance } from '../Appearance'
 
@@ -52,6 +53,7 @@ export function ProfilePage() {
         {me && <MyName key={me.name} me={me} />}
       </div>
       <MyHandle />
+      <ContactEmails />
       <Appearance />
       <div>
         <div className="flex flex-wrap gap-2">

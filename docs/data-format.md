@@ -84,12 +84,39 @@ A person, one of three kinds:
 | `github_id` (`githubId`) | set when the profile was made from (or waits for) a GitHub sign-in; unique |
 | `name`, `avatar_url` (`name`, `avatarUrl`) | what teammates see |
 | `name_set_here` (`nameSetHere`) | they typed their name in Sprawniej, so GitHub's doesn't replace it |
+| `contact_email` (`contactEmail`) | the contact email they show teammates (profile_emails, below), or null for none. Filled by the database only (`show_email()` and the triggers on profile_emails); nobody may write it. The app reads it only when it isn't null and never sends it. |
 | `guest_of` | for a guest: their workspace |
 | `linear_ids` (`linearId`, `linearIds`) | the Linear people this profile stands for, so later imports match them. A guest has one, shown to the app as `linearId`. An account gets them when a guest is linked to it or joins through a guest's invite (`move_person`); the app shows `linearIds` only when there are any. |
 
 Made by `ensure_profile()` or `create_profile()` (accounts) and `import_rows` (guests). You see yourself, everyone who
 is or was in a workspace you are in now, and those workspaces' guests. You change your own `name`, `avatar_url`,
-`name_set_here` and `extra`, and your `handle` through `set_handle()` only.
+`name_set_here` and `extra`, and your `handle` through `set_handle()` only. Everyone who sees a profile sees its
+`contact_email`, people who were in a workspace with the person before included, so they see later changes too.
+
+### profile_emails
+
+A person's contact emails: up to 5 emails teammates may write to. How they sign in doesn't change, and nothing here
+reads the sign-in email. Nobody checks these addresses and nothing is sent to them.
+
+| Column | Meaning |
+| --- | --- |
+| `id` | uuid |
+| `profile_id` | whose it is; set by a trigger (the person signed in), never sent by the browser (its default, `my_profile_id()`, only lets the generated types leave it out) |
+| `email` | trimmed, case kept as typed, up to 254 characters, shaped like `name@domain.tld` with no spaces (`private.valid_email`, the same rule as `EMAIL_PATTERN` in `src/model/contactEmail.ts`). The same email twice for one person is refused, case aside; two people may use the same one. |
+| `visible` | the one teammates see; at most one per person. Changed only by `show_email()`. A new email starts hidden. |
+| `created_at`, `changed_at` | when it was added and last changed |
+
+Only its owner reads, adds, changes (the `email`) and deletes them. Not in `private.wiring`: it belongs to a person,
+not a workspace, so it isn't loaded with a workspace, kept in the browser's copy or broadcast. The app reads it with
+awaited calls (`src/backend/profiles.ts`). The shown one is copied onto `profiles.contact_email`, and teammates get it
+from there: editing the shown one's text changes the copy, deleting it clears the copy (teammates see none). A
+sixth one is refused (`23514`, "You can keep up to 5 emails. Remove one first."), under a lock on the person's
+profile, so two adds at once can't both take the last place. Locks are always taken in one order, the person's email
+rows first and then their profile row, so two tabs can't wait for each other. The rows go with the profile, and with
+the account: when an account is deleted its profile stays (`user_id` becomes null, so the name stays on old work), but
+its contact emails are deleted and `contact_email` is cleared in the same change (the `account_gone` triggers). A later
+GitHub sign-in that claims that profile starts with an empty list. Guests can't have any;
+their emails from Linear stay in `private.guest_emails`, separate and for admins only.
 
 ### workspace_members
 
@@ -385,7 +412,8 @@ connecting again still finds the page), `url`, `created_at`. One per workspace a
 ### private.guest_emails
 
 `profile_id` (a guest), `email`: the email a person from Linear had there. Never sent to browsers; admins read their
-workspace's with `guest_emails()` and set them with `set_guest_email()`.
+workspace's with `guest_emails()` and set them with `set_guest_email()`. Nothing to do with contact emails
+(profile_emails), which only people with an account have.
 
 ## Who may make an account (sign-up codes)
 
@@ -457,7 +485,7 @@ are for the SQL editor only.
 
 Each runs as its owner (security definer) unless the table says otherwise, checks who is calling, and raises errors
 in plain words with a code the app tells apart: `42501` not allowed, `P0002` not there, `23505` already taken, `23503` no such team, `22023` not valid,
-`23514` a workspace needs an owner, `SP001` you already have a name, `SP002` the invite was used, `SP003` it expired,
+`23514` a workspace needs an owner (or too many contact emails), `SP001` you already have a name, `SP002` the invite was used, `SP003` it expired,
 `SP004` a sign-up code is needed first, `SP005` that sign-up code or invite can't let you in (the message says why),
 `SP006` the invite link was ended, `SP007` it is full, `SP008` it was made before you left the workspace,
 `SP010` an import the database can't take (the detail says why), `SP020` a Notion address that was replaced (only
@@ -481,6 +509,7 @@ are and puts everything else in our own words.
 | `link_person(workspace, guest, to)` | admins | This person from Linear is that member: everything moves over (`move_person`). |
 | `set_guest_email(profile, email)` | admins | Keeps (or, empty, forgets) a guest's email. |
 | `guest_emails(workspace)` | admins | The workspace's guests' emails. |
+| `show_email(email)` | with a profile | Picks which of your contact emails teammates see (an id from profile_emails); none, or null, shows none. Copies it onto your profile, which sends one message per workspace. `P0002`: that email isn't yours (or is gone). |
 | `import_rows(workspace, table, rows)` | admins | Up to 1000 rows of one table, inserted or updated quietly (below). |
 | `github_lookup(repository_id, repo, author, refs)` | the service role only (the Edge Function `github-webhook`) | For each workspace that connected the repository: the author's profile if they are a member there now (by `github_id`), the members' logins and @handles (`handle`, null when it is the login), and the issues the refs name (by number or an old number, not archived) with their followers and comments. |
 | `github_apply(connection, repository_id, repo, actor, via, moves, notes, event, pull)` | the service role only | Moves the issues as `actor` (a member now), only from the categories each move allows, to a category (so they land on its default status), adds the notes for the issues that moved, and records the repository's number, name and `last_event`. `pull` (`{"id", "repo", "number", "title", "url", "state", "updated_at", "issues": [ids]}`, optional) keeps the pull request on those issues in `issue_pull_requests` and takes it off the ones it no longer mentions. Without an `event` (a pull request event that moves nothing) `last_event` stays as it was. Without an actor it only records the repository. |
@@ -515,6 +544,9 @@ for rows that will only be updated (Postgres checks the proposed row before it f
 - `valid_login`, `is_completed`, `take_number`, `swap_login`, `move_person`, `notion_page_issue` (the issue a Notion
   page made, for `notion_apply`), and the nightly jobs.
 - Invites: `invite_state(invite, person)`, the state of a link (see invites).
+- Contact emails: `valid_email` (the check on profile_emails, run as whoever writes), `limit_emails` (up to 5),
+  `refresh_contact_email(profile)` (copies the shown email onto the profile, only when it differs, so nothing is sent
+  when nothing changed), `contact_email_changed` (the triggers that call it) and `account_gone` (a deleted account).
 - Sign-up codes: `let_in` (the one rule), `before_user_created` (the Auth hook; only `supabase_auth_admin` may run it),
   `must_be_let_in` (the profiles trigger), and for the SQL editor `make_signup_code`, `switch_off_signup_code`.
 - Four settings change what triggers do within one transaction: `sprawniej.importing` (imports and `move_person`:
@@ -537,7 +569,14 @@ New functions are closed by default: nobody runs one unless a migration grants i
   workspace or kind: `22023` "That status isn't in this workspace."; hidden ones are allowed); `status` changed alone
   (an older app, GitHub, the import) moves `status_id` to that category's default; an insert without `status_id` gets
   its category's default. Both sent: `status_id` wins.
-- `a_author` on views (`owner_id`), inbox (`actor_id`), invites (`invited_by`), github_repos and notion_connections (`added_by`): whoever is signed in.
+- `a_author` on views (`owner_id`), inbox (`actor_id`), invites (`invited_by`), github_repos and notion_connections
+  (`added_by`) and profile_emails (`profile_id`): whoever is signed in. profile_emails also gets its own `a_stamp`
+  (`touch`), though it isn't in `private.wiring`.
+- `b_limit` on profile_emails (insert): up to 5 per person.
+- `contact_email_edited` (the shown email's text changed) and `contact_email_gone` (the shown email was deleted) on
+  profile_emails: copy what is shown now onto the profile (`refresh_contact_email`).
+- `b_account_gone` and `account_gone` on profiles, when `user_id` becomes null (the account was deleted): clear
+  `contact_email` (in the same message as `user_id`) and delete the person's contact emails.
 - `b_number` on issues: the next number of the team (Issue numbers in docs/architecture.md).
 - `b_status` on inbox (`note_status`): a status note sent with `status_id` gets that status's category (an id that
   isn't one of the workspace's issue statuses is dropped); one sent with only `status` (an older app, `github_apply`)
@@ -580,6 +619,8 @@ let them add, change and delete them, except:
 - invites, github_repos and notion_connections: admins and owners only;
 - invite_uses: admins and owners read them; nobody writes them (only `accept_invite`);
 - profiles: see the profiles table;
+- profile_emails: yours only, whatever workspace you are in; you add and change `email` and delete rows, and nothing
+  else (`profile_id` and `visible` are the database's);
 - issue_events, issue_numbers, deletions, issue_pull_requests: read only.
 
 On top of that, **column grants** list what people may write; everything else is filled in by the database
@@ -603,7 +644,9 @@ while you are a member, and to your own `me:`; browsers can't send on either. Ea
 
 An `INSERT` sends the whole row, an `UPDATE` only the columns that changed plus the keys and `changed_at` (nothing at
 all when only a team's counter changed), a `DELETE` the keys. A row over 200 kB comes without `description` or `body`
-and with `"partial": true`; the app fetches it. A profile's change goes to every workspace the person is (or was) in.
+and with `"partial": true`; the app fetches it. A profile's change goes to every workspace the person is (or was) in;
+that is how a new contact email reaches teammates (`{"id", "contact_email", "changed_at"}`). Contact email lists
+(profile_emails) are never broadcast.
 Imports and `move_person` send `{"op": "catch_up"}` (with `"table"` for imports) once per batch instead. Invites,
 invite uses, history, used numbers and deletions are never broadcast. Access is checked when a browser joins, so someone removed
 keeps hearing a workspace until they reconnect.

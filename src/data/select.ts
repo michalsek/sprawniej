@@ -292,3 +292,7 @@ export const isAdmin = (s: WithMembers): boolean => {
 }
 
 export const ownerCount = (s: Pick<WithMembers, 'members'>): number => Object.values(s.members).filter((m) => m.role === 'owner' && !m.removedAt).length
+
+/** the contact email someone shows teammates (yours too: the open workspace's copy of your profile is the newest) */
+export const contactEmailOf = (s: { people: Record<string, Person>; me: Person | null }, login: string): string | undefined =>
+  (s.people[login] ?? (s.me?.login === login ? s.me : undefined))?.contactEmail

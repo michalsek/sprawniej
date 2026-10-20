@@ -361,6 +361,16 @@ links and highlights) only by someone's handle now, case aside (`resolveHandle` 
 same text may mention whoever has that handle next. The editor highlights mentions the same way and draws them again
 when someone's handle changes; typing @ suggests people by name and handle now and inserts their handle now.
 
+## Contact emails
+
+- A person keeps up to 5 contact emails in `profile_emails`, which only they can read, and picks the one teammates
+  see with `show_email()`. The database copies that one onto `profiles.contact_email` (`Person.contactEmail`), so it
+  travels with the profile like the name: opening, the copy in this browser, the `ws:` broadcast and catching up, to
+  everyone who can see the profile. The list itself is read and changed with awaited calls (`src/backend/profiles.ts`,
+  "your contact emails" in `src/data/actions.ts`) on Settings › Profile (`ContactEmails.tsx`, `useContactEmails.ts`),
+  and Settings › Members shows the chosen one. Nothing reads the sign-in email from the database: "Add my sign-in
+  email" copies it from the browser's sign-in as an ordinary email.
+
 ## Inbox notes
 
 Who hears about what is worked out in the browser by pure functions (`src/data/notify.ts`): the new assignee, anyone

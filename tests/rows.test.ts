@@ -53,6 +53,7 @@ const profile = (more: Partial<Row<'profiles'>> = {}): Row<'profiles'> => ({
   name: 'Ana',
   avatar_url: 'https://a/ana.png',
   name_set_here: false,
+  contact_email: null,
   guest_of: null,
   handle: null,
   linear_ids: [],
@@ -154,6 +155,15 @@ describe('people', () => {
     expect(rowToPerson(profile({ name_set_here: true })).nameSetHere).toBe(true)
     expect('nameSetHere' in rowToPerson(profile())).toBe(false)
     expect(personToProfile(rowToPerson(profile({ name_set_here: true })), WS, registry()).name_set_here).toBe(true)
+  })
+
+  test('the contact email they show comes from the database and is never sent back', () => {
+    const p = rowToPerson(profile({ contact_email: 'ana@firma.pl' }))
+    expect(p.contactEmail).toBe('ana@firma.pl')
+    expect('contactEmail' in rowToPerson(profile())).toBe(false)
+    const back = personToProfile(p, WS, registry())
+    expect('contact_email' in back).toBe(false)
+    expect(back.extra).toEqual({})
   })
 
   test('a member: role and when they left', () => {

@@ -98,7 +98,7 @@ const names = <T>(...keys: (keyof Known<T> & string)[]): ReadonlySet<string> => 
 /** the fields each kind has (or makes up from other tables), so none of them is kept in `extra` as well */
 const KNOWN = {
   workspace: names<Workspace>('id', 'name', 'createdAt'),
-  person: names<Person & Linked & { id: string; linearIds: string[] }>('id', 'login', 'handle', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'linearId', 'linearIds'),
+  person: names<Person & Linked & { id: string; linearIds: string[] }>('id', 'login', 'handle', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'contactEmail', 'linearId', 'linearIds'),
   team: names<Team & Linked & { id: string }>('id', 'key', 'name', 'emoji', 'members', 'createdAt', 'lastNumber', 'autoArchive', 'linearId'),
   label: names<Label & Linked>('id', 'name', 'color', 'linearId'),
   status: names<Status>('id', 'kind', 'category', 'name', 'color', 'position', 'hidden'),
@@ -175,7 +175,10 @@ export function rowToWorkspace(row: Row<'workspaces'>): Workspace {
   return { ...fromExtra(row.extra, KNOWN.workspace), id: row.id, name: row.name, createdAt: iso(row.created_at) }
 }
 
-/** a guest keeps one Linear id (`linearId`); an account can stand for several (`linearIds`). `handle` only when it isn't the login */
+/**
+ * A guest keeps one Linear id (`linearId`); an account can stand for several (`linearIds`). `handle` only when it
+ * isn't the login, `contactEmail` only when one is shown.
+ */
 export function rowToPerson(row: Row<'profiles'>): Person {
   const ids = row.linear_ids ?? []
   return {
@@ -186,6 +189,7 @@ export function rowToPerson(row: Row<'profiles'>): Person {
     name: row.name,
     avatarUrl: row.avatar_url,
     ...(row.name_set_here && { nameSetHere: true }),
+    ...(row.contact_email != null && { contactEmail: row.contact_email }),
     ...(row.guest_of && ids.length > 0 && { linearId: ids[0] }),
     ...((row.guest_of ? ids.length > 1 : ids.length > 0) && { linearIds: [...ids] }),
   }
@@ -410,6 +414,7 @@ const linearId = (model: object): string | null => {
   return typeof id === 'string' ? id : null
 }
 
+/** never contact_email: only the database fills it in (and `contactEmail` is known, so it isn't kept in extra either) */
 export function personToProfile(p: Person, workspaceId: string, reg: Registry): Insert<'profiles'> {
   return {
     id: ownId(p) ?? requiredProfileId(p.login, reg),

@@ -40,6 +40,8 @@ export const personSchema = z
     avatarUrl: z.string(),
     /** they typed their name in Sprawniej (Settings › Profile): their GitHub name doesn't replace it */
     nameSetHere: z.boolean().optional(),
+    /** the contact email they picked for teammates to see (src/model/contactEmail.ts); filled by the database only */
+    contactEmail: z.string().optional(),
   })
   .loose()
 export type Person = z.infer<typeof personSchema>

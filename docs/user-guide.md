@@ -32,8 +32,8 @@ The first time you open your team's issues, four short tips show you around. You
 Open **Settings** from the menu under your name (bottom left), or press `⌘K` and type what you're looking for
 ("password", "labels", "members"). In Settings, its own menu takes the sidebar's place:
 
-- **Your account:** **Profile** (your name and @handle, light or dark, switching workspace, signing out) and **Ways
-  to sign in**.
+- **Your account:** **Profile** (your name, @handle and contact email, light or dark, switching workspace, signing
+  out) and **Ways to sign in**.
 - **Workspace:** **General** (the workspace's name, leaving it), **Members**, **Invite links**, **People from Linear**
   (while some haven't joined), **Teams**, **Labels**, **Statuses**, **Archive**, **GitHub**, **Notion** and **Import from
   Linear**. Invite links and Import from Linear are only for owners and admins.
@@ -67,6 +67,27 @@ and history stay yours. What changes:
 - **Someone else may take your old handle.** Then old text with that handle mentions them: it's highlighted as them,
   and they hear about those issues (new comments and status changes), just as if they had been mentioned there.
 - Signing in doesn't change: your email, password and GitHub work as before.
+
+### Your contact email
+
+You can show teammates an email they can write to. It shows next to your name in **Settings › Members**, with a
+button to copy it. Open **Settings › Profile** and look under **Contact email**:
+
+- **Add an email:** type it and press Enter or **Add**. You can keep up to 5. New ones aren't shown to anyone until
+  you pick one. **Add my sign-in email** copies the email you sign in with into the list in one tap.
+- **Pick the one teammates see** under **Teammates see**, or choose **Don't show an email**. You see the same choice
+  in every workspace.
+- **Change one** by typing over it; it saves when you press Enter or click somewhere else. If it can't be saved, what
+  you typed stays, with a note under it saying why; `Esc` puts the saved one back.
+  Changing the one you show changes what teammates see. **Remove** takes one away; removing the one you show means
+  teammates see none.
+
+Good to know:
+- Sprawniej doesn't check these addresses and never sends anything to them, so make sure they're right.
+- How you sign in doesn't change. Your sign-in email stays private unless you add it here and pick it.
+- **Who sees it:** everyone who can see your name in Sprawniej. That's the people in your workspaces, and also people
+  in a workspace you left, since your name stays on your old issues and comments there. If you don't want them to
+  see it, choose **Don't show an email**.
 
 ### Light or dark
 
@@ -120,7 +141,8 @@ workspace). **Copy message** is in the same menu.
 
 ### Members and roles
 
-**Settings › Members** lists everyone in the workspace. Everyone can see and change every issue, project, view and
+**Settings › Members** lists everyone in the workspace, with their @handle and the contact email they chose to show
+(press it to write to them, or the copy button next to it). Everyone can see and change every issue, project, view and
 label, and make teams. On top of that:
 
 - **Owners** can do everything, including making or changing other owners.

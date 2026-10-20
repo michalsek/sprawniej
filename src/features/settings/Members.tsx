@@ -1,9 +1,10 @@
 /**
- * Settings › Members: who is in the workspace and their roles. Admins and owners change roles and remove people;
- * only what the rules allow is offered (src/data/roles.ts), and anything else shows why.
+ * Settings › Members: who is in the workspace and their roles, with the contact email each person shows (if any).
+ * Admins and owners change roles and remove people; only what the rules allow is offered (src/data/roles.ts), and
+ * anything else shows why.
  */
 import { useMemo, useState } from 'react'
-import { Loader2, MoreHorizontal, Search, UserMinus, UserPlus } from 'lucide-react'
+import { Copy, Loader2, MoreHorizontal, Search, UserMinus, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
 import { Link } from 'wouter'
 import { useShallow } from 'zustand/react/shallow'
@@ -21,10 +22,17 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Input } from '@/ui/input'
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
+import { copy } from './copy'
 
 interface Row {
   who: Who
   person: Person
+}
+
+/** a mail link; each side of the @ encoded, the @ itself kept as it is */
+function mailto(email: string): string {
+  const at = email.lastIndexOf('@')
+  return `mailto:${encodeURIComponent(email.slice(0, at))}@${encodeURIComponent(email.slice(at + 1))}`
 }
 
 const RANK: Record<Role, number> = { owner: 0, admin: 1, member: 2 }
@@ -147,7 +155,32 @@ export function Members({ admin }: { admin: boolean }) {
                   {person.name}
                   {mine && <span className="font-normal text-muted-foreground"> (you)</span>}
                 </span>
-                <span className="block truncate text-sm text-muted-foreground">@{handleOf(person)}</span>
+                {person.contactEmail ? (
+                  // on a phone the email gets a line of its own, so it isn't cut to a few letters
+                  <span className="flex min-w-0 flex-col text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-1">
+                    <span className="truncate sm:max-w-1/2 sm:shrink-0">@{handleOf(person)}</span>
+                    <span className="flex min-w-0 items-center gap-1">
+                      <span aria-hidden className="hidden sm:inline">
+                        ·
+                      </span>
+                      <a href={mailto(person.contactEmail)} className="min-w-0 truncate hover:text-foreground hover:underline" data-contact-email>
+                        {person.contactEmail}
+                      </a>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        className="-my-1.5 shrink-0"
+                        aria-label={`Copy ${person.name}'s email`}
+                        title="Copy email"
+                        onClick={() => person.contactEmail && copy(person.contactEmail, 'Email')}
+                      >
+                        <Copy />
+                      </Button>
+                    </span>
+                  </span>
+                ) : (
+                  <span className="block truncate text-sm text-muted-foreground">@{handleOf(person)}</span>
+                )}
               </span>
               {choices.roles.length > 1 ? (
                 <Select value={who.role} disabled={busy === who.login} onValueChange={(v) => isRole(v) && pick(row, v)}>
