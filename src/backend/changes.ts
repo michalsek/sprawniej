@@ -53,10 +53,11 @@ export type Writable<N extends LiveTable, O extends 'insert' | 'update'> = Parti
 >
 
 /** a change the database makes through one of its functions, not a plain update (writes.ts sends it as a call) */
-export interface Call {
-  fn: 'move_issue_to_team'
-  args: { p_issue: string; p_team: string }
-}
+export type Call =
+  /** an issue to another team: a new number there */
+  | { fn: 'move_issue_to_team'; args: { p_issue: string; p_team: string } }
+  /** one checklist item ticked or not, without sending the whole description (src/data/checklist.ts) */
+  | { fn: 'set_checklist_item'; args: { p_issue: string; p_item: number; p_text: string; p_checked: boolean } }
 
 interface Base<N extends LiveTable> {
   table: N

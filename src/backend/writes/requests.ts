@@ -58,7 +58,7 @@ export function parentsOf(s: Pick<Sendable, 'table' | 'key' | 'fields' | 'call'>
     const v = s.fields[col] ?? s.key[col]
     if (typeof v === 'string' && v) out.push(`${table}:${v}`)
   }
-  if (s.call) out.push(`teams:${s.call.args.p_team}`)
+  if (s.call?.fn === 'move_issue_to_team') out.push(`teams:${s.call.args.p_team}`)
   return out
 }
 
@@ -129,7 +129,7 @@ export function plan<S extends Sendable>(ready: readonly S[]): { req: Request; i
     }
     for (const part of chunks(items)) {
       const s = part[0]
-      if (s.op === 'call' && s.call) out.push({ req: { kind: 'call', fn: s.call.fn, args: s.call.args, key: { id: s.key.id } }, items: part })
+      if (s.op === 'call' && s.call) out.push({ req: { kind: 'call', ...s.call, key: { id: s.key.id } }, items: part })
       else if (s.op === 'insert') out.push({ req: { kind: 'insert', table: s.table, rows: part.map((p) => ({ ...p.fields, ...p.key })) }, items: part })
       else if (s.op === 'update') out.push({ req: { kind: 'update', table: s.table, fields: { ...s.fields }, keys: part.map((p) => p.key) }, items: part })
       else if (s.op === 'delete') out.push({ req: { kind: 'delete', table: s.table, keys: part.map((p) => p.key) }, items: part })

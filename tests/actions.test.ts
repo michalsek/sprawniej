@@ -18,6 +18,7 @@ import {
   nextNumber,
   noteRows,
   restoreIssue,
+  setChecklistItem,
   setFollowers,
   updateIssue,
   updateView,
@@ -290,5 +291,31 @@ describe('invite links', () => {
     } finally {
       end.mockRestore()
     }
+  })
+})
+
+describe('checklist ticks', () => {
+  test('only the box is sent, through the database; it shows at once and nobody hears about it', async () => {
+    const i = createIssue({ team: 'ENG', title: 'Release', description: 'Steps:\n- [ ] notes\n- [ ] tell @bob', assignee: 'bob' })
+    await w.settle()
+    const sent = w.since()
+    const before = state().issues[i.id].description
+    expect(setChecklistItem(i.id, { index: 1, text: 'tell @bob', checked: true, before })).toBe(true)
+    expect(state().issues[i.id].description).toBe('Steps:\n- [ ] notes\n- [x] tell @bob')
+    await w.settle()
+    expect(sent()).toEqual([
+      { kind: 'call', fn: 'set_checklist_item', args: { p_issue: i.id, p_item: 1, p_text: 'tell @bob', p_checked: true }, key: { id: i.id } },
+    ])
+    expect(w.db.get('issues', { id: i.id })?.description).toBe('Steps:\n- [ ] notes\n- [x] tell @bob')
+  })
+
+  test('the text here moved on, or the item is gone: nothing is sent, the editor saves the whole text instead', async () => {
+    const i = createIssue({ team: 'ENG', title: 'Release', description: '- [ ] a' })
+    await w.settle()
+    const sent = w.since()
+    expect(setChecklistItem(i.id, { index: 0, text: 'a', checked: true, before: '- [ ] a\n- [ ] b' })).toBe(false)
+    expect(setChecklistItem(i.id, { index: 0, text: 'gone', checked: true, before: '- [ ] a' })).toBe(false)
+    await w.settle()
+    expect(sent()).toEqual([])
   })
 })

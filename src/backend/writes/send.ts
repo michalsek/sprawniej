@@ -11,7 +11,7 @@
  * Inbox notes for teammates never ask for rows back: you can't read other people's notes (E54).
  */
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { keyString } from '../changes'
+import { keyString, type Call } from '../changes'
 import type { Db } from '../client'
 import { isUnreachable } from '../problem'
 import { KEYS, type LiveTable } from '../tables'
@@ -37,7 +37,7 @@ export type Request =
   | { kind: 'insert'; table: LiveTable; rows: Loose[] }
   | { kind: 'update'; table: LiveTable; fields: Loose; keys: Record<string, string>[] }
   | { kind: 'delete'; table: LiveTable; keys: Record<string, string>[] }
-  | { kind: 'call'; fn: 'move_issue_to_team'; args: { p_issue: string; p_team: string }; key: { id: string } }
+  | ({ kind: 'call'; key: { id: string } } & Call)
   | { kind: 'notes'; rows: NoteRow[] }
 
 /** how one row did; `row` is the row as the database has it now (a delete: the keys and changed_at it had) */

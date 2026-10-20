@@ -105,7 +105,8 @@ async function runSql<T>(sql: string): Promise<T[]> {
 
 /** a new sign-up code (shown as XXXX-XXXX-XXXX), noted as this run's */
 export async function newSignupCode(label: string, days = 1, uses = 1): Promise<string> {
-  const [row] = await ownerSql<{ code: string }>(`select private.make_signup_code('dbtest ${RUN} ${label}', ${days}, ${uses}) as code`)
+  // in a transaction of its own: a lone select through the CLI is rolled back, and the code with it
+  const [row] = await ownerSql<{ code: string }>(`begin; select private.make_signup_code('dbtest ${RUN} ${label}', ${days}, ${uses}) as code; commit;`)
   return row.code
 }
 

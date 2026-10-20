@@ -16,6 +16,7 @@
  * On top, the transport can be held, made to fail, or lose an answer.
  */
 import { keyString } from '@/backend/changes'
+import { tickItem } from '@/data/checklist'
 import type { Db } from '@/backend/client'
 import { KEYS, type LiveTable, type Message } from '@/backend/tables'
 import type { Clock } from '@/backend/writes'
@@ -25,6 +26,8 @@ import { postgrest, whatOf, type Answer, type Request, type Transport } from '@/
 type Loose = Record<string, unknown>
 
 export const WS = 'ws-1'
+/** what set_checklist_item says when the item changed meanwhile (supabase/migrations/*_checklist_ticks.sql) */
+export const TICK_REFUSED = "That checklist item changed meanwhile, so your tick wasn't saved. Have a look and tick it again."
 export const profileIdOf = (login: string) => `p-${login}`
 export const teamIdOf = (key: string) => `t-${key.toLowerCase()}`
 export { statusIdOf } from '../fixtures/sample'
@@ -568,6 +571,7 @@ export class FakeDb {
   }
 
   private call(q: Query): Result {
+    if (q.fn === 'set_checklist_item') return this.tick(q.args)
     if (q.fn !== 'move_issue_to_team') return failed('PGRST202', `Could not find the function ${q.fn}`, 404)
     const { p_issue, p_team } = q.args
     const issue = this.get('issues', { id: p_issue })
@@ -577,6 +581,16 @@ export class FakeDb {
     const number = this.takeNumber(p_team)
     const fields = { team_id: p_team, number, former_refs: [...(issue.former_refs as string[]), `${String(old?.key)}-${String(issue.number)}`] }
     return { data: this.change('issues', issue, fields), error: null, status: 200 }
+  }
+
+  /** set_checklist_item, the way the database finds the item (the same helper as the app's) */
+  private tick(args: Loose): Result {
+    const issue = this.get('issues', { id: args.p_issue })
+    if (!issue) return failed('P0002', 'There is no such issue.', 500)
+    const description = tickItem(String(issue.description), Number(args.p_item), String(args.p_text), args.p_checked === true)
+    if (description === null) return failed('P0001', TICK_REFUSED, 400)
+    if (description === issue.description) return { data: issue, error: null, status: 200 }
+    return { data: this.change('issues', issue, { description }), error: null, status: 200 }
   }
 
   private say(table: LiveTable, op: 'INSERT' | 'UPDATE' | 'DELETE', row: Loose) {

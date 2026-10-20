@@ -19,12 +19,14 @@ import {
   markRead,
   moveIssueToTeam,
   moveStatus,
+  setChecklistItem,
   updateComment,
   updateIssue,
   updateStatus,
 } from '@/data/actions'
 import { EMPTY, useData } from '@/data/store'
 import { drain, FakeTarget, person, profileIdOf, seed, statusIdOf, teamIdOf, WS, type World } from './support/fakeBackend'
+import { TICK_REFUSED } from './support/fakeDb'
 
 let w: World
 let warn: ReturnType<typeof spyOn>
@@ -712,5 +714,44 @@ describe('statuses', () => {
     await w.settle()
     expect(statuses()[second.id].hidden).toBe(false)
     expect(w.told).toContain("Each group needs at least one status that isn't hidden. Add or show another one first.")
+  })
+})
+
+describe('checklist ticks', () => {
+  const tick = (id: string, index: number, text: string) => setChecklistItem(id, { index, text, checked: true, before: issue(id).description })
+  const stored = (id: string) => w.db.get('issues', { id })?.description
+
+  test('a tick waits behind an edit of its issue still on its way, and goes on its own', async () => {
+    const i = await saved('Ticks', { description: '- [ ] a\n- [ ] b' })
+    w.db.hold()
+    const sent = w.since()
+    updateIssue(i.id, { description: '- [ ] a\n- [ ] b\n- [ ] c' })
+    tick(i.id, 0, 'a')
+    await w.settle()
+    expect(sent().map((r) => r.kind)).toEqual(['update', 'call'])
+    expect(stored(i.id)).toBe('- [x] a\n- [ ] b\n- [ ] c')
+    nothingLeft(i.id)
+  })
+
+  test("a teammate's tick that landed first stays, and shows with yours", async () => {
+    const i = await saved('Ticks', { description: '- [ ] a\n- [ ] b' })
+    // saved, but not heard here yet
+    w.db.put('issues', { ...w.db.get('issues', { id: i.id }), description: '- [ ] a\n- [x] b' })
+    tick(i.id, 0, 'a')
+    await w.settle()
+    expect(stored(i.id)).toBe('- [x] a\n- [x] b')
+    expect(issue(i.id).description).toBe('- [x] a\n- [x] b')
+  })
+
+  test('an item a teammate just reworded: the tick is undone, and the reason told once', async () => {
+    const i = await saved('Ticks', { description: '- [ ] milk' })
+    w.db.put('issues', { ...w.db.get('issues', { id: i.id }), description: '- [ ] oat milk' })
+    tick(i.id, 0, 'milk')
+    expect(issue(i.id).description).toBe('- [x] milk')
+    await w.settle()
+    expect(issue(i.id).description).toBe('- [ ] milk')
+    expect(stored(i.id)).toBe('- [ ] oat milk')
+    expect(w.told).toEqual([TICK_REFUSED])
+    nothingLeft(i.id)
   })
 })

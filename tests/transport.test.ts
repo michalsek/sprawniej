@@ -240,6 +240,8 @@ describe('which changes wait, and which go together', () => {
     expect(parentsOf({ table: 'issue_labels', key: { issue_id: 'i', label_id: 'l' }, fields: {} })).toEqual(['issues:i', 'labels:l'])
     expect(parentsOf({ table: 'issues', key: { id: 'i' }, fields: { team_id: 't', project_id: 'p', parent_id: null } })).toEqual(['teams:t', 'projects:p'])
     expect(parentsOf({ table: 'issues', key: { id: 'i' }, fields: {}, call: { fn: 'move_issue_to_team', args: { p_issue: 'i', p_team: 't2' } } })).toEqual(['teams:t2'])
+    // a tick waits for nothing
+    expect(parentsOf({ table: 'issues', key: { id: 'i' }, fields: {}, call: { fn: 'set_checklist_item', args: { p_issue: 'i', p_item: 0, p_text: 'a', p_checked: true } } })).toEqual([])
   })
 
   test('the same update of many rows is one request; different ones are not; a move goes on its own', () => {

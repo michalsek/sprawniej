@@ -57,6 +57,7 @@ import { IMAGE_TYPES, MAX_IMAGE_MB, openWorkspaceId, pictureName, picturePath } 
 import { endKey, isFavourite, kindOf, placeAt, visibleFavourites } from './favourites'
 import { cleanHandle, HANDLE_WORDS, handleProblem } from './handles'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
+import { tickItem } from './checklist'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
 import { isAdmin, isUnread, ownerCount } from './select'
 import { canHide, pickStatus, statusesOf, statusNamed } from './statuses'
@@ -428,6 +429,33 @@ export function moveIssueToTeam(id: string, team: string): Issue | undefined {
     },
   })
   return useData.getState().issues[id]
+}
+
+/** one checklist item of a description, ticked or not (from the editor) */
+export interface ChecklistTick {
+  /** the how-manieth item, from 0 */
+  index: number
+  /** what it says */
+  text: string
+  checked: boolean
+  /** the description the tick was made on */
+  before: string
+}
+
+/**
+ * Tick (or untick) one checklist item of an issue's description. Only that box is sent, and the database changes
+ * only that character, so two people ticking at the same moment both keep their tick. False (nothing done) when the
+ * description here has moved on since, or the item isn't in it: then the whole text is saved as usual.
+ */
+export function setChecklistItem(id: string, t: ChecklistTick): boolean {
+  const c = context()
+  const old = useData.getState().issues[id]
+  if (!c || !old || old.description !== t.before) return false
+  const description = tickItem(t.before, t.index, t.text, t.checked)
+  if (description === null) return false
+  if (description === old.description) return true
+  write({ changes: [upd('issues', { id }, {}, { description, updated_at: now() }, { fn: 'set_checklist_item', args: { p_issue: id, p_item: t.index, p_text: t.text, p_checked: t.checked } })] })
+  return true
 }
 
 // ---------- the archive ----------
