@@ -95,6 +95,18 @@ export const CHECKLISTS: ChecklistCase[] = [
     ],
   },
   {
+    name: 'code inside a line is not a code block',
+    md: '```x``` text\n- [ ] counted\n~~~ js `a`\n- [ ] in code\n~~~\n- [x] after',
+    items: [
+      { text: 'counted', checked: false },
+      { text: 'after', checked: true },
+    ],
+    ticks: [
+      { item: 0, text: 'counted', checked: true, after: '```x``` text\n- [x] counted\n~~~ js `a`\n- [ ] in code\n~~~\n- [x] after' },
+      { item: 1, text: 'after', checked: false, after: '```x``` text\n- [ ] counted\n~~~ js `a`\n- [ ] in code\n~~~\n- [ ] after' },
+    ],
+  },
+  {
     name: 'not items: numbered, no space, no box',
     md: '1. [ ] numbered\n-[ ] tight\n- [ ]x\n- [y] other\n- plain',
     items: [],

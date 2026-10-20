@@ -59,6 +59,17 @@ describe('tables', () => {
     expect(cells(once)).toEqual([['a'], ['one<br>**two**']])
     expect(resave(once)).toBe(once)
   })
+
+  test('a <br> in code, or written out as &lt;br&gt;, stays text', () => {
+    const md = '| a |\n| --- |\n| `x<br>y` and &lt;br&gt; |'
+    expect(open(md).firstChild?.child(1).child(0).firstChild?.content.toJSON()).toEqual([
+      { type: 'text', text: 'x<br>y', marks: [{ type: 'code' }] },
+      { type: 'text', text: ' and <br>' },
+    ])
+    const once = resave(md)
+    expect(cells(once)).toEqual([['a'], ['`x<br>y` and &lt;br&gt;']])
+    expect(resave(once)).toBe(once)
+  })
 })
 
 describe('checklists', () => {
@@ -87,6 +98,7 @@ describe('checklists', () => {
       '- a\n\n    ```\n    - [ ] in code\n    ```\n- [ ] real',
       '> ```\n> - [ ] quoted code\n> ```\n\n- [x] after',
       '- [ ] one\r\n```\r\n- [ ] code\r\n```\r\n- [x] two\r',
+      '```x``` text\n- [ ] counted',
     ]
     for (const md of texts) expect(boxes(md)).toEqual(checklistItems(md).map((i) => i.checked))
   })

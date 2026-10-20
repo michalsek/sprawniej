@@ -43,7 +43,8 @@ begin
       if f is not null and left(f[1], 1) = left(fence, 1) and length(f[1]) >= length(fence) then fence := null; end if;
       continue;
     end if;
-    f := regexp_match(line, '^(?:[ \t]*>)*[ \t]*(`{3,}|~{3,})');
+    -- a ``` fence can't have a backtick after it ("```x``` text" is code inside a line), a ~~~ fence can
+    f := regexp_match(line, '^(?:[ \t]*>)*[ \t]*(`{3,}(?!.*`)|~{3,})');
     if f is not null then
       fence := f[1];
       continue;
