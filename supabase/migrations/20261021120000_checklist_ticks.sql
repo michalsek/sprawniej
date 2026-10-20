@@ -3,7 +3,8 @@
 -- other's). Only a new function; no table changes.
 --
 -- Items are found exactly as the app finds them (src/data/checklist.ts, keep the two in step): a line like
--- "- [ ] text", "* [x] text" or "> + [X] text", never inside a code block (``` or ~~~). tests/fixtures/checklists.ts
+-- "- [ ] text", "* [x] text" or "> + [X] text", never inside a code block (``` or ~~~, also indented in a list or
+-- inside a quote). tests/fixtures/checklists.ts
 -- runs the same cases against both.
 
 -- Ticks (p_checked) or unticks item number p_item (from 0) of an issue's description. The item is the one at that
@@ -28,6 +29,9 @@ declare
   same_lines integer[] := '{}';
   same_boxes integer[] := '{}';
 begin
+  if p_issue is null or p_item is null or p_text is null or p_checked is null then
+    raise exception 'Something was missing, so the tick wasn''t saved.' using errcode = '22023';
+  end if;
   select * into i from public.issues where id = p_issue for update;
   if not found then raise exception 'There is no such issue.' using errcode = 'P0002'; end if;
 
@@ -35,16 +39,16 @@ begin
   for k in 1 .. coalesce(array_length(lines, 1), 0) loop
     line := lines[k];
     if fence is not null then
-      f := regexp_match(line, '^ {0,3}(`{3,}|~{3,})[ \t]*$');
+      f := regexp_match(line, '^(?:[ \t]*>)*[ \t]*(`{3,}|~{3,})[ \t\r]*$');
       if f is not null and left(f[1], 1) = left(fence, 1) and length(f[1]) >= length(fence) then fence := null; end if;
       continue;
     end if;
-    f := regexp_match(line, '^ {0,3}(`{3,}|~{3,})');
+    f := regexp_match(line, '^(?:[ \t]*>)*[ \t]*(`{3,}|~{3,})');
     if f is not null then
       fence := f[1];
       continue;
     end if;
-    m := regexp_match(line, '^((?:[ \t]*>)*[ \t]*[-+*][ \t]+\[)([ xX])\](?:[ \t]+([^\n]*))?$');
+    m := regexp_match(line, '^((?:[ \t]*>)*[ \t]*[-+*][ \t]+\[)([ xX])\](?:[ \t]+([^\n]*))?\r?$');
     if m is null then continue; end if;
     item_text := rtrim(coalesce(m[3], ''), E' \t\r');
     if item_text = p_text then

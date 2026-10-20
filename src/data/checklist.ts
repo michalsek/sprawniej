@@ -3,19 +3,19 @@
  * text: no editor needed, so lists and boards can count them and a tick changes exactly one character (the box), so
  * `* [X] a` stays `*` and nothing else in the text moves.
  *
- * Lines inside a code block (``` or ~~~) are never items. The database function set_checklist_item
+ * Lines inside a code block (``` or ~~~, also indented in a list or inside a quote) are never items. The database function set_checklist_item
  * (supabase/migrations/*_checklist_ticks.sql) finds items in exactly the same way: keep the two in step.
  * tests/fixtures/checklists.ts runs the same cases against both.
  */
 
 /** a checklist line: what comes before the box, the box character, and the item's text */
-const ITEM = /^((?:[ \t]*>)*[ \t]*[-+*][ \t]+\[)([ xX])\](?:[ \t]+([^\n]*))?$/
+const ITEM = /^((?:[ \t]*>)*[ \t]*[-+*][ \t]+\[)([ xX])\](?:[ \t]+([^\n]*))?\r?$/
 /** a box with nothing after it, at the end of a line */
-const BARE = /^((?:[ \t]*>)*[ \t]*[-+*][ \t]+\[[ xX]\])$/
-const OPEN_FENCE = /^ {0,3}(`{3,}|~{3,})/
-const CLOSE_FENCE = /^ {0,3}(`{3,}|~{3,})[ \t]*$/
+const BARE = /^(?:[ \t]*>)*[ \t]*[-+*][ \t]+\[[ xX]\]\r?$/
+const OPEN_FENCE = /^(?:[ \t]*>)*[ \t]*(`{3,}|~{3,})/
+const CLOSE_FENCE = /^(?:[ \t]*>)*[ \t]*(`{3,}|~{3,})[ \t\r]*$/
 
-export interface ChecklistItem {
+interface ChecklistItem {
   /** the how-manieth item, from 0 */
   index: number
   /** its line, from 0 */
@@ -92,19 +92,46 @@ export function checklistCount(md: string): { done: number; total: number } | nu
   return { done: items.filter((i) => i.checked).length, total: items.length }
 }
 
-/**
- * The text with a space after every box that ends its line ("- [ ]" becomes "- [ ] "), so an empty item reads back
- * as an empty item and not as the characters "[ ]".
- */
-export function openable(md: string): string {
+/** the text with `fill` after the box of every empty item (outside code), each on its own line still */
+function fillEmpty(md: string, fill: string, only: (line: string) => boolean): string {
   if (!md.includes('[')) return md
   const lines = md.split('\n')
   let changed = false
-  for (const [line, n] of outsideCode(lines)) {
-    if (BARE.test(line)) {
-      lines[n] = `${line} `
-      changed = true
-    }
+  for (const item of checklistItems(md)) {
+    const line = lines[item.line]
+    if (item.text || !only(line)) continue
+    lines[item.line] = line.slice(0, item.at + 2) + fill
+    changed = true
   }
   return changed ? lines.join('\n') : md
+}
+
+/**
+ * For the editor: a space after every box that ends its line ("- [ ]" becomes "- [ ] "), so an empty item opens as
+ * an empty item and not as the characters "[ ]".
+ */
+export const openable = (md: string): string => fillEmpty(md, ' ', (line) => BARE.test(line))
+
+/**
+ * For reading views: every empty item gets a blank that shows nothing, because a box with nothing after it isn't a
+ * box there. The lines stay where they were, so a tick still names its line.
+ */
+export const showable = (md: string): string => fillEmpty(md, ' &nbsp;', () => true)
+
+/**
+ * Whether a tick made in the editor can be saved as just that box: the text the editor shows now (`now`) is the saved
+ * text (`before`) with only that box changed. `pending`: your own edits are still waiting to be saved; then only an
+ * exact match counts. The tick to send, or null (the whole text is saved instead).
+ */
+export function tickFrom(before: string, now: string, tick: { index: number; checked: boolean }, pending: boolean): { index: number; text: string; checked: boolean } | null {
+  const was = checklistItems(before)
+  const item = was[tick.index]
+  if (!item || item.checked === tick.checked) return null
+  const single = { index: tick.index, text: item.text, checked: tick.checked }
+  if (now === setBox(before, item, tick.checked)) return single
+  if (pending) return null
+  // the editor writes some things its own way (`*` as `-`): the same items, and only this box changed
+  const is = checklistItems(now)
+  if (is.length !== was.length || is.some((n, k) => n.checked !== (k === tick.index ? tick.checked : was[k].checked))) return null
+  return single
 }

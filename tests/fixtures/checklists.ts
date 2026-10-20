@@ -3,7 +3,7 @@
  * set_checklist_item (tests/db/checklist.test.ts), so both find the same items and make the same change.
  */
 
-export interface Tick {
+interface Tick {
   /** the how-manieth item, from 0 */
   item: number
   /** what the person saw it say */
@@ -77,6 +77,21 @@ export const CHECKLISTS: ChecklistCase[] = [
     ticks: [
       { item: 0, text: 'real', checked: true, after: '```\n- [ ] in code\n```\n- [x] real\n~~~~md\n- [ ] also code\n~~~\n- [ ] still code\n~~~~\n- [x] last' },
       { item: 1, text: 'last', checked: false, after: '```\n- [ ] in code\n```\n- [ ] real\n~~~~md\n- [ ] also code\n~~~\n- [ ] still code\n~~~~\n- [ ] last' },
+    ],
+  },
+  {
+    name: 'code blocks inside a list item or a quote, and Windows line ends',
+    md: '- a\n\n    ```\n    - [ ] in code\n    ```\n- [ ] real\n> ```\n> - [ ] quoted code\n> ```\n- [ ] after\r\n```\r\n- [ ] crlf code\r\n```\r\n- [x]\r\n- [ ] last\r',
+    items: [
+      { text: 'real', checked: false },
+      { text: 'after', checked: false },
+      { text: '', checked: true },
+      { text: 'last', checked: false },
+    ],
+    ticks: [
+      { item: 0, text: 'real', checked: true, after: '- a\n\n    ```\n    - [ ] in code\n    ```\n- [x] real\n> ```\n> - [ ] quoted code\n> ```\n- [ ] after\r\n```\r\n- [ ] crlf code\r\n```\r\n- [x]\r\n- [ ] last\r' },
+      { item: 2, text: '', checked: false, after: '- a\n\n    ```\n    - [ ] in code\n    ```\n- [ ] real\n> ```\n> - [ ] quoted code\n> ```\n- [ ] after\r\n```\r\n- [ ] crlf code\r\n```\r\n- [ ]\r\n- [ ] last\r' },
+      { item: 3, text: 'last', checked: true, after: '- a\n\n    ```\n    - [ ] in code\n    ```\n- [ ] real\n> ```\n> - [ ] quoted code\n> ```\n- [ ] after\r\n```\r\n- [ ] crlf code\r\n```\r\n- [x]\r\n- [x] last\r' },
     ],
   },
   {

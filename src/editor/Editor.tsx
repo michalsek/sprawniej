@@ -19,7 +19,7 @@ import { Markdown } from '@tiptap/markdown'
 import { Placeholder } from '@tiptap/extensions'
 import { toast } from 'sonner'
 import { addImage, type ChecklistTick } from '@/data/actions'
-import { checklistItems, openable, setChecked } from '@/data/checklist'
+import { openable, setChecked, tickFrom } from '@/data/checklist'
 import { cn } from '@/lib/utils'
 import { MentionSuggest } from './MentionSuggest'
 import { References } from './references'
@@ -51,6 +51,11 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
   const lastSent = useRef(value)
   /** you changed something since the last save */
   const dirty = useRef(false)
+  /**
+   * The editor's own Markdown for what it last showed or saved. A change that leaves it the same is no change: the
+   * empty line the editor adds after a list or table when you click in, for one.
+   */
+  const shown = useRef<string | null>(null)
   /** a teammate's change came while a picture was still being added: it's taken in once the picture is */
   const waiting = useRef(false)
   const latestValue = useRef(value)
@@ -87,9 +92,13 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
         return false
       },
     },
+    onCreate: ({ editor }) => {
+      shown.current = markdownOf(editor)
+    },
     onUpdate: ({ editor, transaction }) => {
       const tick = transaction.getMeta(TICK) as TickMeta | undefined
       if (tick && saveTick(editor, tick)) return
+      if (!dirty.current && markdownOf(editor) === shown.current) return
       dirty.current = true
       saveLater()
     },
@@ -156,23 +165,29 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
   }
 
   /**
-   * A box ticked while nothing else waits to be saved: just that box is saved (`onTick`). Only when the text here is
-   * the saved text with exactly this one box changed, so the item it names is the one you ticked.
+   * A box ticked while nothing else waits to be saved: just that box is saved (`onTick`), when the text here is the
+   * saved text with only this box changed (tickFrom, src/data/checklist.ts).
    */
   function saveTick(editor: TiptapEditor, tick: TickMeta): boolean {
     const save = tickRef.current
-    if (!save || dirty.current || waiting.current) return false
+    if (!save || waiting.current) return false
     const before = lastSent.current
-    const was = checklistItems(before)
-    const now = checklistItems(tidyMarkdown(savedMarkdown(editor)))
-    const item = was[tick.index]
-    if (!item || item.checked === tick.checked || was.length !== now.length) return false
-    if (now.some((n, k) => n.checked !== (k === tick.index ? tick.checked : was[k].checked))) return false
+    const now = markdownOf(editor)
+    const t = tickFrom(before, now, tick, dirty.current)
+    if (!t) return false
     // first: the saved tick comes back here as the new text, and must read as ours, not as a teammate's change
-    lastSent.current = setChecked(before, tick.index, tick.checked)
-    if (save({ index: tick.index, text: item.text, checked: tick.checked, before })) return true
-    lastSent.current = before
-    return false
+    lastSent.current = setChecked(before, t.index, t.checked)
+    if (!save({ ...t, before })) {
+      lastSent.current = before
+      return false
+    }
+    shown.current = now
+    // nothing else was waiting after all
+    if (now === lastSent.current) {
+      dirty.current = false
+      clearTimeout(timer.current)
+    }
+    return true
   }
 
   function saveLater() {
@@ -185,7 +200,8 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
     // a teammate's change still waits to be merged in: saving now would undo it
     if (!editor || editor.isDestroyed || !dirty.current || waiting.current) return
     dirty.current = false
-    const md = tidyMarkdown(savedMarkdown(editor))
+    const md = markdownOf(editor)
+    shown.current = md
     if (md === lastSent.current) return
     lastSent.current = md
     changeRef.current(md)
@@ -211,12 +227,14 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
     lastSent.current = value
     if (!dirty.current && !editor.isFocused) {
       editor.commands.setContent(openable(value), { contentType: 'markdown', emitUpdate: false })
+      shown.current = markdownOf(editor)
       return
     }
-    const mine = dirty.current ? tidyMarkdown(savedMarkdown(editor)) : base
+    const mine = dirty.current ? markdownOf(editor) : base
     const merged = mine === base ? value : mergeText(base, mine, value)
     if (merged === mine) return
     replaceChanged(editor, merged)
+    if (!dirty.current) shown.current = markdownOf(editor)
     // what you added is still to be saved: `lastSent` is their text, the editor has both
     if (merged !== value) {
       dirty.current = true
@@ -230,6 +248,9 @@ export function Editor({ value, onChange, placeholder = 'Add a description…', 
 
   return <EditorContent editor={editor} className={cn('min-h-24 cursor-text', className)} />
 }
+
+/** the Markdown the editor would save now */
+const markdownOf = (editor: TiptapEditor) => tidyMarkdown(savedMarkdown(editor))
 
 /** headings, lists, checklists, quotes, code fences, bold or links at the start of a line or inline */
 const looksLikeMarkdown = (text: string) => /^(#{1,6} |[-*+] |\d+\. |> |```|[-*] \[[ xX]\] )/m.test(text) || /\*\*[^*\n]+\*\*|\[[^\]\n]+\]\([^)\s]+\)/.test(text)
