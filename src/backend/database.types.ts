@@ -738,6 +738,67 @@ export type Database = {
           },
         ]
       }
+      notion_connections: {
+        Row: {
+          added_by: string | null
+          changed_at: string
+          created_at: string
+          id: string
+          last_event: Json | null
+          last_event_at: string | null
+          secret_hash: string
+          secret_set_at: string
+          team_id: string | null
+          workspace_id: string
+        }
+        Insert: {
+          added_by?: string | null
+          changed_at?: string
+          created_at?: string
+          id?: string
+          last_event?: Json | null
+          last_event_at?: string | null
+          secret_hash: string
+          secret_set_at?: string
+          team_id?: string | null
+          workspace_id: string
+        }
+        Update: {
+          added_by?: string | null
+          changed_at?: string
+          created_at?: string
+          id?: string
+          last_event?: Json | null
+          last_event_at?: string | null
+          secret_hash?: string
+          secret_set_at?: string
+          team_id?: string | null
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notion_connections_added_by_fkey"
+            columns: ["added_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notion_connections_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: true
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notion_connections_workspace_id_team_id_fkey"
+            columns: ["workspace_id", "team_id"]
+            isOneToOne: false
+            referencedRelation: "teams"
+            referencedColumns: ["workspace_id", "id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string
@@ -1364,6 +1425,31 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      notion_apply: {
+        Args: {
+          p_actor: string
+          p_connection: string
+          p_issue: Json
+          p_notes: Json
+          p_page: Json
+          p_secret_hash: string
+        }
+        Returns: Json
+      }
+      notion_connect: {
+        Args: { p_team: string; p_workspace: string }
+        Returns: Json
+      }
+      notion_lookup: {
+        Args: {
+          p_connection: string
+          p_emails: string[]
+          p_secret_hash: string
+          p_team: string
+        }
+        Returns: Json
+      }
+      notion_new_secret: { Args: { p_connection: string }; Returns: string }
       set_guest_email: {
         Args: { p_email: string; p_profile: string }
         Returns: undefined

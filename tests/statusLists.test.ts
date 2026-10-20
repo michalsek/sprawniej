@@ -37,9 +37,9 @@ const lists = (name: string) => {
 const byGroup = (...groups: string[]) => CATEGORIES.filter((s) => groups.includes(s.group)).map((s) => s.id)
 
 describe('database lists match src/model', () => {
-  test('issue categories (issues, inbox and the statuses table)', () => {
+  test('issue categories (issues, inbox, the statuses table and Notion pages)', () => {
     const found = lists('issue-statuses')
-    expect(found.length).toBe(3)
+    expect(found.length).toBe(4)
     for (const list of found) expect(list).toEqual([...ISSUE_CATEGORIES])
   })
 
