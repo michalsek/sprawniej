@@ -24,6 +24,14 @@ export type Change =
   | { kind: 'archived' }
   | { kind: 'restored' }
 
+/** the pull request a change came through (GitHub, docs/github-app.md) */
+export interface PullRequestVia {
+  /** owner/name */
+  repo: string
+  number: number
+  url: string
+}
+
 export interface HistoryEvent {
   /** the event the line started from: it stays the same while later ones fold into it */
   id: number
@@ -31,6 +39,8 @@ export interface HistoryEvent {
   /** a login; null when nobody was signed in (the nightly tidy-up, or a change made by hand) */
   by: string | null
   change: Change
+  /** it came through a pull request */
+  via?: PullRequestVia
 }
 
 /** one event as src/backend/history.ts reads it (times already in the app's form) */
@@ -119,6 +129,14 @@ export function changesOf(changes: unknown, login: (id: string) => string | unde
   return out
 }
 
+/** the pull request an event came through, when it says so and the link goes to GitHub */
+export function viaOf(changes: unknown): PullRequestVia | undefined {
+  if (!isRecord(changes) || !isRecord(changes.via) || !isRecord(changes.via.pullRequest)) return undefined
+  const { repo, number, url } = changes.via.pullRequest
+  if (!isText(repo) || typeof number !== 'number' || !isText(url) || !url.startsWith('https://github.com/')) return undefined
+  return { repo, number, url }
+}
+
 // ---------- events to lines ----------
 
 /** changes this close together, by the same person, read as one: typing saves a title several times, and a status
@@ -160,6 +178,7 @@ export function issueEvents(rows: readonly EventRow[], ctx: HistoryContext): His
   // the order they were saved in decides, not their times
   for (const row of [...rows].sort((a, b) => a.id - b.id)) {
     const by = row.actorId === null ? null : (ctx.login(row.actorId) ?? row.actorId)
+    const via = viaOf(row.changes)
     for (let change of changesOf(row.changes, ctx.login)) {
       if (change.kind === 'labels' && atCreation(by, row.at, ctx)) {
         if (!change.removed.length) continue
@@ -169,9 +188,9 @@ export function issueEvents(rows: readonly EventRow[], ctx: HistoryContext): His
       const last = out.findLast((e) => e.change.kind === change.kind)
       const between = last ? out.slice(out.indexOf(last) + 1).some((e) => e.by !== by) : true
       const merged = last && !between && last.by === by && Math.abs(Date.parse(row.at) - Date.parse(last.at)) < together(change.kind) ? combine(last.change, change) : undefined
-      if (merged === undefined) out.push({ id: row.id, at: row.at, by, change })
+      if (merged === undefined) out.push({ id: row.id, at: row.at, by, change, ...(via && { via }) })
       else if (merged === null) out.splice(out.indexOf(last!), 1)
-      else Object.assign(last!, { at: row.at, change: merged })
+      else Object.assign(last!, { at: row.at, change: merged }, via && { via })
     }
   }
   return out

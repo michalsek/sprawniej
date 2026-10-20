@@ -19,6 +19,7 @@ import { context, tell, write, type NoteRow, type WriteContext } from '@/backend
 import { MESSAGES } from '@/backend/writes/problems'
 import { backend } from '@/backend'
 import { PictureError, pictures, type PictureProblem } from '@/backend/pictures'
+import { connectRepo as addRepo, disconnectRepo as removeRepo, repoFromInput } from '@/backend/github'
 import {
   acceptInvite,
   createInvite as makeInvite,
@@ -948,6 +949,27 @@ export async function deleteInvite(id: string): Promise<void> {
   openHere()
   if (!isAdmin(useData.getState())) throw new Error(RULES.notInviter)
   await removeInvite(id)
+}
+
+// ---------- GitHub ----------
+
+/**
+ * Pull requests in this repository move the workspace's issues (docs/github-app.md). Takes "owner/name" or a link
+ * to the repository; throws an Error whose message can be shown as it is.
+ */
+export async function connectRepo(input: string): Promise<string> {
+  const c = openHere()
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notGitHub)
+  const repo = repoFromInput(input)
+  if (!repo) throw new Error('That isn’t a repository. Write it as owner/name, for example acme/website.')
+  await addRepo(c.workspaceId, repo)
+  return repo
+}
+
+export async function disconnectRepo(id: string): Promise<void> {
+  openHere()
+  if (!isAdmin(useData.getState())) throw new Error(RULES.notGitHub)
+  await removeRepo(id)
 }
 
 /** Someone from the Linear import who hadn't joined is this member: their issues, comments and views move over. */

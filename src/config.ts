@@ -20,3 +20,10 @@ export function publicAppUrl(): string | null {
 export function authRedirectUrl(): string {
   return `${location.origin}${location.pathname}`
 }
+
+/**
+ * The Sprawniej GitHub App's page (https://github.com/apps/<name>), for Settings › GitHub to link to; set
+ * VITE_GITHUB_APP_URL when building (docs/github-app.md). Without it, Settings asks admins to find whoever set it up.
+ */
+const APP = (import.meta.env.VITE_GITHUB_APP_URL as string | undefined)?.trim()
+export const GITHUB_APP_URL: string | null = APP?.startsWith('https://github.com/') ? APP : null

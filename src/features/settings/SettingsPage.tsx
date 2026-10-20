@@ -1,6 +1,6 @@
 /**
  * Settings: the workspace (its name, leaving it), its members and invite links, people from Linear, labels, the
- * archive, the import, and your account.
+ * archive, GitHub, the import, and your account.
  */
 import { useState } from 'react'
 import { Loader2, LogOut, Repeat } from 'lucide-react'
@@ -20,6 +20,7 @@ import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
+import { GitHubSettings } from './GitHubSettings'
 import { Guests } from './Guests'
 import { InviteDialog } from './InviteDialog'
 import { InviteLinks } from './InviteLinks'
@@ -216,6 +217,12 @@ export function SettingsPage() {
           description="Finished issues leave the lists some time after they're done, so the lists stay short and the app stays quick. Archived issues can still be opened, found and brought back."
         >
           <ArchiveSettings />
+        </Section>
+        <Section
+          title="GitHub"
+          description="Pull requests that mention an issue, like ENG-12 in the branch name, the title or the description, move it: to In Review when the pull request opens or is ready for review, and to Done when it's merged."
+        >
+          <GitHubSettings admin={admin} />
         </Section>
         <Section title="Import" description="Bring teams, issues, comments, projects and labels over from Linear. You can run it again later to bring in new changes.">
           {admin ? (

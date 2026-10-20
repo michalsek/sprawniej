@@ -8,4 +8,6 @@ interface ImportMetaEnv {
   readonly VITE_SUPABASE_KEY?: string
   /** where Sprawniej is published (src/config.ts) */
   readonly VITE_PUBLIC_URL?: string
+  /** the Sprawniej GitHub App's page (src/config.ts) */
+  readonly VITE_GITHUB_APP_URL?: string
 }

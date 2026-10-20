@@ -126,6 +126,14 @@ function PersonLine({ event }: { event: HistoryEvent }) {
       <Who person={person} />
       <span className="min-w-0">
         <B>{person?.name ?? 'Someone'}</B> {text}
+        {event.via && (
+          <>
+            {' · '}
+            <a className="underline-offset-2 hover:underline" href={event.via.url} target="_blank" rel="noreferrer" title={event.via.repo}>
+              pull request #{event.via.number}
+            </a>
+          </>
+        )}
         <When at={event.at} />
       </span>
     </li>

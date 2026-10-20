@@ -59,6 +59,7 @@ export const RULES = {
   lastOwner: 'A workspace needs at least one owner. Make someone else an owner first.',
   notInviter: 'Only admins and owners can invite people.',
   notLinker: 'Only admins and owners can link people.',
+  notGitHub: 'Only admins and owners can connect repositories.',
 }
 
 export interface InviteInfo {

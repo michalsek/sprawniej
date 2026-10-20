@@ -11,6 +11,17 @@ const ctx: HistoryContext = { login, createdBy: 'ana', createdAt: at(0) }
 const kinds = (rows: EventRow[], c: HistoryContext = ctx) => issueEvents(rows, c).map((e) => e.change.kind)
 
 describe('issue history', () => {
+  test('a change that came through a pull request says which one; a link elsewhere is left out', () => {
+    const pr = { repo: 'acme/web', number: 12, url: 'https://github.com/acme/web/pull/12' }
+    const [line] = issueEvents([row(1, 1, 'pb', { status: ['in_progress', 'in_review'], via: { pullRequest: pr } })], ctx)
+    expect(line).toEqual({ id: 1, at: at(1), by: 'bob', change: { kind: 'status', from: 'in_progress', to: 'in_review' }, via: pr })
+    const elsewhere = { pullRequest: { ...pr, url: 'https://evil.example/pull/12' } }
+    expect(issueEvents([row(1, 1, 'pb', { status: ['todo', 'done'], via: elsewhere })], ctx)[0].via).toBeUndefined()
+    // folded into the same person's change a moment before, it keeps the pull request
+    const folded = issueEvents([row(1, 1, 'pb', { status: ['todo', 'in_progress'] }), row(2, 1.5, 'pb', { status: ['in_progress', 'in_review'], via: { pullRequest: pr } })], ctx)
+    expect(folded).toEqual([{ id: 1, at: at(1.5), by: 'bob', change: { kind: 'status', from: 'todo', to: 'in_review' }, via: pr }])
+  })
+
   test('one line per field, in the order the page shows them, whatever order they were stored in', () => {
     expect(kinds([row(1, 5, 'pa', { status: ['todo', 'done'], title: ['A', 'B'], team: ['ENG-3', 'DES-7'] })])).toEqual(['team', 'title', 'status'])
   })
