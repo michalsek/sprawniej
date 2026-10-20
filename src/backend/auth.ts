@@ -21,6 +21,8 @@ export interface AuthUser {
   avatarUrl: string
   /** Light or dark, kept with the account so it follows you (src/lib/theme.ts); undefined when never picked */
   theme?: ThemeChoice
+  /** when the account last changed: an older copy of you never replaces a newer one (setUser) */
+  updatedAt?: string
 }
 
 export interface AuthState {
@@ -136,6 +138,7 @@ const toUser = (u: User | null | undefined): AuthUser | null =>
         name: String(u.user_metadata?.full_name ?? u.user_metadata?.name ?? ''),
         avatarUrl: String(u.user_metadata?.avatar_url ?? ''),
         theme: u.user_metadata?.theme === undefined ? undefined : parseTheme(u.user_metadata.theme),
+        updatedAt: u.updated_at,
       }
     : null
 
@@ -158,7 +161,14 @@ function startOver() {
 
 const deliberate = () => Date.now() - Number(localStorage.getItem(SIGNING_OUT) ?? 0) < 10_000
 
+/** a copy of the same person from before a change that already arrived (the sign-in kept in this browser, say) */
+const older = (a: AuthUser, b: AuthUser | null) =>
+  !!b && a.id === b.id && !!a.updatedAt && !!b.updatedAt && Date.parse(a.updatedAt) < Date.parse(b.updatedAt)
+
 function setUser(user: AuthUser | null, more: Partial<AuthState> = {}) {
+  const now = useAuth.getState().user
+  // it would undo what's newer, like a light or dark you just saved
+  if (user && older(user, now)) user = now
   if (user) {
     lastUserId = user.id
     // after a reload nobody is in memory: the remembered workspaces say whose they are
@@ -217,17 +227,11 @@ export function startAuth(urlProblem?: string): void {
     history.replaceState(history.state, '', url.toString())
     if (cameBack && !signedIn) useAuth.setState({ urlProblem: GITHUB_UNFINISHED })
   }
-  // the kept sign-in's copy of you can be an hour old (a light or dark picked on another device since): ask once
+  // The kept sign-in's copy of you can be an hour old (a light or dark picked on another device since), and the
+  // client hands it out again on every sign-in event. Renewing once keeps a fresh copy; it comes as TOKEN_REFRESHED.
+  // Offline, the kept copy stays until the client renews by itself.
   const refresh = (signedIn: AuthUser | null) => {
-    if (!signedIn) return
-    db.auth.getUser().then(
-      ({ data }) => {
-        const fresh = toUser(data.user)
-        if (fresh && useAuth.getState().user?.id === fresh.id) useAuth.setState({ user: fresh })
-      },
-      // the kept copy stays; renewing the sign-in brings a fresh one later
-      () => {},
-    )
+    if (signedIn) db.auth.refreshSession().catch(() => {})
   }
   db.auth.getSession().then(
     ({ data }) => {

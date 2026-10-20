@@ -75,8 +75,11 @@ up). Without a copy, it reads everything except the archive.
   the device, other tabs (the storage event) and the account; `setTheme` in `src/data/actions.ts` saves it, quietly
   and outside the save chip. The account's choice wins when you sign in, except a choice made here that couldn't be
   sent yet (`sprawniej:theme-unsent` holds whose it is); that one is sent when you're back online, the sign-in renews,
-  or next start. After start, `startAuth` asks once for a fresh copy of you, since the kept sign-in's can be an hour
-  old.
+  or next start. The sign-in kept in this browser holds a copy of you that can be an hour old, and the client hands it
+  out again on every sign-in event (also when the tab comes back), so `startAuth` renews the sign-in once at start
+  (`refreshSession`) to keep a fresh copy, and `setUser` never lets an older copy of you (`updated_at`) replace a newer
+  one. A side effect: a sign-in ended elsewhere (another device signed out everywhere, the account removed) now shows
+  as signed out right at start, not only at the next renewal.
 
 ## Workspaces, members and roles
 
