@@ -99,7 +99,7 @@ export const INVITE_REFUSED = 'This invite link was already used or has expired.
 export const INVITE_NO_PLACES = 'This invite link has no places left right now. Ask for a new one.'
 
 /**
- * Why a new account wasn't let in (private.let_in, last in supabase/migrations/20261020170000_shared_invite_links.sql).
+ * Why a new account wasn't let in (private.let_in, last in supabase/migrations/20261021130000_shared_invite_links.sql).
  * They come back as the error's message; a test checks this list against the SQL.
  */
 export const SIGNUP_REFUSALS: ReadonlySet<string> = new Set([

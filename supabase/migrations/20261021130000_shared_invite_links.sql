@@ -73,7 +73,7 @@ language sql stable set search_path = '' as $$
     else 'open' end
 $$;
 
--- The join page: as in 20261019000010, with the new states ended, full and left.
+-- The join page: as in 20261021120000_handles.sql, with the new states ended, full and left.
 create or replace function public.invite_info(p_token text)
 returns table (workspace_id uuid, workspace_name text, invited_by_name text, invited_by_login text,
                invited_by_avatar text, for_login text, for_name text, role text, state text, people jsonb)
@@ -86,13 +86,13 @@ language sql stable security definer set search_path = '' as $$
       from public.invites i join public.workspaces w on w.id = i.workspace_id
      where i.token = p_token)
   select case when x.st = 'member' then x.workspace_id end, x.ws_name,
-         coalesce(nullif(b.name, ''), b.login), b.login, b.avatar_url,
+         coalesce(nullif(b.name, ''), b.handle, b.login), coalesce(b.handle, b.login), b.avatar_url,
          case when x.st in ('open', 'member') then x.for_login end,
          case when x.st in ('open', 'member') then g.name end,
          x.role, x.st,
          case when x.st in ('open', 'member') then (
            select coalesce(jsonb_agg(jsonb_build_object('name', y.name, 'avatarUrl', y.avatar_url)), '[]'::jsonb)
-             from (select coalesce(nullif(p.name, ''), p.login) as name, p.avatar_url
+             from (select coalesce(nullif(p.name, ''), p.handle, p.login) as name, p.avatar_url
                      from public.workspace_members m join public.profiles p on p.id = m.profile_id
                     where m.workspace_id = x.workspace_id and m.removed_at is null
                     order by m.joined_at limit 8) y)
