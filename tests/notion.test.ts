@@ -349,8 +349,7 @@ describe('the handler', () => {
     expect(r.calls.map((c) => c.fn)).toEqual(['notion_lookup', 'notion_apply'])
   })
 
-  test('too big, by what it says and by what it is', async () => {
-    expect((await send(fixture, { headers: { 'content-length': String(MAX_BODY + 1) } })).status).toBe(413)
+  test('too big: read to its end, then refused', async () => {
     const r = await send('x'.repeat(MAX_BODY + 1))
     expect(r.status).toBe(413)
     expect(r.calls).toEqual([])

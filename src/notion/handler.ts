@@ -71,6 +71,31 @@ function topOf(first: string | null): string {
   }
 }
 
+/**
+ * The body, or null when it is longer than `max`. A longer one is still read to its end, and dropped as it comes:
+ * Supabase holds an answer back until the request has been read, so answering early would wait out the time limit.
+ */
+async function readUpTo(req: Request, max: number): Promise<Uint8Array | null> {
+  if (!req.body) return new Uint8Array()
+  const reader = req.body.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.length
+    if (size <= max) parts.push(value)
+  }
+  if (size > max) return null
+  const body = new Uint8Array(size)
+  let at = 0
+  for (const p of parts) {
+    body.set(p, at)
+    at += p.length
+  }
+  return body
+}
+
 export async function handle(req: Request, env: Env): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'This address takes pages from Notion (Send webhook).' })
   const connection = new URL(req.url).searchParams.get('c')
@@ -78,9 +103,8 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   const key = keyFrom(req)
   if (!key) return json(401, { error: 'This address is missing its key. Make a new one in Settings › Notion.' })
   if (!env.url || !env.key) return json(500, { error: 'The project settings are missing.' })
-  if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY) return json(413, { error: 'Too big.' })
-  const body = new Uint8Array(await req.arrayBuffer())
-  if (body.length > MAX_BODY) return json(413, { error: 'Too big.' })
+  const body = await readUpTo(req, MAX_BODY)
+  if (!body) return json(413, { error: 'Too big.' })
 
   let payload: unknown = null
   try {
