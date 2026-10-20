@@ -590,6 +590,15 @@ describe('favourites', () => {
     expect(r.fetch).toEqual([])
     expect(w.state.mark).toBe(before)
   })
+
+  test('a delete of one we don’t have (another workspace’s) changes neither the list nor the mark', () => {
+    const w = open()
+    step(w, msg('favourites', 'INSERT', favourite('pr-1', 'a0')))
+    const before = { list: w.data.favourites, mark: w.state.mark }
+    expect(step(w, msg('favourites', 'DELETE', { profile_id: ME, item_id: 'pr-9' })).patch).toEqual({})
+    expect({ list: w.data.favourites, mark: w.state.mark }).toEqual(before)
+    expect(w.data.favourites).toBe(before.list)
+  })
 })
 
 describe('people and teams that arrive later', () => {

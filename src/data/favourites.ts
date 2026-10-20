@@ -5,8 +5,7 @@
  * A favourite can name something that isn't here: deleted a moment ago (its own deletion is on the way), or of a kind
  * a newer app knows. Those never show.
  */
-import type { Announcements } from '@dnd-kit/core'
-import { keyBetween } from './ordering'
+import { keyBetween, keysBetween } from './ordering'
 import type { DataState } from './store'
 import type { Favourite, FavouriteKind } from '@/model/schema'
 
@@ -35,23 +34,20 @@ export function kindOf(s: Pick<DataState, 'projects' | 'views'>, id: string): Fa
 /** the order key that puts a new favourite at the bottom */
 export const endKey = (list: readonly Pick<Favourite, 'sortOrder'>[]): string => keyBetween(list.at(-1)?.sortOrder ?? null, null)
 
-/** the order key that puts `id` at `toIndex` of `list` (the list as shown); null when it doesn't move */
-export function placeAt(list: readonly Pick<Favourite, 'id' | 'sortOrder'>[], id: string, toIndex: number): string | null {
+/**
+ * The new order keys that put `id` at `toIndex` of `list` (the list as shown, sorted by key): its own first, and
+ * usually only that. Where the neighbours share a key (starred in two tabs at once), no key fits between them, so the
+ * ones after it that share the key get new keys too. Null when it doesn't move.
+ */
+export function placeAt(list: readonly Pick<Favourite, 'id' | 'sortOrder'>[], id: string, toIndex: number): { id: string; sortOrder: string }[] | null {
   const from = list.findIndex((f) => f.id === id)
   const rest = list.filter((f) => f.id !== id)
   const at = Math.max(0, Math.min(toIndex, rest.length))
   if (from < 0 || at === from) return null
-  return keyBetween(rest[at - 1]?.sortOrder ?? null, rest[at]?.sortOrder ?? null)
-}
-
-/** what a screen reader hears while a favourite is moved with the keyboard; `items`: the list as shown */
-export function moveText(items: readonly { id: string; name: string }[]): Announcements {
-  const name = (id: string | number) => items.find((f) => f.id === String(id))?.name ?? 'Favourite'
-  const place = (id: string | number) => `${items.findIndex((f) => f.id === String(id)) + 1} of ${items.length}`
-  return {
-    onDragStart: ({ active }) => `Picked up ${name(active.id)}. Use the arrow keys to move it, Space to drop it, Escape to cancel.`,
-    onDragOver: ({ active, over }) => (over ? `${name(active.id)} is now number ${place(over.id)}.` : `${name(active.id)} is outside the list.`),
-    onDragEnd: ({ active, over }) => (over ? `Dropped ${name(active.id)} at number ${place(over.id)}.` : `${name(active.id)} was put back.`),
-    onDragCancel: ({ active }) => `${name(active.id)} was put back.`,
-  }
+  const lo = rest[at - 1]?.sortOrder ?? null
+  let end = at
+  while (lo !== null && end < rest.length && rest[end].sortOrder <= lo) end++
+  const tied = rest.slice(at, end)
+  const keys = keysBetween(lo, rest[end]?.sortOrder ?? null, 1 + tied.length)
+  return [{ id, sortOrder: keys[0] }, ...tied.map((f, n) => ({ id: f.id, sortOrder: keys[n + 1] }))]
 }

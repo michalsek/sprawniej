@@ -4,7 +4,8 @@ import { stopWrites } from '@/backend/writes'
 import { MESSAGES } from '@/backend/writes/problems'
 import { addFavourite, createProject, createView, deleteProject, deleteTeam, deleteView, moveFavourite, moveFavouriteBy, removeFavourite } from '@/data/actions'
 import { DEFAULT_DISPLAY } from '@/data/displays'
-import { endKey, moveText, placeAt, visibleFavourites } from '@/data/favourites'
+import { moveText } from '@/app/favouriteText'
+import { placeAt, visibleFavourites } from '@/data/favourites'
 import { useData } from '@/data/store'
 import type { Favourite, Project, View } from '@/model/schema'
 import { drain, profileIdOf, seed, WS, type World } from './support/fakeBackend'
@@ -19,21 +20,30 @@ describe('what shows, and where a favourite lands', () => {
     expect(visibleFavourites({ favourites, projects, views }).map((f) => f.id)).toEqual(['v1', 'p1'])
   })
 
-  test('placeAt: between the new neighbours, or null when it stays', () => {
+  /** the order after the keys placeAt gives, sorted as the store sorts (key, then id) */
+  const moved = (list: Favourite[], id: string, to: number) => {
+    const keys = new Map((placeAt(list, id, to) ?? []).map((p) => [p.id, p.sortOrder]))
+    return list
+      .map((f) => ({ ...f, sortOrder: keys.get(f.id) ?? f.sortOrder }))
+      .sort((x, y) => (x.sortOrder !== y.sortOrder ? (x.sortOrder < y.sortOrder ? -1 : 1) : x.id < y.id ? -1 : 1))
+      .map((f) => f.id)
+  }
+
+  test('placeAt: between the new neighbours, changing only the moved one, or null when it stays', () => {
     const list = [fav('a', 'a0'), fav('b', 'a1'), fav('c', 'a2')]
-    const order = (id: string, key: string) => list.map((f) => (f.id === id ? { ...f, sortOrder: key } : f)).sort((x, y) => (x.sortOrder < y.sortOrder ? -1 : 1)).map((f) => f.id)
-    expect(order('c', placeAt(list, 'c', 0)!)).toEqual(['c', 'a', 'b'])
-    expect(order('a', placeAt(list, 'a', 1)!)).toEqual(['b', 'a', 'c'])
-    expect(order('a', placeAt(list, 'a', 2)!)).toEqual(['b', 'c', 'a'])
+    expect(moved(list, 'c', 0)).toEqual(['c', 'a', 'b'])
+    expect(moved(list, 'a', 1)).toEqual(['b', 'a', 'c'])
+    expect(moved(list, 'a', 2)).toEqual(['b', 'c', 'a'])
+    expect(placeAt(list, 'a', 1)?.map((p) => p.id)).toEqual(['a'])
     expect(placeAt(list, 'b', 1)).toBeNull()
     expect(placeAt(list, 'missing', 0)).toBeNull()
-    // two that share a key (made in two tabs at once): a key is still found
-    expect(placeAt([fav('a', 'a0'), fav('b', 'a1'), fav('c', 'a1')], 'a', 1)).toBeString()
   })
 
-  test('a new one goes after the last, or anywhere in an empty list', () => {
-    expect(endKey([fav('a', 'a0'), fav('b', 'a5')]) > 'a5').toBe(true)
-    expect(endKey([])).toBeString()
+  test('placeAt between two that share a key (starred in two tabs at once): it lands where dropped', () => {
+    const list = [fav('p', 'a0'), fav('q', 'a1'), fav('r', 'a1')]
+    expect(moved(list, 'p', 1)).toEqual(['q', 'p', 'r'])
+    expect(placeAt(list, 'p', 1)?.map((p) => p.id)).toEqual(['p', 'r'])
+    expect(moved([fav('p', 'a1'), fav('q', 'a1'), fav('r', 'a1'), fav('s', 'a2')], 's', 1)).toEqual(['p', 's', 'q', 'r'])
   })
 
   test('a screen reader hears the name and the place', () => {
@@ -139,6 +149,19 @@ describe('starring', () => {
     w.echo()
     expect(w.db.rows('favourites')).toEqual([])
     expect(ids()).toEqual([])
+    expect(w.told).toEqual([])
+  })
+
+  test('moving or removing one that went meanwhile (unstarred in another tab) says nothing', async () => {
+    const [a, b] = [await project('A'), await project('B')]
+    addFavourite('project', a)
+    addFavourite('project', b)
+    await w.settle()
+    w.db.t('favourites').delete(`${profileIdOf('ana')}|${a}`)
+    w.db.t('favourites').delete(`${profileIdOf('ana')}|${b}`)
+    moveFavourite(b, 0)
+    removeFavourite(a)
+    await w.settle()
     expect(w.told).toEqual([])
   })
 

@@ -14,22 +14,23 @@ import { closestCenter, DndContext, KeyboardSensor, MouseSensor, TouchSensor, us
 import { SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 import { moveFavourite, moveFavouriteBy, removeFavourite } from '@/data/actions'
-import { favouriteIds, moveText } from '@/data/favourites'
+import { favouriteIds, starred, visibleFavourites } from '@/data/favourites'
 import { useData } from '@/data/store'
 import { cn } from '@/lib/utils'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
+import { moveText } from './favouriteText'
 
 /** a favourite moves only up and down, so the sidebar never scrolls sideways */
 const upAndDown: Modifier = ({ transform }) => ({ ...transform, x: 0 })
 
 function FavouriteRow({ id, first, last }: { id: string; first: boolean; last: boolean }) {
-  const project = useData((s) => s.projects[id])
-  const view = useData((s) => s.views[id])
+  const favourite = useData((s) => s.favourites.find((f) => f.id === id))
+  const thing = useData((s) => (favourite ? starred(s, favourite) : undefined))
   const [location] = useLocation()
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-  const thing = project ?? view
-  if (!thing) return null
+  if (!favourite || !thing) return null
+  const project = favourite.kind === 'project'
   const href = project ? `/project/${id}` : `/view/${id}`
   const active = location === href || location.startsWith(`${href}/`)
   return (
@@ -40,13 +41,15 @@ function FavouriteRow({ id, first, last }: { id: string; first: boolean; last: b
     >
       <Link
         href={href}
-        // keep it a link for screen readers; dnd-kit would make it a button
+        // dnd-kit's attributes stay (aria-pressed while dragging tells shortcuts.ts to leave the arrows alone), but it
+        // stays a link for screen readers, not the button dnd-kit would make it
         {...attributes}
         role={undefined}
         {...listeners}
         data-favourite-id={id}
         title={thing.name}
         aria-current={active ? 'page' : undefined}
+        // NavItem's look in Sidebar.tsx, copied for now; one shared constant once the list is in the sidebar
         className={cn(
           'flex h-9 min-w-0 flex-1 touch-manipulation items-center gap-3 rounded-lg px-3 text-[15px] text-sidebar-foreground/90 select-none [-webkit-touch-callout:none] [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/80',
           active && 'text-sidebar-foreground',
@@ -85,14 +88,14 @@ function FavouriteRow({ id, first, last }: { id: string; first: boolean; last: b
 
 export function Favourites() {
   const ids = useData(useShallow(favouriteIds))
-  const names = useData(useShallow((s) => ids.map((id) => s.projects[id]?.name ?? s.views[id]?.name ?? '')))
-  const [, navigate] = useLocation()
+  const names = useData(useShallow((s) => visibleFavourites(s).map((f) => starred(s, f)?.name ?? '')))
   // the click that ends a mouse drag doesn't open the favourite
   const dropped = useRef(false)
   const sensors = useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 4 } }),
+    // the same thresholds as dragging issues (useIssueDrag.ts)
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     // on a touch screen, press and hold to pick one up; a quick swipe still scrolls
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
       // Enter still opens it; Space picks it up and drops it
@@ -102,9 +105,9 @@ export function Favourites() {
 
   if (!ids.length) {
     return (
-      <button type="button" onClick={() => navigate('/projects')} className="mx-3 mt-2 rounded-lg border border-dashed px-3 py-2 text-left text-sm text-muted-foreground hover:text-foreground">
+      <Link href="/projects" className="mx-3 mt-2 rounded-lg border border-dashed px-3 py-2 text-left text-sm text-muted-foreground hover:text-foreground">
         Star a project or view to keep it here.
-      </button>
+      </Link>
     )
   }
 

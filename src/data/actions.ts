@@ -581,11 +581,11 @@ export function toggleFavourite(kind: FavouriteKind, id: string) {
   else addFavourite(kind, id)
 }
 
-/** Move a favourite to `toIndex` of the list as shown: only its order changes. */
+/** Move a favourite to `toIndex` of the list as shown: only its order changes (and, rarely, that of one it ties with). */
 export function moveFavourite(id: string, toIndex: number) {
   const c = context()
-  const sort_order = placeAt(visibleFavourites(useData.getState()), id, toIndex)
-  if (c && sort_order !== null) write({ changes: [upd('favourites', { profile_id: c.meId, item_id: id }, { sort_order })] })
+  const placed = placeAt(visibleFavourites(useData.getState()), id, toIndex)
+  if (c && placed) write({ changes: placed.map((p) => upd('favourites', { profile_id: c.meId, item_id: p.id }, { sort_order: p.sortOrder })) })
 }
 
 /** "Move up" (-1) and "Move down" (1) */
