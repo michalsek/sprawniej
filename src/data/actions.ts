@@ -45,7 +45,7 @@ import { AUTO_ARCHIVE_MONTHS, handleOf } from '@/model/schema'
 import { statusOf } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
-import { clearUnsent, makeThemeSaver, markUnsent, readDevice, readUnsent, showTheme, writeDevice, type ThemeChoice } from '@/lib/theme'
+import { clearUnsent, makeThemeSaver, markUnsent, readUnsent, showTheme, useTheme, writeDevice, type ThemeChoice } from '@/lib/theme'
 import { IMAGE_TYPES, MAX_IMAGE_MB, openWorkspaceId, pictureName, picturePath } from './assets'
 import { cleanHandle, HANDLE_WORDS, handleProblem } from './handles'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
@@ -1074,8 +1074,9 @@ export async function addImage(file: Blob, named?: (src: string) => void): Promi
 
 // ---------- light or dark ----------
 
-// what couldn't be sent stays marked, and goes again when you're back online, signed in again, or next time
-const themeSaver = makeThemeSaver(saveTheme, () => readDevice() ?? 'system', () => clearUnsent())
+// Sends the choice on screen, not this browser's copy (which may not have been kept: storage switched off). What
+// couldn't be sent stays marked, and goes again when you're back online, signed in again, or next time.
+const themeSaver = makeThemeSaver(saveTheme, () => useTheme.getState().choice, () => clearUnsent())
 
 /** System, Light or Dark: shows at once, and saves by itself with your account (quietly, also when offline) */
 export function setTheme(choice: ThemeChoice) {
