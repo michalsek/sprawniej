@@ -4,6 +4,15 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.9.0: Your own statuses
+*2026-10-20*
+
+- Settings › Statuses: add, rename, recolour, reorder and hide your workspace’s statuses
+- Each status sits in a group (Backlog, Todo, In Progress, In Review, Done, Canceled, Duplicate), so the tabs, filters and GitHub keep working the same
+- Split a step in two, like Testing and Design review under In Progress, and see both on the board
+- Hidden statuses aren’t offered any more, but issues that have them keep them
+- Everyone in the workspace can change statuses, like labels
+
 ## 2.8.0: Send pages from Notion
 *2026-10-20*
 
