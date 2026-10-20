@@ -95,6 +95,8 @@ const MESSAGES: Record<string, string> = {
  * how it stands and says exactly why.
  */
 export const INVITE_REFUSED = 'This invite link was already used or has expired. Ask for a new one.'
+/** the link is open, but every place is held by an account that is still being made */
+export const INVITE_NO_PLACES = 'This invite link has no places left right now. Ask for a new one.'
 
 /**
  * Why a new account wasn't let in (private.let_in, last in supabase/migrations/20261020170000_shared_invite_links.sql).
@@ -102,6 +104,7 @@ export const INVITE_REFUSED = 'This invite link was already used or has expired.
  */
 export const SIGNUP_REFUSALS: ReadonlySet<string> = new Set([
   INVITE_REFUSED,
+  INVITE_NO_PLACES,
   'You need a sign-up code to make an account. Ask whoever looks after Sprawniej for one.',
   "That sign-up code doesn't work. Check it and try again.",
   'That sign-up code no longer works. Ask whoever looks after Sprawniej for a new one.',

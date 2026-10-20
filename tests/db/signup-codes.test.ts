@@ -12,6 +12,7 @@ const WRONG = "That sign-up code doesn't work. Check it and try again."
 const OLD = 'That sign-up code no longer works. Ask whoever looks after Sprawniej for a new one.'
 const USED_UP = 'That sign-up code has been used up. Ask whoever looks after Sprawniej for a new one.'
 const BAD_INVITE = 'This invite link was already used or has expired. Ask for a new one.'
+const NO_PLACES = 'This invite link has no places left right now. Ask for a new one.'
 
 /** a sign-up that may be refused: the error's message, or null when the account was made */
 async function trySignUp(name: string, permit: Permit): Promise<string | null> {
@@ -70,7 +71,7 @@ describe.skipIf(!enabled)('sign-up codes', () => {
     expect(await trySignUp('invite-expired', { invite: expiredToken })).toBe(BAD_INVITE)
     const { db } = await signUpBare('invited', { invite: token })
     // the same link can't make a second account, even before it is accepted
-    expect(await trySignUp('invite-again', { invite: token })).toBe(BAD_INVITE)
+    expect(await trySignUp('invite-again', { invite: token })).toBe(NO_PLACES)
     await ok(db.rpc('create_profile', { p_login: `dbt-${RUN}-invited`, p_name: 'Invited' }).single())
     expect(await ok(db.rpc('accept_invite', { p_token: token }))).toBe(ws)
   }, SLOW)
@@ -118,11 +119,24 @@ describe.skipIf(!enabled)('sign-up codes', () => {
     const { token } = await link(ws, 2)
     const a = await signUpBare('two-a', { invite: token })
     await signUpBare('two-b', { invite: token })
-    expect(await trySignUp('two-c', { invite: token })).toBe(BAD_INVITE)
+    expect(await trySignUp('two-c', { invite: token })).toBe(NO_PLACES)
+    expect((await ok(client().rpc('invite_info', { p_token: token })))[0].state).toBe('open')
     // joining doesn't free a place: the one who joined still holds it
     await ok(a.db.rpc('create_profile', { p_login: `dbt-${RUN}-two-a`, p_name: 'Two A' }).single())
     expect(await ok(a.db.rpc('accept_invite', { p_token: token }))).toBe(ws)
-    expect(await trySignUp('two-d', { invite: token })).toBe(BAD_INVITE)
+    expect(await trySignUp('two-d', { invite: token })).toBe(NO_PLACES)
+  }, SLOW)
+
+  test('an account that got in another way no longer holds a place', async () => {
+    const { ws } = await newWorkspace(w.ana, 'signup elsewhere')
+    const { token } = await link(ws, 2)
+    const a = await signUpBare('else-a', { invite: token })
+    await signUpBare('else-b', { invite: token })
+    expect(await trySignUp('else-c', { invite: token })).toBe(NO_PLACES)
+    await ok(a.db.rpc('create_profile', { p_login: `dbt-${RUN}-else-a`, p_name: 'Else A' }).single())
+    const other = await link(ws, 1)
+    expect(await ok(a.db.rpc('accept_invite', { p_token: other.token }))).toBe(ws)
+    expect(await trySignUp('else-d', { invite: token })).toBeNull()
   }, SLOW)
 
   test('a link for anyone makes accounts until it ends; ended, expired and full links make none', async () => {
@@ -158,7 +172,7 @@ describe.skipIf(!enabled)('sign-up codes', () => {
     const { token } = await link(ws, 1)
     const both = await Promise.all([trySignUp('race-a', { invite: token }), trySignUp('race-b', { invite: token })])
     expect(both.filter((r) => r === null)).toHaveLength(1)
-    expect(both.filter((r) => r === BAD_INVITE)).toHaveLength(1)
+    expect(both.filter((r) => r === NO_PLACES)).toHaveLength(1)
   }, SLOW)
 
   test('accounts never let in are removed after 7 days; the rest stay', async () => {

@@ -42,7 +42,8 @@ call private.wire('invite_uses');
 create policy "admins read invite uses" on public.invite_uses for select to authenticated
   using (workspace_id in (select private.my_admin_workspaces()));
 
--- the links accepted so far, so every one has its record
+-- the links accepted so far, each with its record (one whose person's profile was deleted since has none, and stays
+-- used through accepted_at)
 insert into public.invite_uses (invite_id, workspace_id, profile_id, at)
 select i.id, i.workspace_id, i.accepted_by, i.accepted_at from public.invites i
  where i.accepted_by is not null and i.accepted_at is not null
@@ -58,9 +59,9 @@ on conflict do nothing;
 --   expired  its time is over
 --   left     it was made before you left the workspace or were removed: coming back takes a newer link
 -- Called after the invite's row lock (accept_invite, let_in), in a statement of its own, so it counts what the one
--- before it saved.
+-- before it saved. Only the functions here call it, as its owner, so it needs no security definer of its own.
 create function private.invite_state(inv public.invites, p_me uuid) returns text
-language sql stable security definer set search_path = '' as $$
+language sql stable set search_path = '' as $$
   select case
     when inv.accepted_at is not null
       or (inv.max_uses = 1 and exists (select 1 from public.invite_uses u where u.invite_id = inv.id)) then 'used'
@@ -155,10 +156,12 @@ end $$;
 -- ---------- making an account with a link ----------
 
 -- As in 20261020130000, but an invite link lets in as many new accounts as it has places. A place is taken by
--- everyone who joined with it, and by every account made with it that hasn't joined yet (one whose account was
--- deleted no longer counts; one made in the last ten minutes always does, since the hook runs before the account is
--- written). Joining counts only who joined, so an account that never joins can't keep a real person out. A link for
--- anyone makes accounts until it ends or expires. The refusal stays the same sentence, which older apps know.
+-- everyone who joined with it, and by every account made with it that isn't in the workspace yet (one whose account
+-- was deleted no longer counts; one made in the last ten minutes always does, since the hook runs before the account
+-- is written; one with the same email is this person trying again, after Auth failed). Joining counts only who
+-- joined, so an account that never joins can't keep a real person out. A link for anyone makes accounts until it ends
+-- or expires. A link that can't be used refuses with the same sentence as before, which older apps know; one whose
+-- places are all held by accounts still being made says so.
 create or replace function private.let_in(p_user uuid, p_email text, p_provider text, p_code text, p_invite text) returns text
 language plpgsql security definer set search_path = '' as $$
 declare
@@ -173,17 +176,24 @@ begin
     select * into inv from public.invites i where i.token = p_invite for update;
     if found then
       st := private.invite_state(inv, null);
-      select (select count(*) from public.invite_uses u where u.invite_id = inv.id)
-           + (select count(*) from private.signups s
-               where s.invite_id = inv.id
-                 and (s.at > now() - interval '10 minutes' or exists (select 1 from auth.users a where a.id = s.user_id))
-                 and not exists (select 1 from public.invite_uses u join public.profiles p on p.id = u.profile_id
-                                  where u.invite_id = inv.id and p.user_id = s.user_id))
-        into taken;
+      if st = 'open' and inv.max_uses is not null then
+        select (select count(*) from public.invite_uses u where u.invite_id = inv.id)
+             + (select count(*) from private.signups s
+                 where s.invite_id = inv.id
+                   and s.email is distinct from p_email
+                   and (s.at > now() - interval '10 minutes' or exists (select 1 from auth.users a where a.id = s.user_id))
+                   and not exists (select 1 from public.workspace_members m join public.profiles p on p.id = m.profile_id
+                                    where m.workspace_id = inv.workspace_id and p.user_id = s.user_id))
+          into taken;
+      end if;
       if st = 'open' and (inv.max_uses is null or taken < inv.max_uses) then
         insert into private.signups (user_id, email, provider, invite_id) values (p_user, p_email, p_provider, inv.id);
         return null;
       end if;
+    end if;
+    if wanted = '' and st = 'open' then
+      -- @message signup
+      return 'This invite link has no places left right now. Ask for a new one.';
     end if;
     if wanted = '' then
       -- @message signup

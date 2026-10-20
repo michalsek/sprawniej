@@ -40,6 +40,9 @@ with a reason.
   The hook's refusal reaches supabase-js as status 403, code `unknown`, with our sentence as the message, so the app
   recognises the sentences themselves (`SIGNUP_REFUSALS`). Accepted advisor warning, as above, for the two new
   signed-in functions `signup_code_needed` and `use_signup_code`.
+- 2026-10-20: Invite links for several people (`max_uses` and `ended_at` on invites, `invite_uses`, one rule in
+  `private.invite_state`). Accepted advisor warning, as above, for the new signed-in function `end_invite`: it checks
+  that you are an admin or owner of the link's workspace itself.
 
 ## Roadmap
 

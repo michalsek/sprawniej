@@ -4,15 +4,18 @@ import { join } from 'node:path'
 import { friendlyAuthError, SIGNUP_REFUSALS } from '@/backend/auth'
 
 // Why a new account isn't let in comes from the database (private.let_in) as the error's message, and the app shows
-// only the sentences it knows. Each one in the SQL has a marker comment ("-- @message signup") on the line above it. A
-// later migration that replaces let_in repeats them, so the sentences are compared, not counted.
+// only the sentences it knows. Each one in the SQL has a marker comment ("-- @message signup") on the line above it.
+// Only the newest definition of let_in counts: a sentence it no longer says needn't stay in the app.
 
 const dir = join(import.meta.dir, '..', 'supabase', 'migrations')
-const sql = readdirSync(dir)
+const DEFINES = /^create (?:or replace )?function private\.let_in\(/m
+const newest = readdirSync(dir)
   .filter((f) => f.endsWith('.sql'))
   .sort()
   .map((f) => readFileSync(join(dir, f), 'utf8'))
-  .join('\n')
+  .findLast((text) => DEFINES.test(text))
+/** the newest let_in, from its first line to the end of its body */
+const sql = newest ? newest.slice(newest.search(DEFINES)).split(/^end \$\$;/m)[0] : ''
 
 /** the SQL string on the line after each marker, with '' read as ' */
 function marked(): string[] {

@@ -123,7 +123,8 @@ members, as `[{"name", "avatarUrl"}]`). Only an `open` link, or one for someone 
 
 Who joined with which link, one row per person: `invite_id`, `workspace_id`, `profile_id`, `at`. Written only by
 `accept_invite` (someone already in writes none); the migration that made the table wrote one for every invite
-accepted before. Admins and owners read them; nobody writes, changes or deletes one. Deleting an invite deletes its
+accepted before whose person is still here (one whose profile was deleted has none, and stays used through
+`accepted_at`). Admins and owners read them; nobody writes, changes or deletes one. Deleting an invite deletes its
 rows, and so does deleting the person's profile. Never broadcast.
 
 ### teams
@@ -311,11 +312,14 @@ new account's metadata (`signUp(..., { data })`), or to `use_signup_code(code, i
 
 - `invite` names an invite that is `open` (not used, ended, full or expired) and still has a place for an account:
   `max_uses` is null (anyone with the link), or the people who joined with it plus the accounts made with it that
-  haven't joined yet are fewer than `max_uses`. An account made with it that was deleted since frees its place (one
-  made in the last ten minutes always holds it, as the hook runs before the account is written). So a link for one
-  person makes one account, as before, and the link still has to be accepted with `accept_invite` afterwards.
-  Joining counts only who joined, so an account that never joins can't keep a real person out. The invite's row lock
-  makes two sign-ups at once wait for each other; or
+  aren't in the workspace yet are fewer than `max_uses`. An account made with it that was deleted since frees its
+  place (one made in the last ten minutes always holds it, as the hook runs before the account is written), and so
+  does one that got into the workspace another way. A sign-up with the same email as a waiting one is that person
+  trying again (after Auth failed), so it doesn't count against itself. So a link for one person makes one account,
+  as before, and the link still has to be accepted with `accept_invite` afterwards. Joining counts only who joined,
+  so an account that never joins can't keep a real person out. An open link whose places are all held this way
+  refuses with its own sentence ("no places left right now"). The invite's row lock makes two sign-ups at once wait
+  for each other; or
 - `signup_code` matches a code that is not switched off, not expired and not used up. Case, spaces and dashes don't
   matter (`k7qx m2pa 9rtd` is `K7QX-M2PA-9RTD`). Using it adds one to `uses`, under a row lock, so two sign-ups at once
   can't both take the last use.
