@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.2.0'
+export const APP_VERSION = '2.3.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,16 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.3.0',
+    date: '2026-10-20',
+    title: 'Pull requests on the issue',
+    notes: [
+      'An issue lists the pull requests that mention it, under its title: Open, Draft, Merged or Closed. Click one to open it on GitHub',
+      'The list changes as soon as something happens on GitHub, also for drafts and pull requests closed without merging',
+      'Taking the issue’s number out of a pull request takes it off the list',
+    ],
+  },
   {
     version: '2.2.0',
     date: '2026-10-20',

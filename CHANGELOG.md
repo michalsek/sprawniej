@@ -4,6 +4,13 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.3.0: Pull requests on the issue
+*2026-10-20*
+
+- An issue lists the pull requests that mention it, under its title: Open, Draft, Merged or Closed. Click one to open it on GitHub
+- The list changes as soon as something happens on GitHub, also for drafts and pull requests closed without merging
+- Taking the issue’s number out of a pull request takes it off the list
+
 ## 2.2.0: Pull requests move issues
 *2026-10-20*
 
