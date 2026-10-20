@@ -1,35 +1,49 @@
 /**
- * Issue statuses and priorities. Fixed on purpose: one shared vocabulary for every team, and the import maps onto
- * them one to one. Each status belongs to a group; the groups decide
- * which issues the Active, Backlog and All tabs show.
+ * Issue categories and priorities, fixed on purpose: one shared vocabulary for every team, and the import maps onto
+ * the categories one to one. Each issue has a category (`issue.status`) and one of the workspace's own statuses
+ * (`issue.statusId`, src/data/statuses.ts): people add, rename, recolour, reorder and hide statuses within a
+ * category, but whatever decides something (the tabs, finished, the nightly archive, GitHub) looks at the category.
+ * Each category belongs to a group; the groups decide which issues the Active, Backlog and All tabs show.
  */
 
 export type StatusGroup = 'backlog' | 'unstarted' | 'started' | 'completed' | 'canceled'
 
-export const STATUS_IDS = ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'canceled', 'duplicate'] as const
-export type StatusId = (typeof STATUS_IDS)[number]
+export const ISSUE_CATEGORIES = ['backlog', 'todo', 'in_progress', 'in_review', 'done', 'canceled', 'duplicate'] as const
+export type IssueCategory = (typeof ISSUE_CATEGORIES)[number]
+export const isIssueCategory = (x: unknown): x is IssueCategory => ISSUE_CATEGORIES.some((c) => c === x)
 
-export interface Status {
-  id: StatusId
+/** what a status can be for: issues, or (later) projects */
+export const STATUS_KINDS = ['issue', 'project'] as const
+export type StatusKind = (typeof STATUS_KINDS)[number]
+
+export interface Category {
+  id: IssueCategory
+  /** the name its first status starts with, and what an issue shows while its status isn't known */
   name: string
   group: StatusGroup
-  /** CSS colour (a theme variable) */
+  /** CSS colour (a theme variable): what an issue shows while its status isn't known */
   color: string
+  /** the colour its first status starts with (the database seeds it: @seed issue-statuses) */
+  seed: string
+  /** what it decides, in a line (Settings) */
+  description: string
 }
 
-export const STATUSES: Status[] = [
-  { id: 'backlog', name: 'Backlog', group: 'backlog', color: 'var(--status-backlog)' },
-  { id: 'todo', name: 'Todo', group: 'unstarted', color: 'var(--status-todo)' },
-  { id: 'in_progress', name: 'In Progress', group: 'started', color: 'var(--status-progress)' },
-  { id: 'in_review', name: 'In Review', group: 'started', color: 'var(--status-review)' },
-  { id: 'done', name: 'Done', group: 'completed', color: 'var(--status-done)' },
-  { id: 'canceled', name: 'Canceled', group: 'canceled', color: 'var(--status-canceled)' },
-  { id: 'duplicate', name: 'Duplicate', group: 'canceled', color: 'var(--status-canceled)' },
+export const CATEGORIES: Category[] = [
+  { id: 'backlog', name: 'Backlog', group: 'backlog', color: 'var(--status-backlog)', seed: '#8a8f98', description: 'Shows on the Backlog tab: ideas and work nobody planned yet.' },
+  { id: 'todo', name: 'Todo', group: 'unstarted', color: 'var(--status-todo)', seed: '#c4c6cc', description: 'Shows on the Active tab: planned, not started.' },
+  { id: 'in_progress', name: 'In Progress', group: 'started', color: 'var(--status-progress)', seed: '#f2c94c', description: 'Shows on the Active tab: someone is working on it.' },
+  { id: 'in_review', name: 'In Review', group: 'started', color: 'var(--status-review)', seed: '#4cb782', description: 'Shows on the Active tab: waiting for a look. Pull requests move issues here.' },
+  { id: 'done', name: 'Done', group: 'completed', color: 'var(--status-done)', seed: '#5e6ad2', description: 'Counts as finished, and is archived after a while. Merged pull requests move issues here.' },
+  { id: 'canceled', name: 'Canceled', group: 'canceled', color: 'var(--status-canceled)', seed: '#8a8f98', description: "Won't be done, and is archived after a while." },
+  { id: 'duplicate', name: 'Duplicate', group: 'canceled', color: 'var(--status-canceled)', seed: '#8a8f98', description: 'The same as another issue, and is archived after a while.' },
 ]
 
-const byId = new Map(STATUSES.map((s) => [s.id, s]))
-/** a status this app doesn't know (written by a newer one, or by hand) reads as Backlog instead of breaking the screen */
-export const statusOf = (id: StatusId): Status => byId.get(id) ?? STATUSES[0]
+const byId = new Map(CATEGORIES.map((s) => [s.id, s]))
+/** a category this app doesn't know (written by a newer one, or by hand) reads as Backlog instead of breaking the screen */
+export const categoryOf = (id: IssueCategory): Category => byId.get(id) ?? CATEGORIES[0]
+
+export { STATUS_COLORS } from './colors'
 
 /** The tabs on a team's Issues page. */
 export type IssueTab = 'active' | 'backlog' | 'all'

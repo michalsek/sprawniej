@@ -16,6 +16,7 @@ import {
   rowToMember,
   rowToPerson,
   rowToProject,
+  rowToStatus,
   rowToTeam,
   rowToView,
   teamToRows,
@@ -69,6 +70,7 @@ const issueRow = (more: Partial<Row<'issues'>> = {}): Row<'issues'> => ({
   title: 'Fix the chart',
   description: 'It is **broken**',
   status: 'todo',
+  status_id: 'status-todo',
   priority: 2,
   assignee_id: null,
   project_id: null,
@@ -258,6 +260,8 @@ describe('issues', () => {
       title: 'Fix the chart',
       description: 'It is **broken**',
       status: 'in_progress',
+      // the import sends only the category: the database gives it the category's default
+      statusId: '',
       priority: 2,
       assignee: 'ana',
       labels: ['l-2', 'l-1'],
@@ -329,11 +333,34 @@ describe('teams, projects, views, inbox', () => {
   })
 
   test('an inbox note: read one by one, empty fields left out', () => {
-    const row: Row<'inbox'> = { id: 'n-1', workspace_id: WS, recipient_id: 'p-ana', actor_id: 'p-bob', type: 'assigned', issue_id: 'i-1', comment_id: null, status: null, at: T(4), read_at: T(5), changed_at: T(5), extra: {} }
+    const row: Row<'inbox'> = { id: 'n-1', workspace_id: WS, recipient_id: 'p-ana', actor_id: 'p-bob', type: 'assigned', issue_id: 'i-1', comment_id: null, status: null, status_id: null, at: T(4), read_at: T(5), changed_at: T(5), extra: {} }
     const note = rowToInbox(row, resolver())
     expect(note).toEqual({ id: 'n-1', type: 'assigned', issue: 'i-1', actor: 'bob', at: '2026-10-19T12:00:04.123Z', readAt: '2026-10-19T12:00:05.123Z' })
     expect(inboxToRow(note, WS, registry(), 'ana')).toMatchObject({ recipient_id: 'p-ana', actor_id: 'p-bob', comment_id: null, read_at: note.readAt })
     expect('readAt' in rowToInbox({ ...row, read_at: null }, resolver())).toBe(false)
+  })
+})
+
+describe('statuses', () => {
+  test('a status: what it is for, its category, name, colour, order and whether it is hidden', () => {
+    const row: Row<'statuses'> = { id: 'st-testing-1', workspace_id: WS, kind: 'issue', category: 'in_progress', name: 'Testing', color: '#bb87fc', position: 'a1', hidden: false, changed_at: T(1), extra: { note: 'kept', name: 'stale' } }
+    expect(rowToStatus(row)).toEqual({ id: 'st-testing-1', kind: 'issue', category: 'in_progress', name: 'Testing', color: '#bb87fc', position: 'a1', hidden: false, note: 'kept' } as never)
+  })
+
+  test('an issue reads its status; the status is never kept in extra, and a column this version doesn’t know is left out', () => {
+    const issue = rowToIssue({ ...issueRow({ status_id: 'st-testing-1', extra: { statusId: 'stale' } }), brand_new: 1 } as Row<'issues'>, [], [], resolver())!.issue
+    expect(issue.statusId).toBe('st-testing-1')
+    expect('brand_new' in issue).toBe(false)
+    expect(issueToRows(issue, WS, registry()).issues.extra).toEqual({})
+    // the import doesn't send it: the database gives the category's default
+    expect('status_id' in issueToRows(issue, WS, registry()).issues).toBe(false)
+  })
+
+  test('a status note names its status, both ways', () => {
+    const row: Row<'inbox'> = { id: 'n-2', workspace_id: WS, recipient_id: 'p-ana', actor_id: 'p-bob', type: 'status', issue_id: 'i-1', comment_id: null, status: 'in_progress', status_id: 'st-testing-1', at: T(4), read_at: null, changed_at: T(5), extra: {} }
+    const note = rowToInbox(row, resolver())
+    expect(note).toMatchObject({ status: 'in_progress', statusId: 'st-testing-1' })
+    expect(inboxToRow(note, WS, registry(), 'ana')).toMatchObject({ status: 'in_progress', status_id: 'st-testing-1', extra: {} })
   })
 })
 

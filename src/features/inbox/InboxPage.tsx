@@ -13,9 +13,9 @@ import { loadArchive } from '@/backend'
 import { isUnread } from '@/data/select'
 import { issueRef, useData } from '@/data/store'
 import { shortDate } from '@/features/issues/format'
-import { StatusIcon } from '@/features/issues/icons'
+import { IssueStatusIcon } from '@/features/issues/icons'
 import { jumpToComment } from '@/features/issues/jumpTo'
-import { statusOf } from '@/model/status'
+import { categoryOf } from '@/model/status'
 import type { InboxItem } from '@/model/schema'
 import { cn } from '@/lib/utils'
 import { Button } from '@/ui/button'
@@ -31,6 +31,8 @@ function snippet(md: string | undefined): string {
 
 function useWhat(n: InboxItem): string {
   const body = useData((s) => (n.comment ? s.comments[n.issue]?.find((c) => c.id === n.comment)?.body : undefined))
+  // the status as it's called now (renamed or hidden since, it's still the same one)
+  const status = useData((s) => (n.statusId ? s.statuses[n.statusId]?.name : undefined))
   switch (n.type) {
     case 'assigned':
       return 'assigned you'
@@ -39,7 +41,7 @@ function useWhat(n: InboxItem): string {
     case 'commented':
       return body ? `commented: ${snippet(body)}` : 'commented'
     case 'status':
-      return n.status ? `marked it ${statusOf(n.status).name}` : 'changed the status'
+      return status ? `marked it ${status}` : n.status ? `marked it ${categoryOf(n.status).name}` : 'changed the status'
   }
 }
 
@@ -68,7 +70,7 @@ function Note({ n, unread }: { n: InboxItem; unread: boolean }) {
           <span className={cn('flex items-center gap-2 truncate text-[15px]', !unread && 'text-foreground/80')}>
             {issue ? (
               <>
-                <StatusIcon status={issue.status} />
+                <IssueStatusIcon issue={issue} />
                 <span className="shrink-0 text-muted-foreground">{issueRef(issue)}</span>
                 <span className={cn('truncate', unread && 'font-medium')}>{issue.title}</span>
               </>

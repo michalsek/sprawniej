@@ -46,6 +46,8 @@ export const MESSAGES = {
   goneView: "This view was deleted meanwhile, so your change wasn't saved.",
   goneTeam: "This team was deleted meanwhile, so your change wasn't saved.",
   labelName: "There's already a label with this name.",
+  statusName: "There's already a status with this name.",
+  goneStatus: "This status isn't there any more, so your change wasn't saved.",
   teamKey: 'Another team already uses this key.',
   notSaved: "This change couldn't be saved, so it was undone.",
   bug: 'Something went wrong, so this change was undone.',
@@ -81,6 +83,7 @@ const GONE: Record<string, string> = {
 const POINTS_AT: [RegExp, string][] = [
   [/_label_id_fkey$/, MESSAGES.goneLabelAdded],
   [/_project_id_fkey$/, MESSAGES.goneProject],
+  [/_status_id_fkey$/, MESSAGES.goneStatus],
   [/_team_id_fkey$/, MESSAGES.goneTeam],
   [/_(issue_id|parent_id|duplicate_of)_fkey$/, MESSAGES.goneIssue],
 ]
@@ -114,6 +117,7 @@ export function classify(error: ErrorLike | null | undefined, status: number, wh
   if (code === '23505') {
     const name = constraintOf(message)
     if (name === 'labels_name') return { kind: 'refused', message: MESSAGES.labelName }
+    if (name === 'statuses_name') return { kind: 'refused', message: MESSAGES.statusName }
     if (name === 'teams_workspace_id_key_key') return { kind: 'refused', message: MESSAGES.teamKey }
   }
   if (code === '42501') return { kind: 'refused', message: ownWords(message) ?? MESSAGES.refused }

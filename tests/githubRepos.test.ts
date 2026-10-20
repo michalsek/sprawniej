@@ -37,6 +37,9 @@ describe('the latest pull request', () => {
     expect(listRefs(['A-1', 'A-2', 'A-3'])).toBe('A-1, A-2 and A-3')
     expect(lastText(base)).toBe('moved ENG-1 to Done')
     expect(lastText({ ...base, to: 'in_review', moved: ['ENG-1', 'ENG-2'] })).toBe('moved ENG-1 and ENG-2 to In Review')
+    // the status issues land on is their group's default, named as the workspace calls it now
+    const statuses = { s1: { id: 's1', kind: 'issue' as const, category: 'in_review', name: 'Code review', color: '#4cb782', position: 'a0', hidden: false } }
+    expect(lastText({ ...base, to: 'in_review', moved: ['ENG-1'] }, statuses)).toBe('moved ENG-1 to Code review')
     expect(lastText({ ...base, skipped: true, moved: [] })).toBe("moved nothing: @octocat isn't in this workspace with GitHub as a way to sign in")
     expect(lastText({ ...base, refs: [], moved: [] })).toBe('mentions no issue')
     expect(lastText({ ...base, moved: [] })).toBe('moved nothing: ENG-1 is already further along, archived or not here')

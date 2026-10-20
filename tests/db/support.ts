@@ -202,16 +202,30 @@ export async function addMember(admin: Someone, person: Someone, ws: string, rol
 
 export const ulid = () => makeUlid()
 
+type IssueInsert = Database['public']['Tables']['issues']['Insert']
+/** an issue as an older version sends it: without status_id, which the database fills in (the category's default) */
+export type IssueWithout = Omit<IssueInsert, 'status_id'> & Partial<Pick<IssueInsert, 'status_id'>>
+/** the generated types say status_id is needed (it is never null); the database fills it in when it's left out */
+export const issueInsert = (row: IssueWithout): IssueInsert => row as IssueInsert
+
 let order = 0
 /** a new issue in a team; returns the row */
-export async function newIssue(who: Someone, ws: string, team: string, more: Partial<Database['public']['Tables']['issues']['Insert']> = {}) {
+export async function newIssue(who: Someone, ws: string, team: string, more: Partial<IssueInsert> = {}) {
   return ok(
     who.db
       .from('issues')
-      .insert({ id: ulid(), workspace_id: ws, team_id: team, title: 'Test issue', sort_order: `a${order++}`, ...more })
+      .insert(issueInsert({ id: ulid(), workspace_id: ws, team_id: team, title: 'Test issue', sort_order: `a${order++}`, ...more }))
       .select()
       .single(),
   )
+}
+
+/** a workspace's issue statuses by category: the default (first shown) one of each, as every workspace starts */
+export async function defaultStatuses(who: Someone, ws: string): Promise<Record<string, string>> {
+  const rows = await ok(who.db.from('statuses').select('id, category, position, hidden').eq('workspace_id', ws).eq('kind', 'issue').eq('hidden', false).order('position').order('id'))
+  const out: Record<string, string> = {}
+  for (const r of rows) out[r.category] ??= r.id
+  return out
 }
 
 type Result<T> = PromiseLike<{ data: T; error: { message: string; code?: string } | null }>
@@ -295,6 +309,7 @@ export const TABLES = [
   'teams',
   'team_members',
   'labels',
+  'statuses',
   'projects',
   'project_teams',
   'issues',

@@ -158,6 +158,7 @@ export type Database = {
           read_at: string | null
           recipient_id: string
           status: string | null
+          status_id: string | null
           type: string
           workspace_id: string
         }
@@ -172,6 +173,7 @@ export type Database = {
           read_at?: string | null
           recipient_id: string
           status?: string | null
+          status_id?: string | null
           type: string
           workspace_id: string
         }
@@ -186,6 +188,7 @@ export type Database = {
           read_at?: string | null
           recipient_id?: string
           status?: string | null
+          status_id?: string | null
           type?: string
           workspace_id?: string
         }
@@ -569,6 +572,7 @@ export type Database = {
           project_id: string | null
           sort_order: string
           status: string
+          status_id: string
           team_id: string
           title: string
           updated_at: string
@@ -596,6 +600,7 @@ export type Database = {
           project_id?: string | null
           sort_order: string
           status?: string
+          status_id: string
           team_id: string
           title: string
           updated_at?: string
@@ -623,6 +628,7 @@ export type Database = {
           project_id?: string | null
           sort_order?: string
           status?: string
+          status_id?: string
           team_id?: string
           title?: string
           updated_at?: string
@@ -649,6 +655,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "issues_status_id_fkey"
+            columns: ["workspace_id", "status_id"]
+            isOneToOne: false
+            referencedRelation: "statuses"
+            referencedColumns: ["workspace_id", "id"]
           },
           {
             foreignKeyName: "issues_workspace_id_duplicate_of_fkey"
@@ -909,6 +922,53 @@ export type Database = {
           },
           {
             foreignKeyName: "read_state_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      statuses: {
+        Row: {
+          category: string
+          changed_at: string
+          color: string
+          extra: Json
+          hidden: boolean
+          id: string
+          kind: string
+          name: string
+          position: string
+          workspace_id: string
+        }
+        Insert: {
+          category: string
+          changed_at?: string
+          color: string
+          extra?: Json
+          hidden?: boolean
+          id: string
+          kind: string
+          name: string
+          position: string
+          workspace_id: string
+        }
+        Update: {
+          category?: string
+          changed_at?: string
+          color?: string
+          extra?: Json
+          hidden?: boolean
+          id?: string
+          kind?: string
+          name?: string
+          position?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "statuses_workspace_id_fkey"
             columns: ["workspace_id"]
             isOneToOne: false
             referencedRelation: "workspaces"
@@ -1291,6 +1351,7 @@ export type Database = {
           project_id: string | null
           sort_order: string
           status: string
+          status_id: string
           team_id: string
           title: string
           updated_at: string

@@ -10,6 +10,7 @@ import {
   createIssue,
   createLabel,
   createProject,
+  createStatus,
   createView,
   deleteComment,
   deleteIssue,
@@ -17,11 +18,13 @@ import {
   deleteTeam,
   markRead,
   moveIssueToTeam,
+  moveStatus,
   updateComment,
   updateIssue,
+  updateStatus,
 } from '@/data/actions'
 import { EMPTY, useData } from '@/data/store'
-import { drain, FakeTarget, person, profileIdOf, seed, teamIdOf, WS, type World } from './support/fakeBackend'
+import { drain, FakeTarget, person, profileIdOf, seed, statusIdOf, teamIdOf, WS, type World } from './support/fakeBackend'
 
 let w: World
 let warn: ReturnType<typeof spyOn>
@@ -73,9 +76,10 @@ describe('changes to one row', () => {
   test('only the columns that changed are sent', async () => {
     const i = await saved('Same')
     const sent = w.since()
-    updateIssue(i.id, { status: 'in_progress', title: 'Same' })
+    updateIssue(i.id, { statusId: statusIdOf('in_progress'), title: 'Same' })
     await w.settle()
-    expect(sent('issues').map(fieldsOf)).toEqual([{ status: 'in_progress' }])
+    // the status, and its category for older versions (it changed too)
+    expect(sent('issues').map(fieldsOf)).toEqual([{ status: 'in_progress', status_id: statusIdOf('in_progress') }])
   })
 })
 
@@ -584,5 +588,133 @@ describe('the queue, more', () => {
     expect(issue(i.id).title).toBe('after signing in')
     expect(w.told).toEqual([MESSAGES.bug])
     expect(error).toHaveBeenCalled()
+  })
+})
+
+describe('statuses', () => {
+  const statuses = () => useData.getState().statuses
+
+  test('they come with the workspace: one per category, named as the app shows them', () => {
+    expect(Object.values(statuses()).map((x) => x.name).sort()).toEqual(['Backlog', 'Canceled', 'Done', 'Duplicate', 'In Progress', 'In Review', 'Todo'])
+  })
+
+  test('a new issue starts in Todo’s default, or the default of the category asked for, or the status picked', async () => {
+    expect(await saved('Plain')).toMatchObject({ status: 'todo', statusId: statusIdOf('todo') })
+    const backlog = await saved('Later', { status: 'backlog' })
+    expect(issue(backlog.id)).toMatchObject({ status: 'backlog', statusId: statusIdOf('backlog') })
+    const sent = w.since()
+    const done = await saved('Finished', { statusId: statusIdOf('done') })
+    expect(issue(done.id)).toMatchObject({ status: 'done', statusId: statusIdOf('done') })
+    expect(issue(done.id).completedAt).not.toBeNull()
+    expect(sent('issues').map(fieldsOf)).toEqual([[expect.objectContaining({ status: 'done', status_id: statusIdOf('done') })]])
+  })
+
+  test('picking another status of the same category sends only the status; across categories, the category too', async () => {
+    const testing = createStatus('issue', 'in_progress', 'Testing')!
+    const released = createStatus('issue', 'done', 'Released')!
+    await w.settle()
+    const i = await saved('Moves')
+    const sent = w.since()
+    updateIssue(i.id, { statusId: testing.id })
+    await w.settle()
+    updateIssue(i.id, { statusId: statusIdOf('in_progress') })
+    await w.settle()
+    updateIssue(i.id, { statusId: statusIdOf('done') })
+    await w.settle()
+    const finished = issue(i.id).completedAt
+    updateIssue(i.id, { statusId: released.id })
+    // shown at once, completed_at kept: Done to Released, both done
+    expect(issue(i.id)).toMatchObject({ status: 'done', statusId: released.id, completedAt: finished })
+    await w.settle()
+    expect(sent('issues').map(fieldsOf)).toEqual([
+      { status: 'in_progress', status_id: testing.id },
+      { status_id: statusIdOf('in_progress') },
+      { status: 'done', status_id: statusIdOf('done') },
+      { status_id: released.id },
+    ])
+    expect(issue(i.id)).toMatchObject({ status: 'done', statusId: released.id, completedAt: finished })
+  })
+
+  test('a category alone means its default; the category the issue has already changes nothing', async () => {
+    const testing = createStatus('issue', 'in_progress', 'Testing')!
+    await w.settle()
+    const i = await saved('Category', { statusId: testing.id })
+    const sent = w.since()
+    updateIssue(i.id, { status: 'in_progress' })
+    await w.settle()
+    expect(sent('issues')).toEqual([])
+    updateIssue(i.id, { status: 'in_review' })
+    await w.settle()
+    expect(sent('issues').map(fieldsOf)).toEqual([{ status: 'in_review', status_id: statusIdOf('in_review') }])
+  })
+
+  test('followers hear about a move within a category, with the status named', async () => {
+    const testing = createStatus('issue', 'in_progress', 'Testing')!
+    const i = await saved('Followed', { assignee: 'bob', status: 'in_progress' })
+    updateIssue(i.id, { statusId: testing.id })
+    await w.settle()
+    expect(w.db.notesFor('bob').filter((n) => n.type === 'status')).toEqual([expect.objectContaining({ status: 'in_progress', status_id: testing.id })])
+  })
+
+  test('an issue moved into a status just made waits until the status is saved', async () => {
+    const i = await saved('Waits')
+    const sent = w.since()
+    w.db.hold()
+    const blocked = createStatus('issue', 'todo', 'Blocked')!
+    updateIssue(i.id, { statusId: blocked.id })
+    await drain()
+    expect(sent().map((r) => (r.kind === 'insert' || r.kind === 'update' ? r.table : r.kind))).toEqual(['statuses'])
+    await w.settle()
+    expect(sent().map((r) => (r.kind === 'insert' || r.kind === 'update' ? r.table : r.kind))).toEqual(['statuses', 'issues'])
+    expect(w.db.get('issues', { id: i.id })).toMatchObject({ status: 'todo', status_id: blocked.id })
+  })
+
+  test('add, rename, recolour, reorder and hide: only what changed is sent', async () => {
+    const sent = w.since()
+    const a = createStatus('issue', 'in_progress', ' Testing ')!
+    expect(a).toMatchObject({ name: 'Testing', category: 'in_progress', color: '#f2c94c', hidden: false })
+    const b = createStatus('issue', 'in_progress', 'Design review')!
+    expect(a.position > statuses()[statusIdOf('in_progress')].position && b.position > a.position).toBe(true)
+    await w.settle()
+    updateStatus(a.id, { name: 'QA', color: '#bb87fc' })
+    updateStatus(a.id, { name: 'QA' })
+    moveStatus(b.id, { prev: null, next: statusIdOf('in_progress') })
+    updateStatus(a.id, { hidden: true })
+    await w.settle()
+    expect(sent('statuses').map(fieldsOf)).toEqual([
+      [expect.objectContaining({ name: 'Testing', kind: 'issue', category: 'in_progress' }), expect.objectContaining({ name: 'Design review' })],
+      { name: 'QA', color: '#bb87fc', hidden: true },
+      { position: statuses()[b.id].position },
+    ])
+    expect(statuses()[b.id].position < statuses()[statusIdOf('in_progress')].position).toBe(true)
+    expect(statuses()[a.id]).toMatchObject({ name: 'QA', hidden: true })
+  })
+
+  test('refused here: a taken name, an empty one, a category the kind lacks, hiding the last shown one', async () => {
+    const sent = w.since()
+    expect(createStatus('issue', 'todo', 'in progress')?.id).toBe(statusIdOf('in_progress'))
+    expect(createStatus('issue', 'todo', '  ')).toBeUndefined()
+    expect(createStatus('issue', 'planned', 'Planned')).toBeUndefined()
+    updateStatus(statusIdOf('todo'), { name: 'Done' })
+    updateStatus(statusIdOf('todo'), { hidden: true })
+    await w.settle()
+    expect(sent()).toEqual([])
+  })
+
+  test('refused by the database: a name a teammate took meanwhile, the last shown one hidden meanwhile', async () => {
+    w.db.put('statuses', { id: 'teammates-qa', workspace_id: WS, kind: 'issue', category: 'in_review', name: 'QA', color: '#bb87fc', position: 'a1', hidden: false })
+    const mine = createStatus('issue', 'in_progress', 'QA')!
+    await w.settle()
+    expect(statuses()[mine.id]).toBeUndefined()
+    expect(w.told).toContain(MESSAGES.statusName)
+
+    const second = createStatus('issue', 'canceled', 'Not now')!
+    await w.settle()
+    // a teammate hid the other one meanwhile
+    w.db.put('statuses', { ...w.db.get('statuses', { id: statusIdOf('canceled') }), hidden: true })
+    updateStatus(second.id, { hidden: true })
+    await w.settle()
+    expect(statuses()[second.id].hidden).toBe(false)
+    expect(w.told).toContain("Each group needs at least one status that isn't hidden. Add or show another one first.")
   })
 })

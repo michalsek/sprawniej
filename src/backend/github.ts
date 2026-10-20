@@ -2,7 +2,7 @@
  * The repositories whose pull requests move this workspace's issues (Settings › GitHub, admins only;
  * docs/github-app.md). Like invite links, these are awaited calls, read when Settings opens: they aren't live.
  */
-import { STATUS_IDS, type StatusId } from '@/model/status'
+import { ISSUE_CATEGORIES, type IssueCategory } from '@/model/status'
 import { requireClient } from './client'
 import { friendlyDbError } from './problem'
 import { RULES } from './workspaces'
@@ -14,7 +14,7 @@ export interface LastPullRequest {
   title: string
   /** the author's GitHub login */
   login: string | null
-  to: StatusId | null
+  to: IssueCategory | null
   /** the issues it named */
   refs: string[]
   /** the issues that moved */
@@ -46,7 +46,7 @@ export function readLast(v: unknown): LastPullRequest | null {
     url: typeof e.url === 'string' && e.url.startsWith('https://') ? e.url : null,
     title: typeof e.title === 'string' ? e.title : '',
     login: typeof e.login === 'string' ? e.login : null,
-    to: STATUS_IDS.find((s) => s === e.to) ?? null,
+    to: ISSUE_CATEGORIES.find((s) => s === e.to) ?? null,
     refs: texts(e.refs),
     moved: texts(e.moved),
     skipped: e.skipped === 'author',

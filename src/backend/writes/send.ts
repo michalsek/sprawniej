@@ -27,7 +27,10 @@ export interface NoteRow {
   type: string
   issue_id: string
   comment_id: string | null
+  /** the new status's category, for older versions */
   status: string | null
+  /** the new status (status notes) */
+  status_id: string | null
 }
 
 export type Request =

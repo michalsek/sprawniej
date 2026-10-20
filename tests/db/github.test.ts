@@ -4,6 +4,7 @@ import {
   asService,
   client,
   closeChannels,
+  defaultStatuses,
   enabled,
   expectDenied,
   expectError,
@@ -180,12 +181,17 @@ describe.skipIf(!enabled)('GitHub', () => {
     const now = await ok(ana.db.from('issues').select('id, status').in('id', [one.id, done.id, moved.id]))
     expect(Object.fromEntries(now.map((i) => [i.id, i.status]))).toEqual({ [one.id]: 'in_review', [done.id]: 'done', [moved.id]: 'in_review' })
 
+    // it lands on the default In Review status (the first shown one)
+    const st = await defaultStatuses(ana, ws)
     const events = await ok(ana.db.from('issue_events').select('actor_id, changes').eq('issue_id', one.id))
-    expect(events).toEqual([{ actor_id: bob.profileId, changes: { status: ['in_progress', 'in_review'], via } }])
+    expect(events).toEqual([{ actor_id: bob.profileId, changes: { status: ['in_progress', 'in_review'], statusId: [st.in_progress, st.in_review], via } }])
 
     // only the note for an issue that moved, written as the author
     const notes = await ok(ana.db.from('inbox').select('id, actor_id, type, status, issue_id').eq('workspace_id', ws))
     expect(notes).toEqual([{ id: note, actor_id: bob.profileId, type: 'status', status: 'in_review', issue_id: one.id }])
+    // the note names the status the issue landed on
+    const named = await ok(ana.db.from('inbox').select('status_id').eq('id', note).single())
+    expect(named).toEqual({ status_id: st.in_review })
 
     const saved = await ok(ana.db.from('github_repos').select('repo, repository_id, last_event, last_event_at').eq('id', conn.id).single())
     expect(saved.repository_id).toBe(repositoryId)
@@ -199,7 +205,45 @@ describe.skipIf(!enabled)('GitHub', () => {
     // a change that comes later without a pull request says nothing about one
     await ok(ana.db.from('issues').update({ status: 'todo' }).eq('id', one.id))
     const later = await ok(ana.db.from('issue_events').select('actor_id, changes').eq('issue_id', one.id).order('id'))
-    expect(later[1]).toEqual({ actor_id: ana.profileId, changes: { status: ['in_review', 'todo'] } })
+    expect(later[1]).toEqual({ actor_id: ana.profileId, changes: { status: ['in_review', 'todo'], statusId: [st.in_review, st.todo] } })
+  })
+
+  test('moves land on the default status of their group; an issue in any review status stays', async () => {
+    const conn = await ok(ana.db.from('github_repos').insert({ workspace_id: ws, repo: `${repo}-statuses` }).select('id').single())
+    const st = await defaultStatuses(ana, ws)
+    const status = (category: string, name: string) => ({ id: ulid(), workspace_id: ws, kind: 'issue', category, name: `${name} ${ulid()}`, color: '#bb87fc', position: 'b0' })
+    const testing = status('in_progress', 'Testing')
+    const qa = status('in_review', 'QA')
+    const released = status('done', 'Released')
+    await ok(ana.db.from('statuses').insert([testing, qa, released]))
+    const a = await newIssue(ana, ws, eng, { title: 'In testing', status_id: testing.id })
+    const b = await newIssue(ana, ws, eng, { title: 'In QA', status_id: qa.id })
+    const from = ['backlog', 'todo', 'in_progress']
+    const moved = await apply({
+      connection: conn.id,
+      actor: bob.profileId,
+      moves: [
+        { issue: a.id, ref: `ENG-${a.number}`, from, to: 'in_review' },
+        { issue: b.id, ref: `ENG-${b.number}`, from, to: 'in_review' },
+      ],
+      event: { number: 13, action: 'opened' },
+    })
+    expect(moved.moved).toEqual([`ENG-${a.number}`])
+    const now = async () => Object.fromEntries((await ok(ana.db.from('issues').select('id, status_id').in('id', [a.id, b.id]))).map((i) => [i.id, i.status_id]))
+    expect(await now()).toEqual({ [a.id]: st.in_review, [b.id]: qa.id })
+
+    // merged: both go to the default Done (Released comes after Done, so Done stays the default)
+    const merged = ['backlog', 'todo', 'in_progress', 'in_review']
+    await apply({
+      connection: conn.id,
+      actor: bob.profileId,
+      moves: [
+        { issue: a.id, ref: `ENG-${a.number}`, from: merged, to: 'done' },
+        { issue: b.id, ref: `ENG-${b.number}`, from: merged, to: 'done' },
+      ],
+      event: { number: 13, action: 'merged' },
+    })
+    expect(await now()).toEqual({ [a.id]: st.done, [b.id]: st.done })
   })
 
   test('without a member as the author nothing moves, but the connection remembers it', async () => {

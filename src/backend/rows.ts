@@ -26,11 +26,12 @@ import {
   type Project,
   type PullRequest,
   type ReadState,
+  type Status,
   type Team,
   type View,
   type Workspace,
 } from '@/model/schema'
-import type { Priority, StatusId } from '@/model/status'
+import type { IssueCategory, Priority, StatusKind } from '@/model/status'
 
 // ---------- times ----------
 
@@ -99,15 +100,16 @@ const KNOWN = {
   person: names<Person & Linked & { id: string; linearIds: string[] }>('id', 'login', 'handle', 'githubId', 'name', 'avatarUrl', 'nameSetHere', 'linearId', 'linearIds'),
   team: names<Team & Linked & { id: string }>('id', 'key', 'name', 'emoji', 'members', 'createdAt', 'lastNumber', 'autoArchive', 'linearId'),
   label: names<Label & Linked>('id', 'name', 'color', 'linearId'),
+  status: names<Status>('id', 'kind', 'category', 'name', 'color', 'position', 'hidden'),
   project: names<Project & Linked>('id', 'name', 'emoji', 'description', 'status', 'lead', 'teams', 'targetDate', 'createdAt', 'linearId'),
   issue: names<ArchivedIssue & Linked>(
-    'id', 'team', 'number', 'title', 'description', 'status', 'priority', 'assignee', 'labels', 'project', 'parent',
+    'id', 'team', 'number', 'title', 'description', 'status', 'statusId', 'priority', 'assignee', 'labels', 'project', 'parent',
     'dueDate', 'estimate', 'sortOrder', 'createdBy', 'createdAt', 'updatedAt', 'completedAt', 'duplicateOf',
     'subscribers', 'unsubscribed', 'formerRefs', 'linearId', 'archivedAt', 'archivedBy', 'comments',
   ),
   comment: names<Comment & Linked>('id', 'issue', 'author', 'createdAt', 'editedAt', 'body', 'linearId'),
   view: names<View & Linked>('id', 'name', 'emoji', 'description', 'owner', 'team', 'filters', 'display', 'createdAt', 'linearId'),
-  inbox: names<InboxItem>('id', 'type', 'issue', 'actor', 'at', 'comment', 'status', 'readAt'),
+  inbox: names<InboxItem>('id', 'type', 'issue', 'actor', 'at', 'comment', 'status', 'statusId', 'readAt'),
   readState: names<ReadState>('readUntil'),
 }
 
@@ -210,6 +212,19 @@ export function rowToLabel(row: Row<'labels'>): Label {
   return { ...fromExtra(row.extra, KNOWN.label), id: row.id, name: row.name, color: row.color, ...linear(row) }
 }
 
+export function rowToStatus(row: Row<'statuses'>): Status {
+  return {
+    ...fromExtra(row.extra, KNOWN.status),
+    id: row.id,
+    kind: row.kind as StatusKind,
+    category: row.category,
+    name: row.name,
+    color: row.color,
+    position: row.position,
+    hidden: row.hidden,
+  }
+}
+
 export type ProjectTeamIn = Pick<Row<'project_teams'>, 'team_id'> & Stamped
 /** a team not known yet is left out until it arrives */
 export function rowToProject(row: Row<'projects'>, teams: readonly ProjectTeamIn[], r: Resolve): Project {
@@ -257,7 +272,9 @@ export function rowToIssue(
     title: row.title,
     // a row too big to send comes without it (`partial`) until it's fetched
     description: row.description ?? '',
-    status: row.status as StatusId,
+    status: row.status as IssueCategory,
+    // a row from before statuses (there should be none once the database has them) waits for one
+    statusId: row.status_id ?? '',
     priority: row.priority as Priority,
     assignee: login(row.assignee_id, r),
     labels: inOrder(labels, (l) => l.label_id),
@@ -321,7 +338,8 @@ export function rowToInbox(row: Row<'inbox'>, r: Resolve): InboxItem {
     actor: login(row.actor_id, r) ?? '',
     at: iso(row.at),
     ...(row.comment_id != null && { comment: row.comment_id }),
-    ...(row.status != null && { status: row.status as StatusId }),
+    ...(row.status != null && { status: row.status as IssueCategory }),
+    ...(row.status_id != null && { statusId: row.status_id }),
     ...(row.read_at != null && { readAt: iso(row.read_at) }),
   }
 }
@@ -443,12 +461,18 @@ export function projectToRows(
   }
 }
 
-/** issue_labels in the issue's order (as projectToRows); an archived issue's comments are written on their own */
+/** an issue as the import writes it: its category only, so it lands on the category's default status (or keeps its own) */
+export type ImportedIssue = Omit<Insert<'issues'>, 'status_id'>
+
+/**
+ * issue_labels in the issue's order (as projectToRows); an archived issue's comments are written on their own. No
+ * status_id: import_rows doesn't take it, and the database gives the issue its category's default status.
+ */
 export function issueToRows(
   i: Issue & { archivedAt?: string; archivedBy?: string },
   workspaceId: string,
   reg: Registry,
-): { issues: Insert<'issues'>; issue_labels: Insert<'issue_labels'>[]; issue_followers: Insert<'issue_followers'>[] } {
+): { issues: ImportedIssue; issue_labels: Insert<'issue_labels'>[]; issue_followers: Insert<'issue_followers'>[] } {
   const followers = new Map<string, boolean>()
   for (const l of i.subscribers ?? []) followers.set(requiredProfileId(l, reg), true)
   for (const l of i.unsubscribed ?? []) followers.set(requiredProfileId(l, reg), false)
@@ -525,6 +549,7 @@ export function inboxToRow(n: InboxItem, workspaceId: string, reg: Registry, rec
     issue_id: n.issue,
     comment_id: n.comment ?? null,
     status: n.status ?? null,
+    status_id: n.statusId ?? null,
     at: n.at,
     read_at: n.readAt ?? null,
     extra: toExtra(n, KNOWN.inbox),

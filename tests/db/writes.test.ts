@@ -3,7 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { MESSAGES } from '@/backend/writes/problems'
 import { postgrest, type Answer, type Outcome } from '@/backend/writes/send'
 import { createWorkspace } from '@/backend/workspaces'
-import { closeChannels, enabled, getWorld, newIssue, newTeam, ok, RUN, ulid, type World } from './support'
+import { closeChannels, enabled, getWorld, issueInsert, newIssue, newTeam, ok, RUN, ulid, type World } from './support'
 
 const outcome = (a: Answer, ks: string): Outcome | undefined => ('outcomes' in a ? a.outcomes.get(ks) : undefined)
 const problem = (a: Answer) => ('problem' in a ? a.problem : undefined)
@@ -42,7 +42,7 @@ describe.skipIf(!enabled)('saving changes', () => {
 
   test('notes for teammates are sent without asking for them back (E54)', async () => {
     const issue = await newIssue(w.ana, w.ws, w.eng)
-    const note = () => ({ id: ulid(), workspace_id: w.ws, recipient_id: w.bob.profileId, type: 'commented', issue_id: issue.id, comment_id: null, status: null })
+    const note = () => ({ id: ulid(), workspace_id: w.ws, recipient_id: w.bob.profileId, type: 'commented', issue_id: issue.id, comment_id: null, status: null, status_id: null })
     const sent = await postgrest(w.ana.db).run({ kind: 'notes', rows: [note()] }, { retry: false })
     expect(outcome(sent, 'notes')).toEqual({ ok: true })
     const { error } = await w.ana.db.from('inbox').insert(note()).select()
@@ -81,7 +81,7 @@ describe.skipIf(!enabled)('saving changes', () => {
     const made = await ana.run({ kind: 'insert', table: 'issues', rows: [row] }, { retry: false })
     const number = (outcome(made, id) as unknown as { row: { number: number } }).row.number
     expect(number).toBeGreaterThan(0)
-    const { error } = await w.ana.db.from('issues').insert(row)
+    const { error } = await w.ana.db.from('issues').insert(issueInsert(row))
     expect(error?.code).toBe('23505')
     expect(error?.message).toContain('issues_pkey')
     expect(problem(await ana.run({ kind: 'insert', table: 'issues', rows: [row] }, { retry: false }))?.kind).toBe('refused')

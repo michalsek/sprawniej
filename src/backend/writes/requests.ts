@@ -17,6 +17,7 @@ export const PARENTS: Partial<Record<LiveTable, readonly (readonly [string, Live
   ],
   issues: [
     ['team_id', 'teams'],
+    ['status_id', 'statuses'],
     ['project_id', 'projects'],
     ['parent_id', 'issues'],
     ['duplicate_of', 'issues'],

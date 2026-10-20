@@ -57,7 +57,7 @@ describe('requests, as sent', () => {
 
   test('inbox notes: no select (E54)', async () => {
     const r = recorder(() => ({ data: null, status: 201 }))
-    const note = { id: 'n1', workspace_id: 'w', recipient_id: 'p', type: 'assigned', issue_id: 'i', comment_id: null, status: null }
+    const note = { id: 'n1', workspace_id: 'w', recipient_id: 'p', type: 'assigned', issue_id: 'i', comment_id: null, status: null, status_id: null }
     const a = await postgrest(r.db).run({ kind: 'notes', rows: [note] }, { retry: false })
     expect(names(r.chains[0])).toEqual(['from', 'insert'])
     expect(outcome(a, 'notes')).toEqual({ ok: true })
@@ -139,6 +139,7 @@ describe('requests, as sent', () => {
     const db = new FakeDb(() => profileIdOf('ana'), new FakeClock())
     db.put('workspace_members', { workspace_id: WS, profile_id: profileIdOf('ana'), role: 'owner' })
     db.put('teams', { id: teamIdOf('ENG'), workspace_id: WS, key: 'ENG', name: 'Eng', last_number: 0 })
+    db.put('statuses', { id: 'status-todo', workspace_id: WS, kind: 'issue', category: 'todo', name: 'Todo', color: '#c4c6cc', position: 'a0', hidden: false })
     const row = (id: string) => ({ id, workspace_id: WS, team_id: teamIdOf('ENG'), title: id, sort_order: 'a0' })
     const t = postgrest(db.client())
     await t.run({ kind: 'insert', table: 'issues', rows: [row('A')] }, { retry: false })
@@ -154,7 +155,7 @@ describe('requests, as sent', () => {
     for (const l of ['ana', 'bob']) db.put('profiles', { id: profileIdOf(l), login: l })
     db.put('teams', { id: teamIdOf('ENG'), workspace_id: WS, key: 'ENG', name: 'Eng', last_number: 0 })
     db.put('issues', { id: 'I', workspace_id: WS, team_id: teamIdOf('ENG'), number: 1, title: 'x' })
-    const note = (id: string, type: string) => ({ id, workspace_id: WS, recipient_id: profileIdOf('bob'), type, issue_id: 'I', comment_id: null, status: null })
+    const note = (id: string, type: string) => ({ id, workspace_id: WS, recipient_id: profileIdOf('bob'), type, issue_id: 'I', comment_id: null, status: null, status_id: null })
     const t = postgrest(db.client())
     await t.run({ kind: 'notes', rows: [note('n1', 'assigned')] }, { retry: false })
     const again = await t.run({ kind: 'notes', rows: [note('n1', 'assigned'), note('n2', 'mentioned')] }, { retry: true })
@@ -262,7 +263,7 @@ describe('which changes wait, and which go together', () => {
   test('inserts into one table together, a hundred at most; one batch’s notes stay together', () => {
     const many = Array.from({ length: 150 }, (_, n) => s(n + 1, { op: 'insert', table: 'issue_labels', key: { issue_id: 'i', label_id: `l${n}` }, fields: { workspace_id: 'w' } }))
     expect(plan(many).map((o) => o.items.length)).toEqual([100, 50])
-    const note = { id: 'n', workspace_id: 'w', recipient_id: 'p', type: 'assigned', issue_id: 'i', comment_id: null, status: null }
+    const note = { id: 'n', workspace_id: 'w', recipient_id: 'p', type: 'assigned', issue_id: 'i', comment_id: null, status: null, status_id: null }
     const notes = plan([s(1, { op: 'notes', notes: Array(60).fill(note) }), s(2, { op: 'notes', notes: Array(60).fill(note) })])
     expect(notes.map((o) => (o.req.kind === 'notes' ? o.req.rows.length : 0))).toEqual([60, 60])
   })

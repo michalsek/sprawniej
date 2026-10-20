@@ -13,13 +13,13 @@ import { issueRef, useData } from '@/data/store'
 import { useMedia } from '@/lib/useNarrow'
 import { cn } from '@/lib/utils'
 import type { ArchivedIssue } from '@/model/schema'
-import { PRIORITY_NAMES, statusOf } from '@/model/status'
+import { PRIORITY_NAMES } from '@/model/status'
 import { Button } from '@/ui/button'
 import { Comments } from './Comments'
 import { PullRequests } from './PullRequests'
 import { DueChip, EstimateIcon } from './DueDate'
 import { estimateName, shortDate } from './format'
-import { PriorityIcon, StatusIcon } from './icons'
+import { IssueStatusName, PriorityIcon } from './icons'
 
 function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -47,7 +47,7 @@ export function ArchivedIssuePage({ issue }: { issue: ArchivedIssue }) {
   const properties = (
     <div className="flex flex-col gap-1">
       <Property label="Status">
-        <StatusIcon status={issue.status} /> {statusOf(issue.status).name}
+        <IssueStatusName issue={issue} />
       </Property>
       <Property label="Priority">
         <PriorityIcon priority={issue.priority} /> {PRIORITY_NAMES[issue.priority]}

@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { anyTable, client, closeChannels, enabled, expectDenied, getWorld, newIssue, ok, RUN, TABLES, ulid, wsColumn, type World } from './support'
+import { anyTable, client, closeChannels, enabled, expectDenied, getWorld, issueInsert, newIssue, ok, RUN, TABLES, ulid, wsColumn, type World } from './support'
 
 describe.skipIf(!enabled)('who sees and changes what', () => {
   let w: World
@@ -14,7 +14,7 @@ describe.skipIf(!enabled)('who sees and changes what', () => {
       const rows = await ok(anyTable(w.cy.db, t).select().match({ [wsColumn(t)]: w.ws }))
       expect({ t, rows }).toEqual({ t, rows: [] })
     }
-    const { error } = await w.cy.db.from('issues').insert({ id: ulid(), workspace_id: w.ws, team_id: w.eng, title: 'x', sort_order: 'a0' })
+    const { error } = await w.cy.db.from('issues').insert(issueInsert({ id: ulid(), workspace_id: w.ws, team_id: w.eng, title: 'x', sort_order: 'a0' }))
     expect(error?.code).toBe('42501')
     expect(await ok(w.cy.db.from('issues').update({ title: 'Hacked' }).eq('id', issue.id).select())).toEqual([])
     const same = await ok(w.ana.db.from('issues').select('title').eq('id', issue.id).single())
@@ -79,5 +79,5 @@ describe.skipIf(!enabled)('who sees and changes what', () => {
   })
 
   const newIssueWith = (more: { assignee_id: string }) =>
-    w.ana.db.from('issues').insert({ id: ulid(), workspace_id: w.ws, team_id: w.eng, title: 'x', sort_order: 'a0', ...more })
+    w.ana.db.from('issues').insert(issueInsert({ id: ulid(), workspace_id: w.ws, team_id: w.eng, title: 'x', sort_order: 'a0', ...more }))
 })

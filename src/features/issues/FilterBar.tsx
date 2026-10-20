@@ -1,18 +1,20 @@
 /**
  * Filters for a list of issues: "Filter" adds one (status, assignee, subscribers, priority, labels, project, team), and each
  * active filter shows as a chip you can change or remove. Inside one filter, any chosen value matches
- * (Todo or In Progress); different filters must all match (Todo and assigned to Ana).
+ * (Todo or In Progress); different filters must all match (Todo and assigned to Ana). The Status filter keeps whole
+ * categories where every shown status of one is picked, so a status added later shows too (src/data/statuses.ts).
  */
 import { useMemo, type ReactNode } from 'react'
 import { Bell, Box, CircleDot, ListFilter, SignalHigh, Tag, UserRound, Users, X } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { Picker, type PickerItem } from '@/components/Picker'
+import { pickedStatusIds, statusFilter } from '@/data/statuses'
 import { useData } from '@/data/store'
 import type { Filters } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import type { FilterKey } from './filters'
-import { priorityItems, statusItems, useLabelItems, usePeopleItems, useProjectItems } from './pickers'
+import { priorityItems, useLabelItems, usePeopleItems, useProjectItems, useStatusItems } from './pickers'
 
 const KINDS: { key: FilterKey; name: string; icon: ReactNode }[] = [
   { key: 'statuses', name: 'Status', icon: <CircleDot /> },
@@ -25,13 +27,14 @@ const KINDS: { key: FilterKey; name: string; icon: ReactNode }[] = [
 ]
 
 function useItems(): Record<FilterKey, PickerItem<unknown>[]> {
+  const statuses = useStatusItems({ all: true })
   const people = usePeopleItems()
   const labels = useLabelItems()
   const projects = useProjectItems()
   const teams = useData(useShallow((s) => Object.values(s.teams)))
   return useMemo(
     () => ({
-      statuses: statusItems,
+      statuses,
       assignees: people,
       // anyone following the issue: who made it, is assigned, commented, was mentioned or subscribed
       subscribers: people.filter((p) => p.value !== null),
@@ -40,7 +43,7 @@ function useItems(): Record<FilterKey, PickerItem<unknown>[]> {
       projects,
       teams: teams.map((t) => ({ value: t.key, label: t.name, icon: <span className="w-4 text-center leading-none">{t.emoji}</span> })),
     }),
-    [people, labels, projects, teams],
+    [statuses, people, labels, projects, teams],
   )
 }
 
@@ -76,13 +79,18 @@ export function FilterButton({ hide = [], onPick }: { hide?: FilterKey[]; onPick
 /** the chips; `open` = the filter whose menu is open (one just picked from the Filter button shows even when empty) */
 export function FilterChips({ filters, onChange, hide = [], extra, open, setOpen }: Props & { open: FilterKey | null; setOpen: (k: FilterKey | null) => void }) {
   const items = useItems()
+  const statuses = useData((s) => s.statuses)
   const shown = KINDS.filter((k) => !hide.includes(k.key) && ((filters[k.key]?.length ?? 0) > 0 || open === k.key))
   if (!shown.length && !extra) return null
-  const set = (key: FilterKey, values: unknown[]) => onChange({ ...filters, [key]: values.length ? values : undefined })
+  // statuses are picked one by one, and kept as categories plus, where only some of one are picked, those statuses
+  const valuesOf = (key: FilterKey): unknown[] => (key === 'statuses' ? pickedStatusIds(filters, statuses) : ((filters[key] ?? []) as unknown[]))
+  const set = (key: FilterKey, values: unknown[]) =>
+    onChange(key === 'statuses' ? { ...filters, ...statusFilter(values as string[], statuses) } : { ...filters, [key]: values.length ? values : undefined })
+  const kept = hide.flatMap((k) => (k === 'statuses' ? (['statuses', 'statusIds'] as const) : [k]))
   return (
     <div className="flex flex-wrap items-center gap-2">
       {shown.map((k) => {
-        const values = (filters[k.key] ?? []) as unknown[]
+        const values = valuesOf(k.key)
         const names = values.map((v) => items[k.key].find((i) => JSON.stringify(i.value) === JSON.stringify(v))?.label ?? (v === null ? String(v) : 'one that was deleted'))
         return (
           <span key={k.key} className="inline-flex h-8 items-center rounded-lg border text-sm">
@@ -113,7 +121,7 @@ export function FilterChips({ filters, onChange, hide = [], extra, open, setOpen
         )
       })}
       {shown.length > 1 && (
-        <button type="button" onClick={() => onChange(Object.fromEntries(hide.map((k) => [k, filters[k]])))} className="px-1 text-sm text-muted-foreground hover:text-foreground">
+        <button type="button" onClick={() => onChange(Object.fromEntries(kept.map((k) => [k, filters[k]])))} className="px-1 text-sm text-muted-foreground hover:text-foreground">
           Clear all
         </button>
       )}

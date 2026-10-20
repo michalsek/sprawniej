@@ -103,6 +103,19 @@ describe.skipIf(!enabled)('every shared table is wired the same way', () => {
     })
   }
 
+  // never deleted (hidden instead): no delete, so no deletion note; a workspace that goes takes them quietly (below)
+  test('statuses', async () => {
+    const id = ulid()
+    const key = { id }
+    await insert('statuses', { id, kind: 'issue', category: 'in_progress', name: `Wired ${id}`, color: '#bb87fc', position: 'b0' })
+    const first = await changedAt('statuses', key)
+    await ok(w.ana.db.from('statuses').update({ name: `Rewired ${id}` }).eq('id', id))
+    expect((await changedAt('statuses', key)) > first).toBe(true)
+    const { error } = await w.ana.db.from('statuses').delete().eq('id', id)
+    expect(error?.code).toBe('42501')
+    for (const op of ['INSERT', 'UPDATE']) expect(await heard.waitFor(about('statuses', op, key))).toBeDefined()
+  })
+
   // written only by github_apply (the GitHub webhook), so this writes it as the database's owner
   test('issue_pull_requests', async () => {
     const key = { issue_id: await issueId(), pull_request_id: String(Date.now()) }

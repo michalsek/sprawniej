@@ -11,28 +11,37 @@ import { PersonAvatar } from '@/components/Avatar'
 import { LabelDot } from '@/components/LabelChip'
 import { Picker } from '@/components/Picker'
 import { createIssue, createLabel, type NewIssue } from '@/data/actions'
+import { CATEGORY_STATUSES, pickStatus } from '@/data/statuses'
 import { issueRef, useData } from '@/data/store'
 import { Editor } from '@/editor/LazyEditor'
-import { PRIORITY_NAMES, statusOf } from '@/model/status'
+import type { Status } from '@/model/schema'
+import { PRIORITY_NAMES } from '@/model/status'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog'
 import { useComposer } from './composer'
 import { PriorityIcon, StatusIcon } from './icons'
 import { DueDatePicker, EstimateIcon } from './DueDate'
 import { dayName, estimateName } from './format'
-import { estimateItems, priorityItems, statusItems, useLabelItems, useParentItems, usePeopleItems, useProjectItems } from './pickers'
+import { estimateItems, priorityItems, useLabelItems, useStatusItems, useParentItems, usePeopleItems, useProjectItems } from './pickers'
 
 const chip =
   'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm text-foreground/90 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60'
 
-type Draft = Required<Omit<NewIssue, 'description'>> & { description: string }
+type Draft = Required<Omit<NewIssue, 'description' | 'status' | 'statusId'>> & { description: string; statusId: string }
+
+/** the status to start in: the one asked for, or the default of the category asked for (Todo's when neither) */
+function startIn(d: Partial<NewIssue>, statuses: Record<string, Status>): string {
+  if (d.statusId) return d.statusId
+  const picked = pickStatus(d.status ?? 'todo', statuses)
+  return picked?.statusId ?? picked?.status ?? 'todo'
+}
 
 function fresh(d: Partial<NewIssue>, fallbackTeam: string): Draft {
   return {
     team: d.team ?? fallbackTeam,
     title: d.title ?? '',
     description: d.description ?? '',
-    status: d.status ?? 'todo',
+    statusId: startIn(d, useData.getState().statuses),
     priority: d.priority ?? 0,
     assignee: d.assignee ?? null,
     labels: d.labels ?? [],
@@ -71,6 +80,8 @@ function Composer() {
   const [more, setMore] = useState(false)
   // the editor keeps its own text; a new key empties it after "create more"
   const [round, setRound] = useState(0)
+  const statusItems = useStatusItems({ current: [draft.statusId] })
+  const status = useData((s) => s.statuses[draft.statusId]) ?? CATEGORY_STATUSES.find((c) => c.id === draft.statusId) ?? CATEGORY_STATUSES[1]
   const peopleItems = usePeopleItems()
   const labelItems = useLabelItems()
   const projectItems = useProjectItems(draft.team)
@@ -164,9 +175,9 @@ function Composer() {
           onSubmit={submit} className="mt-2 max-h-[40vh] min-h-20 overflow-y-auto" />
       </div>
       <div className="flex flex-wrap gap-2 px-5 pt-3 pb-4">
-        <Picker placeholder="Status…" items={statusItems} value={draft.status} onSelect={(status) => set({ status })}>
+        <Picker placeholder="Status…" items={statusItems} value={draft.statusId} onSelect={(statusId) => set({ statusId })}>
           <button type="button" className={chip}>
-            <StatusIcon status={draft.status} /> {statusOf(draft.status).name}
+            <StatusIcon status={status} /> {status.name}
           </button>
         </Picker>
         <Picker placeholder="Priority…" items={priorityItems} value={draft.priority} onSelect={(priority) => set({ priority })}>

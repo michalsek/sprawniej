@@ -3,7 +3,7 @@
  * they never change it directly. All changes go through `actions.ts` (see CLAUDE.md, golden rules).
  */
 import { create } from 'zustand'
-import { TEAM_KEY, type ArchivedIssue, type Comment, type InboxItem, type Issue, type Label, type Member, type Person, type Project, type PullRequest, type ReadState, type Team, type View, type Workspace } from '@/model/schema'
+import { TEAM_KEY, type ArchivedIssue, type Comment, type InboxItem, type Issue, type Label, type Member, type Person, type Project, type PullRequest, type ReadState, type Status, type Team, type View, type Workspace } from '@/model/schema'
 
 export interface DataState {
   workspace: Workspace | null
@@ -13,6 +13,8 @@ export interface DataState {
   /** by login: everyone's role in the workspace, and who left */
   members: Record<string, Member>
   labels: Record<string, Label>
+  /** the workspace's own statuses by id, every kind, hidden ones too (src/data/statuses.ts) */
+  statuses: Record<string, Status>
   teams: Record<string, Team>
   issues: Record<string, Issue>
   /** archived issues by id; empty until something needs them (loadArchive in src/backend) */
@@ -35,6 +37,7 @@ export const EMPTY: DataState = {
   people: {},
   members: {},
   labels: {},
+  statuses: {},
   teams: {},
   issues: {},
   archive: {},

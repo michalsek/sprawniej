@@ -3,7 +3,7 @@ import { searchIssues } from '@/data/search'
 import type { Issue } from '@/model/schema'
 
 const mk = (number: number, title: string, status: Issue['status'] = 'todo', updatedAt = '2026-01-01'): Issue => ({
-  id: `i${number}`, team: 'ENG', number, title, description: '', status, priority: 0, assignee: null, labels: [], project: null, parent: null,
+  id: `i${number}`, team: 'ENG', number, title, description: '', status, statusId: '', priority: 0, assignee: null, labels: [], project: null, parent: null,
   sortOrder: 'a0', createdBy: 'x', createdAt: '', updatedAt,
 })
 const issues = Object.fromEntries([mk(1, 'Fix login'), mk(12, 'Login page is slow', 'done'), mk(3, 'Slow charts', 'todo', '2026-02-01'), mk(4, 'Mention ENG-12')].map((i) => [i.id, i]))

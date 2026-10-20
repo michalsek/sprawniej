@@ -114,6 +114,7 @@ function ConnectDialog({ onDone }: { onDone: (repo?: string) => void }) {
 
 function RepoLine({ r, now, onRemove }: { r: GitHubRepo; now: number; onRemove: () => void }) {
   const last = r.last
+  const statuses = useData((s) => s.statuses)
   return (
     <li className="flex items-center gap-3 py-1.5">
       <span className="size-5 shrink-0 text-muted-foreground [&_svg]:size-5">
@@ -134,7 +135,7 @@ function RepoLine({ r, now, onRemove }: { r: GitHubRepo; now: number; onRemove: 
               ) : (
                 `#${last.number ?? '?'}`
               )}{' '}
-              {lastText(last)} · {timeAgo(r.lastAt, new Date(now))}
+              {lastText(last, statuses)} · {timeAgo(r.lastAt, new Date(now))}
             </>
           ) : (
             'Waiting for the first pull request'

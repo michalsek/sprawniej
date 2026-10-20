@@ -28,7 +28,7 @@ describe('dropping an issue', () => {
     }
   })
   test('the group it lands in sets the property', () => {
-    expect(groupPatch('status', 'done')).toEqual({ status: 'done' })
+    expect(groupPatch('status', 'status-done')).toEqual({ statusId: 'status-done' })
     expect(groupPatch('priority', 1)).toEqual({ priority: 1 })
     expect(groupPatch('assignee', null)).toEqual({ assignee: null })
     expect(groupPatch('project', 'p1')).toEqual({ project: 'p1' })

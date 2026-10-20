@@ -18,7 +18,7 @@ export interface Source {
   miss(id: string, table: 'profiles' | 'teams', ref: Ref): void
 }
 
-type RecField = 'people' | 'members' | 'labels' | 'teams' | 'issues' | 'archive' | 'projects' | 'views' | 'comments' | 'pullRequests'
+type RecField = 'people' | 'members' | 'labels' | 'statuses' | 'teams' | 'issues' | 'archive' | 'projects' | 'views' | 'comments' | 'pullRequests'
 
 const byTime = (a: Comment, b: Comment) =>
   a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0
@@ -87,6 +87,11 @@ export function derive(src: Source, data: StoreSlice, dirty: Dirty, ctx: ApplyCo
   for (const id of ids.label) {
     const row = src.shown('labels', { id })
     p.set('labels', id, row && rows.rowToLabel(row))
+  }
+
+  for (const id of ids.status) {
+    const row = src.shown('statuses', { id })
+    p.set('statuses', id, row && rows.rowToStatus(row))
   }
 
   for (const id of ids.project) {

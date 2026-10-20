@@ -12,7 +12,7 @@ import { searchIssues } from '@/data/search'
 import { isAdmin } from '@/data/select'
 import { findByRef, issueRef, useData } from '@/data/store'
 import { openComposer } from '@/features/issues/composer'
-import { StatusIcon } from '@/features/issues/icons'
+import { IssueStatusIcon } from '@/features/issues/icons'
 import { listedPages } from '@/features/settings/nav'
 import { PAGES } from '@/features/settings/pages'
 import { plain } from '@/lib/plain'
@@ -123,7 +123,7 @@ function Palette() {
     <CommandGroup heading="Archived">
       {foundOld.map((i) => (
         <CommandItem key={i.id} value={`archived-${i.id}`} onSelect={() => pick(go(`/issue/${issueRef(i)}`))} className="text-muted-foreground">
-          <StatusIcon status={i.status} />
+          <IssueStatusIcon issue={i} />
           <span className="min-w-[4.75rem] shrink-0 whitespace-nowrap tabular-nums">{issueRef(i)}</span>
           <span className="truncate">{i.title}</span>
         </CommandItem>
@@ -141,7 +141,7 @@ function Palette() {
           <CommandGroup heading="Issues">
             {found.map((i) => (
               <CommandItem key={i.id} value={`issue-${i.id}`} onSelect={() => pick(go(`/issue/${issueRef(i)}`))}>
-                <StatusIcon status={i.status} />
+                <IssueStatusIcon issue={i} />
                 <span className="min-w-[4.75rem] shrink-0 whitespace-nowrap text-muted-foreground tabular-nums">{issueRef(i)}</span>
                 <span className="truncate">{i.title}</span>
               </CommandItem>

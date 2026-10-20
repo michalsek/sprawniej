@@ -21,13 +21,13 @@ import type { DataState } from '@/data/store'
 
 export type StoreSlice = Pick<
   DataState,
-  'workspace' | 'me' | 'people' | 'members' | 'labels' | 'teams' | 'issues' | 'archive' | 'projects' | 'views' | 'comments' | 'pullRequests' | 'inbox' | 'readState'
+  'workspace' | 'me' | 'people' | 'members' | 'labels' | 'statuses' | 'teams' | 'issues' | 'archive' | 'projects' | 'views' | 'comments' | 'pullRequests' | 'inbox' | 'readState'
 >
 
 type Rec<V> = Readonly<Record<string, V>>
 
 /** a kind of thing in the store made from rows */
-export type Kind = 'person' | 'member' | 'team' | 'label' | 'project' | 'issue' | 'view' | 'inbox'
+export type Kind = 'person' | 'member' | 'team' | 'label' | 'status' | 'project' | 'issue' | 'view' | 'inbox'
 /** one such thing, by the id of its main row */
 export interface Ref {
   kind: Kind

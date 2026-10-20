@@ -6,7 +6,7 @@
  * deletes what a newer one wrote.
  */
 import { z } from 'zod'
-import { PRIORITY_IDS, STATUS_IDS } from './status'
+import { ISSUE_CATEGORIES, PRIORITY_IDS, STATUS_KINDS } from './status'
 
 const iso = z.string() // ISO 8601 date-time
 const login = z.string() // a person's hidden key (Person.login)
@@ -87,6 +87,28 @@ export type Label = z.infer<typeof labelSchema>
 /** months after which finished issues are archived, unless a team says otherwise (team.autoArchive) */
 export const AUTO_ARCHIVE_MONTHS = 6
 
+/**
+ * One of the workspace's own statuses (the statuses table): a name and a colour within one fixed category. Issue
+ * statuses (`kind` 'issue') belong to one of the issue categories (src/model/status.ts); project statuses come later.
+ * Never deleted, only hidden: things that have a hidden status keep it and show it.
+ */
+export const statusSchema = z
+  .object({
+    id: z.string(),
+    kind: z.enum(STATUS_KINDS),
+    /** fixed: an issue category for issue statuses */
+    category: z.string(),
+    name: z.string(),
+    /** "#rrggbb" (STATUS_COLORS) */
+    color: z.string(),
+    /** a fractional index: the order within its category */
+    position: z.string(),
+    /** not offered when picking */
+    hidden: z.boolean(),
+  })
+  .loose()
+export type Status = z.infer<typeof statusSchema>
+
 /** a team key (ENG): a capital letter, then up to six capitals or digits; the database checks the same */
 export const TEAM_KEY_PATTERN = /^[A-Z][A-Z0-9]{0,6}$/
 /** the same rule without the anchors, for finding team keys inside longer text (ENG-12) */
@@ -117,7 +139,10 @@ export const issueFieldsSchema = z
     id: z.string(),
     number: z.number().int().positive(),
     title: z.string(),
-    status: z.enum(STATUS_IDS),
+    /** its category: decides the tabs, finished, the nightly archive (src/model/status.ts) */
+    status: z.enum(ISSUE_CATEGORIES),
+    /** the workspace's status it has, one of `status`'s category ('' while it isn't known; see statusOfIssue) */
+    statusId: z.string(),
     priority: z.union(PRIORITY_IDS.map((p) => z.literal(p))),
     assignee: login.nullable(),
     labels: z.array(z.string()),
@@ -198,7 +223,13 @@ export type Ordering = (typeof ORDERINGS)[number]
 export const filtersSchema = z
   .object({
     teams: z.array(z.string()).optional(),
-    statuses: z.array(z.enum(STATUS_IDS)).optional(),
+    /** categories (what older versions read too): any status of these */
+    statuses: z.array(z.enum(ISSUE_CATEGORIES)).optional(),
+    /**
+     * only these statuses, within the categories in `statuses` that they belong to (a category none of them belongs
+     * to keeps all its statuses); without `statuses` it means nothing (src/data/statuses.ts, matchesStatus)
+     */
+    statusIds: z.array(z.string()).optional(),
     assignees: z.array(login.nullable()).optional(),
     /** people following the issue (see src/data/notify.ts, `followers`) */
     subscribers: z.array(login).optional(),
@@ -247,8 +278,10 @@ export const inboxItemSchema = z
     at: iso,
     /** the comment it's about (mentioned in a comment, commented) */
     comment: z.string().optional(),
-    /** the new status (status) */
-    status: z.enum(STATUS_IDS).optional(),
+    /** the new status's category (status) */
+    status: z.enum(ISSUE_CATEGORIES).optional(),
+    /** the new status (status), when the note names one */
+    statusId: z.string().optional(),
     /** when it was read one by one */
     readAt: iso.nullable().optional(),
   })

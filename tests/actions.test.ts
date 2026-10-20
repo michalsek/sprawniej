@@ -240,8 +240,8 @@ describe('the rows behind an issue', () => {
   test('noteRows: one row per note, people we do not know are left out', () => {
     const rows = noteRows('i', [{ to: 'bob', type: 'mentioned', comment: 'c1' }, { to: 'nobody', type: 'assigned' }, { to: 'cy', type: 'status', status: 'done' }], ctx())
     expect(rows.map(({ id: _id, ...r }) => r)).toEqual([
-      { workspace_id: 'w', recipient_id: 'p-bob', type: 'mentioned', issue_id: 'i', comment_id: 'c1', status: null },
-      { workspace_id: 'w', recipient_id: 'p-cy', type: 'status', issue_id: 'i', comment_id: null, status: 'done' },
+      { workspace_id: 'w', recipient_id: 'p-bob', type: 'mentioned', issue_id: 'i', comment_id: 'c1', status: null, status_id: null },
+      { workspace_id: 'w', recipient_id: 'p-cy', type: 'status', issue_id: 'i', comment_id: null, status: 'done', status_id: null },
     ])
     expect(new Set(rows.map((r) => r.id)).size).toBe(2)
   })

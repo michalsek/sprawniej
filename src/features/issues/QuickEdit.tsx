@@ -8,24 +8,29 @@ import { useShallow } from 'zustand/react/shallow'
 import { usePalette, type QuickField } from '@/app/palette'
 import type { PickerItem } from '@/components/Picker'
 import { updateIssue } from '@/data/actions'
+import { statusOfIssue } from '@/data/statuses'
 import { issueRef, useData } from '@/data/store'
 import { plainFilter } from '@/lib/fuzzy'
 import { cn } from '@/lib/utils'
 import type { Issue } from '@/model/schema'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog'
-import { estimateItems, priorityItems, statusItems, useLabelItems, usePeopleItems } from './pickers'
+import { estimateItems, priorityItems, useLabelItems, usePeopleItems, useStatusItems } from './pickers'
 
 const TITLES: Record<QuickField, string> = { status: 'Change status', priority: 'Change priority', assignee: 'Assign to', labels: 'Change labels', estimate: 'Set estimate' }
 
 function Menu({ issues, field }: { issues: Issue[]; field: QuickField }) {
+  const statuses = useData((s) => s.statuses)
+  const statusItems = useStatusItems({ current: issues.map((i) => statusOfIssue(i, statuses).id) })
   const people = usePeopleItems()
   const labels = useLabelItems()
   const close = () => usePalette.setState({ quick: null })
   const items = (
     field === 'status' ? statusItems : field === 'priority' ? priorityItems : field === 'assignee' ? people : field === 'estimate' ? estimateItems(issues.length === 1 ? issues[0].estimate : null) : labels
   ) as PickerItem<unknown>[]
-  const chosen = (v: unknown) => issues.every((i) => (field === 'labels' ? i.labels.includes(v as string) : (i[field] ?? null) === v))
+  /** what an issue has for this field (its status: the one it shows) */
+  const has = (i: Issue): unknown => (field === 'status' ? statusOfIssue(i, statuses).id : (i[field] ?? null))
+  const chosen = (v: unknown) => issues.every((i) => (field === 'labels' ? i.labels.includes(v as string) : has(i) === v))
 
   function pick(v: unknown) {
     if (field === 'labels') {
@@ -39,7 +44,7 @@ function Menu({ issues, field }: { issues: Issue[]; field: QuickField }) {
       }
       return
     }
-    for (const i of issues) if ((i[field] ?? null) !== v) updateIssue(i.id, { [field]: v })
+    for (const i of issues) if (has(i) !== v) updateIssue(i.id, field === 'status' ? { statusId: v as string } : { [field]: v })
     close()
   }
 

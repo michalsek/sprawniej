@@ -99,7 +99,7 @@ const byTitle = (t: string, rows: IssueRow[]) => rows.find((i) => i.title === t)
 const eng: Team = { key: 'ENG', name: 'Eng', emoji: '🛠️', members: ['mikolaj'], createdAt: NOW }
 /** real order keys, so an import that puts new issues above these can work out keys between them */
 const KEYS = generateNKeysBetween(null, null, 100)
-const native = (n: number): Issue => ({ id: `mine${n}`, team: 'ENG', number: n, title: `Made here ${n}`, description: '', status: 'todo', priority: 0, assignee: null, labels: [], project: null, parent: null, sortOrder: KEYS[n], createdBy: 'mikolaj', createdAt: NOW, updatedAt: NOW })
+const native = (n: number): Issue => ({ id: `mine${n}`, team: 'ENG', number: n, title: `Made here ${n}`, description: '', status: 'todo', statusId: 'status-todo', priority: 0, assignee: null, labels: [], project: null, parent: null, sortOrder: KEYS[n], createdBy: 'mikolaj', createdAt: NOW, updatedAt: NOW })
 /** a workspace's issues, top of the list first */
 const issuesIn = (ws: Existing) => Object.values(ws.issues).sort((a, b) => (a.sortOrder < b.sortOrder ? -1 : 1))
 

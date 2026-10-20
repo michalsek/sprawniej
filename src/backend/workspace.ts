@@ -121,6 +121,7 @@ const slice = (s: DataState): StoreSlice => ({
   people: s.people,
   members: s.members,
   labels: s.labels,
+  statuses: s.statuses,
   teams: s.teams,
   issues: s.issues,
   archive: s.archive,

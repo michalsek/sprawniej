@@ -16,7 +16,7 @@ import { issueRef, useData } from '@/data/store'
 import type { Display, Issue } from '@/model/schema'
 import { cn } from '@/lib/utils'
 import { DueChip, EstimateChip } from './DueDate'
-import { PriorityIcon, StatusIcon } from './icons'
+import { PriorityIcon, IssueStatusIcon } from './icons'
 import { GroupIcon } from './GroupIcon'
 import { SubIssueCount } from './SubIssueCount'
 import { TitleText } from './TitleText'
@@ -64,7 +64,7 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted }: CardProp
         </span>
       </div>
       <div className="flex items-start gap-2">
-        <StatusIcon status={issue.status} className="mt-1" />
+        <IssueStatusIcon issue={issue} className="mt-1" />
         <span className="line-clamp-3">
           <TitleText title={issue.title} />
         </span>

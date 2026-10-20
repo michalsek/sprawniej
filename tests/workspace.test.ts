@@ -29,7 +29,7 @@ afterEach(() => warn.mockRestore())
 
 const fetch = (table: Extract<Incoming, { from: 'fetch' }>['table'], rows: object[]): Incoming => ({ from: 'fetch', table, rows: rows as Record<string, unknown>[] })
 const issueRow = (id: string, title: string, s: number) => ({
-  id, workspace_id: WS, team_id: 't-eng', number: 1, title, description: '', status: 'todo', priority: 0, assignee_id: null,
+  id, workspace_id: WS, team_id: 't-eng', number: 1, title, description: '', status: 'todo', status_id: 'status-todo', priority: 0, assignee_id: null,
   project_id: null, parent_id: null, due_date: null, estimate: null, sort_order: 'a0', duplicate_of: null, former_refs: [],
   created_by: ME, created_at: T(1), updated_at: T(s), completed_at: null, archived_at: null, archived_by: null,
   linear_id: null, changed_at: T(s), extra: {},

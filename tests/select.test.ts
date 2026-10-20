@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
-import { sampleData } from './fixtures/sample'
+import { sampleData, statusIdOf } from './fixtures/sample'
 import { childIndex, compareIssues, dueForArchive, myTeamKeys, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectProgress } from '@/data/select'
 import { findByRef, issueRef } from '@/data/store'
 import { DEFAULT_DISPLAY } from '@/data/displays'
@@ -114,6 +114,37 @@ describe('grouping', () => {
     const projects = groupIssues([], { ...DEFAULT_DISPLAY, grouping: 'project' }, { ...ctx, team: 'ENG' }, 'all', true)
     const open = Object.values(data.projects).filter((p) => !['completed', 'canceled'].includes(p.status) && (!p.teams.length || p.teams.includes('ENG')))
     expect(projects.length).toBe(open.length + 1)
+  })
+  test('by the workspace’s statuses: one group each, in its order; a hidden one only while issues here have it', () => {
+    const statuses = {
+      ...data.statuses,
+      testing: { id: 'testing', kind: 'issue' as const, category: 'in_progress', name: 'Testing', color: '#bb87fc', position: 'a1', hidden: false },
+      parked: { id: 'parked', kind: 'issue' as const, category: 'todo', name: 'Parked', color: '#95a2b3', position: 'a1', hidden: true },
+    }
+    const withStatuses = { ...ctx, statuses }
+    const keys = (gs: { key: string }[]) => gs.map((g) => g.key)
+    const groups = groupIssues(issues, DEFAULT_DISPLAY, withStatuses, 'all')
+    expect(keys(groups)).toEqual(['backlog', 'todo', 'in_progress', 'testing', 'in_review', 'done', 'canceled', 'duplicate'].map((k) => (k === 'testing' ? k : statusIdOf(k))))
+    expect(groups.find((g) => g.key === 'testing')).toMatchObject({ title: 'Testing', value: 'testing', issues: [] })
+    // an issue in the hidden status brings its group; one whose status isn't known goes with its category's default
+    const parked = { ...issues[4], status: 'todo' as const, statusId: 'parked' }
+    const unknown = { ...issues[7], status: 'todo' as const, statusId: 'not-here-yet' }
+    const now = groupIssues([parked, unknown], DEFAULT_DISPLAY, withStatuses, 'all')
+    expect(keys(now)).toContain('parked')
+    expect(now.find((g) => g.key === 'parked')!.issues.map((i) => i.id)).toEqual([parked.id])
+    expect(now.find((g) => g.key === statusIdOf('todo'))!.issues.map((i) => i.id)).toEqual([unknown.id])
+    // a board on Active: statuses of the other categories are places to drop, marked outside
+    const board = groupIssues(issues.filter((i) => inTab(i, 'active')), DEFAULT_DISPLAY, withStatuses, 'active', true)
+    expect(board.filter((g) => !g.outside).map((g) => g.title)).toEqual(['Todo', 'In Progress', 'Testing', 'In Review'])
+    expect(board.filter((g) => g.outside).map((g) => g.title)).toEqual(['Backlog', 'Done', 'Canceled', 'Duplicate'])
+  })
+  test('the Status filter reads the workspace’s statuses: a refinement narrows its own category', () => {
+    const follow = { comments: {}, people: data.people, statuses: { ...data.statuses, testing: { id: 'testing', kind: 'issue' as const, category: 'in_progress', name: 'Testing', color: '#bb87fc', position: 'a1', hidden: false } } }
+    const inProgress = issues.filter((i) => i.status === 'in_progress')
+    const testing = { ...inProgress[0], statusId: 'testing' }
+    expect(matches(testing, { statuses: ['in_progress'] }, follow)).toBe(true)
+    expect(matches(testing, { statuses: ['in_progress'], statusIds: [statusIdOf('in_progress')] }, follow)).toBe(false)
+    expect(matches(inProgress[1], { statuses: ['in_progress'], statusIds: [statusIdOf('in_progress')] }, follow)).toBe(true)
   })
   test('manual order uses plain string order of sortOrder', () => {
     const a = issues[0]

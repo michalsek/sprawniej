@@ -11,7 +11,7 @@ import { nestChildren, type Group } from '@/data/select'
 import { issueRef, useData } from '@/data/store'
 import type { Display, Issue } from '@/model/schema'
 import { cn } from '@/lib/utils'
-import { PriorityIcon, StatusIcon } from './icons'
+import { PriorityIcon, IssueStatusIcon } from './icons'
 import { GroupIcon } from './GroupIcon'
 import { DueChip, EstimateChip } from './DueDate'
 import { shortDate } from './format'
@@ -61,7 +61,7 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
     >
       <PriorityIcon priority={issue.priority} />
       <span className="hidden min-w-[4.75rem] shrink-0 whitespace-nowrap text-muted-foreground tabular-nums sm:inline">{issueRef(issue)}</span>
-      <StatusIcon status={issue.status} />
+      <IssueStatusIcon issue={issue} />
       <span className={cn('min-w-0 truncate', closed && 'text-muted-foreground')}>
         <TitleText title={issue.title} />
       </span>

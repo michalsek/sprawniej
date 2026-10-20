@@ -39,6 +39,9 @@ describe.skipIf(!enabled)('reading a workspace', () => {
     expect(Object.keys(r.patch.teams ?? {})).toEqual(['ENG'])
     expect(r.patch.teams?.ENG.members).toEqual([w.ana.login])
     expect(r.patch.labels?.[label]?.name).toBe('Bug')
+    // the statuses the workspace started with, and every issue on one of them
+    expect(Object.values(r.patch.statuses ?? {}).map((s) => s.category).sort()).toEqual(['backlog', 'canceled', 'done', 'duplicate', 'in_progress', 'in_review', 'todo'])
+    expect(Object.values(r.patch.issues ?? {}).every((i) => r.patch.statuses?.[i.statusId]?.category === i.status)).toBe(true)
     expect(r.patch.members?.[w.ana.login]?.role).toBe('owner')
     expect(r.patch.people?.[w.ana.login]?.name).toBe('Test ana')
     expect(r.patch.issues?.[open]?.labels).toEqual([label])

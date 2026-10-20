@@ -1,40 +1,66 @@
-/** Status, priority and pull request icons: the same shapes everywhere, so people recognise them at a glance. */
+/**
+ * Status, priority and pull request icons: the same shapes everywhere, so people recognise them at a glance. A
+ * status's shape says its category (a dotted ring for Backlog, a pie for In Progress, a tick for Done…); its colour is
+ * the status's own.
+ */
 import { GitMerge, GitPullRequest, GitPullRequestClosed, GitPullRequestDraft } from 'lucide-react'
-import type { PullRequest } from '@/model/schema'
+import { useData } from '@/data/store'
+import { statusOfIssue } from '@/data/statuses'
+import type { Issue, PullRequest, Status } from '@/model/schema'
 import { pullStateName } from './format'
-import type { Priority, StatusId } from '@/model/status'
-import { statusOf } from '@/model/status'
+import type { IssueCategory, Priority } from '@/model/status'
 import { cn } from '@/lib/utils'
 
-const PIE: Partial<Record<StatusId, number>> = { in_progress: 0.5, in_review: 0.75 }
+const PIE: Partial<Record<IssueCategory, number>> = { in_progress: 0.5, in_review: 0.75 }
 
-export function StatusIcon({ status, className }: { status: StatusId; className?: string }) {
-  const color = statusOf(status).color
+export function StatusIcon({ status, className }: { status: Pick<Status, 'category' | 'color' | 'name'>; className?: string }) {
+  const { color, name } = status
+  const category = status.category as IssueCategory
   const box = cn('size-3.5 shrink-0', className)
-  if (status === 'done') {
+  if (category === 'done') {
     return (
-      <svg viewBox="0 0 14 14" className={box} aria-label="Done">
+      <svg viewBox="0 0 14 14" className={box} aria-label={name}>
         <circle cx="7" cy="7" r="6" fill={color} />
         <path d="M4.3 7.2 6.2 9l3.5-3.8" fill="none" stroke="var(--status-mark)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )
   }
-  if (status === 'canceled' || status === 'duplicate') {
+  if (category === 'canceled' || category === 'duplicate') {
     return (
-      <svg viewBox="0 0 14 14" className={box} aria-label={statusOf(status).name}>
+      <svg viewBox="0 0 14 14" className={box} aria-label={name}>
         <circle cx="7" cy="7" r="6" fill={color} />
         <path d="m5 5 4 4m0-4-4 4" stroke="var(--status-mark)" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     )
   }
-  const pie = PIE[status]
+  const pie = PIE[category]
   // a circle of radius 1.75 with a 3.5-wide stroke paints a pie; dasharray sets how much of it
   const c = 2 * Math.PI * 1.75
   return (
-    <svg viewBox="0 0 14 14" className={box} aria-label={statusOf(status).name}>
-      <circle cx="7" cy="7" r="6" fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={status === 'backlog' ? '1.4 1.74' : undefined} />
+    <svg viewBox="0 0 14 14" className={box} aria-label={name}>
+      <circle cx="7" cy="7" r="6" fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={category === 'backlog' ? '1.4 1.74' : undefined} />
       {pie && <circle cx="7" cy="7" r="1.75" fill="none" stroke={color} strokeWidth="3.5" strokeDasharray={`${c * pie} ${c}`} transform="rotate(-90 7 7)" />}
     </svg>
+  )
+}
+
+/** the status an issue has, as the workspace names and colours it (src/data/statuses.ts, statusOfIssue) */
+function useIssueStatus(issue: Pick<Issue, 'status' | 'statusId'>): Status {
+  return useData((s) => statusOfIssue(issue, s.statuses))
+}
+
+/** an issue's status icon */
+export function IssueStatusIcon({ issue, className }: { issue: Pick<Issue, 'status' | 'statusId'>; className?: string }) {
+  return <StatusIcon status={useIssueStatus(issue)} className={className} />
+}
+
+/** an issue's status icon and name */
+export function IssueStatusName({ issue }: { issue: Pick<Issue, 'status' | 'statusId'> }) {
+  const status = useIssueStatus(issue)
+  return (
+    <>
+      <StatusIcon status={status} /> {status.name}
+    </>
   )
 }
 

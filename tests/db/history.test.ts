@@ -3,7 +3,7 @@ import { fetchIssueEvents } from '@/backend/history'
 import { Registry } from '@/backend/registry'
 import { iso } from '@/backend/rows'
 import { issueEvents } from '@/data/history'
-import { closeChannels, DISPLAY, enabled, getWorld, newIssue, newTeam, ok, ulid, type World } from './support'
+import { closeChannels, defaultStatuses, DISPLAY, enabled, getWorld, newIssue, newTeam, ok, ulid, type World } from './support'
 
 describe.skipIf(!enabled)('history and deletions', () => {
   let w: World
@@ -119,6 +119,7 @@ describe.skipIf(!enabled)('history and deletions', () => {
 
   test('events read as the right lines', async () => {
     const label = await newLabel()
+    const st = await defaultStatuses(w.ana, w.ws)
     const issue = await newIssue(w.ana, w.ws, w.eng, { title: 'Lines' })
     // the app adds the labels a moment after the issue (E26)
     await ok(w.ana.db.from('issue_labels').insert({ workspace_id: w.ws, issue_id: issue.id, label_id: label }))
@@ -138,7 +139,7 @@ describe.skipIf(!enabled)('history and deletions', () => {
     known.learnProfile(w.guest, w.guestLogin)
     const lines = issueEvents(rows, { login: (id) => known.login(id), createdBy: w.ana.login, createdAt: iso(issue.created_at) })
     expect(lines.map((l) => [l.by, l.change])).toEqual([
-      [w.ana.login, { kind: 'status', from: 'todo', to: 'done' }],
+      [w.ana.login, { kind: 'status', from: { id: st.todo, category: 'todo' }, to: { id: st.done, category: 'done' } }],
       [w.ana.login, { kind: 'title', from: 'Lines', to: 'Renamed' }],
       [w.bob.login, { kind: 'assignee', from: null, to: w.guestLogin }],
       [w.ana.login, { kind: 'team', from: `ENG-${issue.number}`, to: `DES-${moved.number}` }],

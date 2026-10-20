@@ -15,17 +15,18 @@ import { Picker, type PickerItem } from '@/components/Picker'
 import { archiveIssues, createLabel, deleteIssue, markRead, moveIssueToTeam, setFollowers, subscribe, updateIssue } from '@/data/actions'
 import { followers } from '@/data/notify'
 import { isClosed, isUnread } from '@/data/select'
+import { statusOfIssue } from '@/data/statuses'
 import { loadArchive } from '@/backend'
 import { findArchivedByRef, findByRef, issueRef, useData } from '@/data/store'
 import { Editor } from '@/editor/LazyEditor'
 import { useMedia } from '@/lib/useNarrow'
 import { cn } from '@/lib/utils'
-import { PRIORITY_NAMES, statusOf } from '@/model/status'
+import { PRIORITY_NAMES } from '@/model/status'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
-import { PriorityIcon, StatusIcon } from './icons'
+import { IssueStatusIcon, PriorityIcon, StatusIcon } from './icons'
 import { ArchivedIssuePage } from './ArchivedIssuePage'
 import { Comments } from './Comments'
 import { DueChip, DueDatePicker, EstimateIcon } from './DueDate'
@@ -33,7 +34,7 @@ import { estimateName, shortDate } from './format'
 import { PullRequests } from './PullRequests'
 import { SubIssues } from './SubIssues'
 import { TitleField } from './TitleField'
-import { estimateItems, priorityItems, statusItems, useLabelItems, useParentItems, usePeopleItems, useProjectItems } from './pickers'
+import { estimateItems, priorityItems, useLabelItems, useStatusItems, useParentItems, usePeopleItems, useProjectItems } from './pickers'
 
 function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -81,6 +82,8 @@ export function IssuePage() {
   const followerList = useMemo(() => (issue ? followers(issue, comments ?? [], people) : []), [issue, comments, people])
   const following = !!me && followerList.includes(me)
   const labelItems = useLabelItems()
+  const status = useData((s) => (issue ? statusOfIssue(issue, s.statuses) : undefined))
+  const statusItems = useStatusItems({ current: status ? [status.id] : [] })
   const projectItems = useProjectItems(issue?.team)
   const parentItems = useParentItems(issue)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -94,9 +97,9 @@ export function IssuePage() {
     <>
     <div className="flex flex-col gap-1">
       <Property label="Status">
-        <Picker placeholder="Change status…" items={statusItems} value={issue.status} onSelect={(status) => updateIssue(issue.id, { status })}>
+        <Picker placeholder="Change status…" items={statusItems} value={status?.id ?? ''} onSelect={(statusId) => updateIssue(issue.id, { statusId })}>
           <button type="button" className={pick}>
-            <StatusIcon status={issue.status} /> {statusOf(issue.status).name}
+            {status && <StatusIcon status={status} />} {status?.name}
           </button>
         </Picker>
       </Property>
@@ -234,7 +237,7 @@ export function IssuePage() {
         <div className="mx-auto max-w-3xl">
           {parent && (
             <Link href={`/issue/${issueRef(parent)}`} className="mb-3 inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-              <StatusIcon status={parent.status} /> Sub-issue of {issueRef(parent)} {parent.title}
+              <IssueStatusIcon issue={parent} /> Sub-issue of {issueRef(parent)} {parent.title}
             </Link>
           )}
           <div className="flex items-start gap-2">

@@ -2,19 +2,24 @@
  * Pure helpers that turn the store into what a list or board shows: filter, sort, group. No React, no store
  * access, so they are easy to test (tests/select.test.ts).
  */
-import type { Comment, Display, Filters, InboxItem, Issue, Member, Ordering, Person, Project, ReadState, Team } from '@/model/schema'
+import type { Comment, Display, Filters, InboxItem, Issue, Member, Ordering, Person, Project, ReadState, Status, Team } from '@/model/schema'
 import { followers } from './notify'
-import { PRIORITY_NAMES, PRIORITY_ORDER, STATUSES, TAB_GROUPS, statusOf, type IssueTab, type Priority } from '@/model/status'
+import { issueStatuses, matchesStatus, statusOfIssue } from './statuses'
+import { PRIORITY_NAMES, PRIORITY_ORDER, TAB_GROUPS, categoryOf, type IssueTab, type Priority } from '@/model/status'
 
-/** for the Subscribers filter: who follows an issue depends on its comments and on who is in the workspace */
+/**
+ * For the Subscribers filter: who follows an issue depends on its comments and on who is in the workspace. For the
+ * Status filter: which category each status belongs to (without them, only the categories count).
+ */
 export interface FollowContext {
   comments: Record<string, Comment[]>
   people: Record<string, Person>
+  statuses?: Record<string, Status>
 }
 
 export function matches(issue: Issue, f: Filters, ctx?: FollowContext): boolean {
   if (f.teams?.length && !f.teams.includes(issue.team)) return false
-  if (f.statuses?.length && !f.statuses.includes(issue.status)) return false
+  if (!matchesStatus(issue, f, ctx?.statuses ?? {})) return false
   if (f.assignees?.length && !f.assignees.includes(issue.assignee)) return false
   if (f.subscribers?.length && ctx) {
     const following = followers(issue, ctx.comments[issue.id] ?? [], ctx.people)
@@ -27,12 +32,12 @@ export function matches(issue: Issue, f: Filters, ctx?: FollowContext): boolean 
 }
 
 export function inTab(issue: Issue, tab: IssueTab): boolean {
-  return TAB_GROUPS[tab].includes(statusOf(issue.status).group)
+  return TAB_GROUPS[tab].includes(categoryOf(issue.status).group)
 }
 
 /** "completed" and "canceled" issues are hidden unless the display asks for them */
 export const isClosed = (issue: Issue) => {
-  const g = statusOf(issue.status).group
+  const g = categoryOf(issue.status).group
   return g === 'completed' || g === 'canceled'
 }
 
@@ -94,6 +99,8 @@ export interface Group {
 
 interface GroupCtx {
   people: Record<string, Person>
+  /** the workspace's statuses (grouping by status); without them, one group per category */
+  statuses?: Record<string, Status>
   projects: Record<string, Project>
   /** the page's team, if it has one: only its projects become extra groups */
   team?: string
@@ -103,7 +110,7 @@ interface GroupCtx {
 
 /**
  * Split issues into groups in display order. Grouping by status always shows every status the tab covers,
- * even empty ones, so there is somewhere to drop an issue.
+ * even empty ones, so there is somewhere to drop an issue; a hidden status only while an issue here has it.
  *
  * `everyGroup` (the board) adds a group for every other place an issue could go: statuses this tab leaves out
  * (marked `outside`), people with nothing assigned, open projects with nothing in them. The board shows empty ones
@@ -117,15 +124,27 @@ export function groupIssues(issues: Issue[], display: Display, ctx: GroupCtx, ta
     case 'none':
       return [{ key: 'all', value: null, title: 'All issues', issues: sorted }]
     case 'status': {
+      const statuses = ctx.statuses ?? {}
       const groups = TAB_GROUPS[tab]
-      const shown = (s: (typeof STATUSES)[number]) => groups.includes(s.group) && (display.showCompleted || (s.group !== 'completed' && s.group !== 'canceled'))
-      return STATUSES.filter((s) => everyGroup || shown(s)).map((s) => ({
-        key: s.id,
-        value: s.id,
-        title: s.name,
-        issues: sorted.filter((i) => i.status === s.id),
-        ...(!shown(s) && { outside: true }),
-      }))
+      const shown = (s: Status) => {
+        const g = categoryOf(s.category as Issue['status']).group
+        return groups.includes(g) && (display.showCompleted || (g !== 'completed' && g !== 'canceled'))
+      }
+      // an issue whose status isn't known goes with its category's default
+      const by = new Map<string, Issue[]>()
+      for (const i of sorted) {
+        const id = statusOfIssue(i, statuses).id
+        by.set(id, [...(by.get(id) ?? []), i])
+      }
+      return issueStatuses(statuses)
+        .filter((s) => (s.hidden ? by.has(s.id) : everyGroup || shown(s)))
+        .map((s) => ({
+          key: s.id,
+          value: s.id,
+          title: s.name,
+          issues: by.get(s.id) ?? [],
+          ...(!shown(s) && { outside: true }),
+        }))
     }
     case 'priority':
       return PRIORITY_ORDER.map((p: Priority) => ({
@@ -197,7 +216,7 @@ export function childIndex(issues: Record<string, Issue>): Map<string, ChildCoun
     if (!i.parent) continue
     const c = index.get(i.parent) ?? { done: 0, total: 0 }
     c.total++
-    if (statusOf(i.status).group === 'completed') c.done++
+    if (categoryOf(i.status).group === 'completed') c.done++
     index.set(i.parent, c)
   }
   childCache.set(issues, index)
@@ -206,8 +225,8 @@ export function childIndex(issues: Record<string, Issue>): Map<string, ChildCoun
 
 /** share of a project's issues that are done, 0..1 (canceled ones don't count either way) */
 export function projectProgress(projectId: string, issues: Issue[]): { done: number; total: number } {
-  const mine = issues.filter((i) => i.project === projectId && statusOf(i.status).group !== 'canceled')
-  return { done: mine.filter((i) => statusOf(i.status).group === 'completed').length, total: mine.length }
+  const mine = issues.filter((i) => i.project === projectId && categoryOf(i.status).group !== 'canceled')
+  return { done: mine.filter((i) => categoryOf(i.status).group === 'completed').length, total: mine.length }
 }
 
 /** not marked as read yet: not read on its own (`readAt`) and newer than everything marked read at once */

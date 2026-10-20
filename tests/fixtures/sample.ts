@@ -1,7 +1,7 @@
 /** A made-up workspace for tests: four people, two teams, a few issues, projects and views. */
 import { generateNKeysBetween } from 'fractional-indexing'
-import type { Issue, Label, Person, Project, Team, View } from '@/model/schema'
-import type { Priority, StatusId } from '@/model/status'
+import type { Issue, Label, Person, Project, Status, Team, View } from '@/model/schema'
+import { CATEGORIES, type IssueCategory, type Priority } from '@/model/status'
 import type { DataState } from '@/data/store'
 
 const at = (daysAgo: number) => new Date(Date.UTC(2026, 9, 6) - daysAgo * 86_400_000).toISOString()
@@ -12,6 +12,13 @@ const people: Person[] = [
   { login: 'bartek', githubId: 3, name: 'Bartek Nowak', avatarUrl: '' },
   { login: 'zosia', githubId: 4, name: 'Zosia Wiśniewska', avatarUrl: '' },
 ]
+
+/** the seven statuses every workspace starts with, one per category (ids as tests/support/fakeDb.ts makes them) */
+export const statusIdOf = (category: string) => `status-${category}`
+export const sampleStatuses = (): Record<string, Status> =>
+  Object.fromEntries(
+    CATEGORIES.map((c) => [statusIdOf(c.id), { id: statusIdOf(c.id), kind: 'issue', category: c.id, name: c.name, color: c.seed, position: 'a0', hidden: false }]),
+  )
 
 const labels: Label[] = [
   { id: 'bug', name: 'Bug', color: '#eb5757' },
@@ -50,7 +57,7 @@ const projects: Project[] = [
   },
 ]
 
-type Row = [team: string, title: string, status: StatusId, priority: Priority, assignee: string | null, labels: string[], project?: string, parent?: number]
+type Row = [team: string, title: string, status: IssueCategory, priority: Priority, assignee: string | null, labels: string[], project?: string, parent?: number]
 
 const rows: Row[] = [
   ['ENG', 'Simplify `Insights` graphs and move row detail into tooltips', 'in_review', 1, 'ania-k', ['insights'], 'p-insights'],
@@ -94,6 +101,7 @@ function buildIssues(): Issue[] {
       number: counters[team],
       title,
       status,
+      statusId: statusIdOf(status),
       priority,
       assignee,
       labels: labelIds,
@@ -155,6 +163,7 @@ export function sampleData(): DataState {
     people: byKey(people, (p) => p.login),
     members: {},
     labels: byKey(labels, (l) => l.id),
+    statuses: sampleStatuses(),
     teams: byKey(teams, (t) => t.key),
     archive: {},
     archiveLoaded: false,

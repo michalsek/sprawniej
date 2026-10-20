@@ -10,7 +10,7 @@ import { EmptyState } from '@/components/EmptyState'
 import { loadArchive } from '@/backend'
 import { issueRef, useData } from '@/data/store'
 import { shortDate } from '@/features/issues/format'
-import { StatusIcon } from '@/features/issues/icons'
+import { IssueStatusIcon } from '@/features/issues/icons'
 import { plain } from '@/lib/plain'
 import { TitleText } from '@/features/issues/TitleText'
 import { AUTO_ARCHIVE_MONTHS } from '@/model/schema'
@@ -74,7 +74,7 @@ export function ArchiveList({ team, left }: { team: string; left: React.ReactNod
               <li key={a.id}>
                 <Link href={`/issue/${issueRef(a)}`} className="flex h-11 items-center gap-3 rounded-md px-2 text-[15px] hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none sm:px-4">
                   <span className="hidden min-w-[4.75rem] shrink-0 whitespace-nowrap text-muted-foreground tabular-nums sm:inline">{issueRef(a)}</span>
-                  <StatusIcon status={a.status} />
+                  <IssueStatusIcon issue={a} />
                   <span className="min-w-0 truncate text-foreground/80">
                     <TitleText title={a.title} />
                   </span>

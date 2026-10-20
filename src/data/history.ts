@@ -4,10 +4,19 @@
  * the lines the issue page shows. Pure, so it's unit-tested (tests/history.test.ts).
  */
 import type { ArchivedIssue, Issue } from '@/model/schema'
-import { PRIORITY_IDS, STATUS_IDS, type Priority, type StatusId } from '@/model/status'
+import { PRIORITY_IDS, ISSUE_CATEGORIES, type Priority, type IssueCategory } from '@/model/status'
+
+/**
+ * A status in a history line: the workspace's status (`id`, from events since statuses came) and its category (when
+ * the event says: it does when the category changed, and older events say only that).
+ */
+export interface StatusRef {
+  id?: string
+  category?: IssueCategory
+}
 
 export type Change =
-  | { kind: 'status'; from: StatusId; to: StatusId }
+  | { kind: 'status'; from: StatusRef; to: StatusRef }
   | { kind: 'priority'; from: Priority; to: Priority }
   /** logins (an id nobody knows stays as it is) */
   | { kind: 'assignee'; from: string | null; to: string | null }
@@ -68,7 +77,7 @@ type Guard<T> = (x: unknown) => x is T
 
 const isText = (x: unknown): x is string => typeof x === 'string'
 const textOrNull = (x: unknown): x is string | null => x === null || typeof x === 'string'
-const isStatus = (x: unknown): x is StatusId => STATUS_IDS.some((s) => s === x)
+const isStatus = (x: unknown): x is IssueCategory => ISSUE_CATEGORIES.some((s) => s === x)
 const isPriority = (x: unknown): x is Priority => PRIORITY_IDS.some((p) => p === x)
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/
 const dayOrNull = (x: unknown): x is string | null => x === null || (typeof x === 'string' && DATE_ONLY.test(x))
@@ -104,8 +113,11 @@ export function changesOf(changes: unknown, login: (id: string) => string | unde
   if (team) out.push({ kind: 'team', from: team[0], to: team[1] })
   const title = pair(c.title, textOrNull, textOrNull)
   if (title) out.push({ kind: 'title', from: title[0] ?? '', to: title[1] ?? '' })
+  // "statusId" since statuses came, with "status" too when the category changed; older events have only "status"
   const status = pair(c.status, isStatus, isStatus)
-  if (status) out.push({ kind: 'status', from: status[0], to: status[1] })
+  const statusId = pair(c.statusId, textOrNull, textOrNull)
+  const ref = (n: 0 | 1): StatusRef => ({ ...(statusId?.[n] && { id: statusId[n] }), ...(status && { category: status[n] }) })
+  if (statusId || status) out.push({ kind: 'status', from: ref(0), to: ref(1) })
   const priority = pair(c.priority, isPriority, isPriority)
   if (priority) out.push({ kind: 'priority', from: priority[0], to: priority[1] })
   const assignee = pair(c.assignee, textOrNull, textOrNull)
@@ -154,6 +166,10 @@ function combine(a: Change, b: Change): Change | null | undefined {
     }
     case 'description':
       return a
+    case 'status': {
+      const merged: Change = { kind: 'status', from: a.from, to: (b as typeof a).to }
+      return sameStatus(merged.from, merged.to) ? null : merged
+    }
     case 'archived':
     case 'restored':
       return undefined
@@ -163,6 +179,12 @@ function combine(a: Change, b: Change): Change | null | undefined {
       return 'from' in merged && merged.from === merged.to ? null : merged
     }
   }
+}
+
+/** the same status, as far as two references tell: by id when both have one, else by category when both say */
+function sameStatus(a: StatusRef, b: StatusRef): boolean {
+  if (a.id && b.id) return a.id === b.id
+  return !!a.category && a.category === b.category
 }
 
 /** labels the creator put on while creating the issue (they're saved a moment after it) */

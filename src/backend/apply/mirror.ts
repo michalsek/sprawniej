@@ -18,6 +18,7 @@ export interface Mirror {
   /** team_id → profile_id → row */
   team_members: Rec<Rec<Row<'team_members'>>>
   labels: Rec<Row<'labels'>>
+  statuses: Rec<Row<'statuses'>>
   projects: Rec<Row<'projects'>>
   /** project_id → team_id → row */
   project_teams: Rec<Rec<Row<'project_teams'>>>
@@ -45,6 +46,7 @@ export const emptyMirror = (): Mirror => ({
   teams: {},
   team_members: {},
   labels: {},
+  statuses: {},
   projects: {},
   project_teams: {},
   issues: {},

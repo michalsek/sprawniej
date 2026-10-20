@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { INBOX_KEEP } from '@/data/actions'
 import { AUTO_ARCHIVE_MONTHS, inboxItemSchema, PROJECT_STATUSES, TEAM_KEY_PATTERN } from '@/model/schema'
-import { PRIORITY_IDS, STATUS_IDS, STATUSES } from '@/model/status'
+import { PRIORITY_IDS, ISSUE_CATEGORIES, CATEGORIES } from '@/model/status'
 
 // The database checks copy the fixed lists from src/model. Each copy has a marker comment ("-- @list issue-statuses")
 // on the line above it; this test reads the line after every marker and compares.
@@ -33,13 +33,26 @@ const lists = (name: string) => {
   return found
 }
 
-const byGroup = (...groups: string[]) => STATUSES.filter((s) => groups.includes(s.group)).map((s) => s.id)
+const byGroup = (...groups: string[]) => CATEGORIES.filter((s) => groups.includes(s.group)).map((s) => s.id)
 
 describe('database lists match src/model', () => {
-  test('issue statuses (issues and inbox)', () => {
+  test('issue categories (issues, inbox and the statuses table)', () => {
     const found = lists('issue-statuses')
-    expect(found.length).toBe(2)
-    for (const list of found) expect(list).toEqual([...STATUS_IDS])
+    expect(found.length).toBe(3)
+    for (const list of found) expect(list).toEqual([...ISSUE_CATEGORIES])
+  })
+
+  test('the statuses every workspace starts with: one per category, named and coloured as the app shows them', () => {
+    const [line] = marked('seed', 'issue-statuses')
+    const triples = [...line.matchAll(/\('([^']*)', '([^']*)', '([^']*)'\)/g)].map((m) => [m[1], m[2], m[3]])
+    expect(triples).toEqual(CATEGORIES.map((c) => [c.id, c.name, c.seed]))
+    // and the seed colours are the theme's status colours, so nothing looks different
+    const css = readFileSync(join(import.meta.dir, '..', 'src', 'index.css'), 'utf8')
+    for (const c of CATEGORIES) {
+      const name = /var\((--[\w-]+)\)/.exec(c.color)?.[1]
+      const value = new RegExp(`${name}:\\s*(#[0-9a-f]{6})`).exec(css)?.[1]
+      expect({ c: c.id, value }).toEqual({ c: c.id, value: c.seed })
+    }
   })
 
   test('project statuses', () => {

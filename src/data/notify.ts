@@ -3,13 +3,13 @@
  * - assigned: the new assignee
  * - mentioned: anyone newly @mentioned in a description or comment
  * - commented: everyone following the issue
- * - status: everyone following the issue, when its status changes
+ * - status: everyone following the issue, when its status changes (also to another status of the same category)
  * People follow an issue they created, are assigned to, commented on or were mentioned in, and any issue they
  * subscribed to; unsubscribing stops all of that. Nobody hears about their own changes, and only people in the
  * workspace get notes (not people from Linear who haven't joined).
  */
 import { isGuest, type Comment, type InboxItem, type Issue, type Person } from '@/model/schema'
-import type { StatusId } from '@/model/status'
+import type { IssueCategory } from '@/model/status'
 import { mentionedLogins, newMentions } from './mentions'
 
 /** people who follow an issue without asking: its creator, assignee, commenters and everyone mentioned in it */
@@ -41,7 +41,10 @@ export interface Note {
   to: string
   type: InboxItem['type']
   comment?: string
-  status?: StatusId
+  /** the new status's category */
+  status?: IssueCategory
+  /** the new status ('' or missing: not known, the database takes the issue's) */
+  statusId?: string
 }
 
 function keep(notes: Note[], actor: string, people: Record<string, Person>): Note[] {
@@ -62,10 +65,11 @@ export function issueNotes(before: Issue | null, after: Issue, actor: string, pe
   if (after.description !== before?.description) {
     for (const to of newMentions(before?.description ?? '', after.description, people)) notes.push({ to, type: 'mentioned' })
   }
-  if (before && before.status !== after.status) {
+  if (before && (before.status !== after.status || before.statusId !== after.statusId)) {
     // a new assignee already hears about it being theirs
     const told = new Set(notes.filter((n) => n.type === 'assigned').map((n) => n.to))
-    for (const to of followers(after, comments, people)) if (!told.has(to)) notes.push({ to, type: 'status', status: after.status })
+    const status = { status: after.status, ...(after.statusId && { statusId: after.statusId }) }
+    for (const to of followers(after, comments, people)) if (!told.has(to)) notes.push({ to, type: 'status', ...status })
   }
   return keep(notes, actor, people)
 }

@@ -3,9 +3,9 @@
  * importing each other.
  */
 import { plainName as plain } from '@/lib/plain'
-import { STATUSES, type StatusId } from '@/model/status'
+import { CATEGORIES, type IssueCategory } from '@/model/status'
 
-const STATE_TYPES: Record<string, StatusId> = {
+const STATE_TYPES: Record<string, IssueCategory> = {
   triage: 'backlog',
   backlog: 'backlog',
   unstarted: 'todo',
@@ -15,7 +15,7 @@ const STATE_TYPES: Record<string, StatusId> = {
 }
 
 /** by name first ("In Review"), then by Linear's kind of state */
-export function mapStatus(state: { name: string; type: string }): StatusId {
+export function mapStatus(state: { name: string; type: string }): IssueCategory {
   const name = plain(state.name.replace(/cancelled/i, 'canceled'))
-  return STATUSES.find((s) => plain(s.name) === name)?.id ?? STATE_TYPES[state.type] ?? 'backlog'
+  return CATEGORIES.find((s) => plain(s.name) === name)?.id ?? STATE_TYPES[state.type] ?? 'backlog'
 }

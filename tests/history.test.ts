@@ -14,12 +14,31 @@ describe('issue history', () => {
   test('a change that came through a pull request says which one; a link elsewhere is left out', () => {
     const pr = { repo: 'acme/web', number: 12, url: 'https://github.com/acme/web/pull/12' }
     const [line] = issueEvents([row(1, 1, 'pb', { status: ['in_progress', 'in_review'], via: { pullRequest: pr } })], ctx)
-    expect(line).toEqual({ id: 1, at: at(1), by: 'bob', change: { kind: 'status', from: 'in_progress', to: 'in_review' }, via: pr })
+    expect(line).toEqual({ id: 1, at: at(1), by: 'bob', change: { kind: 'status', from: { category: 'in_progress' }, to: { category: 'in_review' } }, via: pr })
     const elsewhere = { pullRequest: { ...pr, url: 'https://evil.example/pull/12' } }
     expect(issueEvents([row(1, 1, 'pb', { status: ['todo', 'done'], via: elsewhere })], ctx)[0].via).toBeUndefined()
     // folded into the same person's change a moment before, it keeps the pull request
     const folded = issueEvents([row(1, 1, 'pb', { status: ['todo', 'in_progress'] }), row(2, 1.5, 'pb', { status: ['in_progress', 'in_review'], via: { pullRequest: pr } })], ctx)
-    expect(folded).toEqual([{ id: 1, at: at(1.5), by: 'bob', change: { kind: 'status', from: 'todo', to: 'in_review' }, via: pr }])
+    expect(folded).toEqual([{ id: 1, at: at(1.5), by: 'bob', change: { kind: 'status', from: { category: 'todo' }, to: { category: 'in_review' } }, via: pr }])
+  })
+
+  test('statuses: the status and, when the category changed, the category; older events have only the category', () => {
+    const change = (changes: unknown) => issueEvents([row(1, 1, 'pa', changes)], ctx)[0]?.change
+    expect(change({ status: ['todo', 'in_progress'], statusId: ['s-todo', 's-testing'] })).toEqual({ kind: 'status', from: { id: 's-todo', category: 'todo' }, to: { id: 's-testing', category: 'in_progress' } })
+    expect(change({ statusId: ['s-testing', 's-progress'] })).toEqual({ kind: 'status', from: { id: 's-testing' }, to: { id: 's-progress' } })
+    expect(change({ status: ['todo', 'done'] })).toEqual({ kind: 'status', from: { category: 'todo' }, to: { category: 'done' } })
+    // something unreadable is left out
+    expect(change({ statusId: [1, 2] })).toBeUndefined()
+  })
+
+  test('status moves fold by status: there and back within a category leaves nothing', () => {
+    const lines = (rows: EventRow[]) => issueEvents(rows, ctx).map((e) => e.change)
+    expect(lines([row(1, 1, 'pa', { statusId: ['s-progress', 's-testing'] }), row(2, 1.5, 'pa', { statusId: ['s-testing', 's-progress'] })])).toEqual([])
+    expect(lines([row(1, 1, 'pa', { status: ['todo', 'in_progress'], statusId: ['s-todo', 's-progress'] }), row(2, 1.5, 'pa', { statusId: ['s-progress', 's-testing'] })])).toEqual([
+      { kind: 'status', from: { id: 's-todo', category: 'todo' }, to: { id: 's-testing' } },
+    ])
+    // an old line (only the category) and a new one compare by category
+    expect(lines([row(1, 1, 'pa', { status: ['todo', 'done'] }), row(2, 1.5, 'pa', { status: ['done', 'todo'], statusId: ['s-done', 's-todo'] })])).toEqual([])
   })
 
   test('one line per field, in the order the page shows them, whatever order they were stored in', () => {
@@ -28,7 +47,7 @@ describe('issue history', () => {
 
   test('the same person changing a field twice in a row reads as one change', () => {
     const folded = issueEvents([row(1, 1, 'pa', { status: ['todo', 'in_progress'] }), row(2, 2, 'pa', { status: ['in_progress', 'done'] })], ctx)
-    expect(folded).toEqual([{ id: 1, at: at(2), by: 'ana', change: { kind: 'status', from: 'todo', to: 'done' } }])
+    expect(folded).toEqual([{ id: 1, at: at(2), by: 'ana', change: { kind: 'status', from: { category: 'todo' }, to: { category: 'done' } } }])
     const apart = issueEvents([row(1, 1, 'pa', { status: ['todo', 'in_progress'] }), row(2, 4, 'pa', { status: ['in_progress', 'done'] })], ctx)
     expect(apart).toHaveLength(2)
   })
@@ -119,7 +138,7 @@ describe('issue history', () => {
 
 describe('when the history has something new', () => {
   const issue: Issue = {
-    id: 'i1', team: 'ENG', number: 3, title: 'Charts', description: 'Old', status: 'todo', priority: 0, assignee: null, labels: ['a', 'b'],
+    id: 'i1', team: 'ENG', number: 3, title: 'Charts', description: 'Old', status: 'todo', statusId: 's-todo', priority: 0, assignee: null, labels: ['a', 'b'],
     project: null, parent: null, sortOrder: 'a0', createdBy: 'ana', createdAt: at(0), updatedAt: at(0),
   }
   const sig = historySignature(issue)

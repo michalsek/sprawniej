@@ -6,7 +6,7 @@ import { issueNotes } from '@/data/notify'
 import { withoutCode } from '@/data/mentions'
 import type { Comment, Issue, Person } from '@/model/schema'
 import { TEAM_KEY } from '@/model/schema'
-import type { StatusId } from '@/model/status'
+import type { IssueCategory } from '@/model/status'
 
 // ---------- the signature ----------
 
@@ -49,9 +49,9 @@ export function findRefs(pr: { branch?: string | null; title?: string | null; bo
 // ---------- where they go ----------
 
 export interface Move {
-  to: StatusId
+  to: IssueCategory
   /** an issue moves only from one of these: nothing goes backwards */
-  from: StatusId[]
+  from: IssueCategory[]
 }
 
 export const TO_REVIEW: Move = { to: 'in_review', from: ['backlog', 'todo', 'in_progress'] }
@@ -103,7 +103,7 @@ export interface LookupIssue {
   id: string
   ref: string
   former_refs: string[]
-  status: StatusId
+  status: IssueCategory
   created_by: string | null
   assignee_id: string | null
   description: string
@@ -122,7 +122,7 @@ export interface Lookup {
 }
 
 /** the move for each issue that will move, with the ref the pull request used for it */
-export function movesFor(issues: LookupIssue[], refs: string[], move: Move): { issue: string; ref: string; from: StatusId[]; to: StatusId }[] {
+export function movesFor(issues: LookupIssue[], refs: string[], move: Move): { issue: string; ref: string; from: IssueCategory[]; to: IssueCategory }[] {
   const out = []
   for (const i of issues) {
     if (!move.from.includes(i.status)) continue
@@ -138,14 +138,14 @@ export interface StatusNote {
   issue: string
   /** a profile id */
   to: string
-  status: StatusId
+  status: IssueCategory
 }
 
 /**
  * The Inbox notes for an issue moving to `to`, by the same rules as the app (src/data/notify.ts): everyone following
  * it hears about it, except whoever moved it.
  */
-export function notesFor(issue: LookupIssue, to: StatusId, actor: string, members: Lookup['people']): StatusNote[] {
+export function notesFor(issue: LookupIssue, to: IssueCategory, actor: string, members: Lookup['people']): StatusNote[] {
   const loginOf = new Map(members.map((p) => [p.id, p.login]))
   const idOf = new Map(members.map((p) => [p.login, p.id]))
   // someone who left keeps their profile id here: no login, so no note
@@ -161,6 +161,8 @@ export function notesFor(issue: LookupIssue, to: StatusId, actor: string, member
     title: '',
     description: issue.description,
     status: issue.status,
+    // the categories decide here: GitHub moves an issue to a category, and it lands on that one's default status
+    statusId: '',
     priority: 0,
     assignee: login(issue.assignee_id),
     labels: [],

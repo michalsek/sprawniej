@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { chipState } from '@/backend/status'
-import { statusOf, type StatusId } from '@/model/status'
+import { categoryOf, type IssueCategory } from '@/model/status'
 
 const up = { online: true, channelsUp: true, signedIn: true, failing: false }
 
@@ -19,8 +19,8 @@ describe('the save chip', () => {
   })
 })
 
-describe('statuses', () => {
-  test('a status this app does not know reads as Backlog instead of breaking the screen', () => {
-    expect(statusOf('blocked' as StatusId)).toMatchObject({ id: 'backlog', group: 'backlog' })
+describe('categories', () => {
+  test('a category this app does not know reads as Backlog instead of breaking the screen', () => {
+    expect(categoryOf('blocked' as IssueCategory)).toMatchObject({ id: 'backlog', group: 'backlog' })
   })
 })

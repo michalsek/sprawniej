@@ -20,7 +20,7 @@ describe('people from Linear who haven’t joined', () => {
   test('follow and can be assigned, but get no inbox notes', () => {
     const guest: Person = { login: '~jan', githubId: 0, name: 'Jan', avatarUrl: '' }
     const all = { ...people, '~jan': guest }
-    const issue = { id: 'i', team: 'ENG', number: 1, title: 't', description: '', status: 'todo', priority: 0, assignee: '~jan', labels: [], project: null, parent: null, sortOrder: 'a0', createdBy: 'ana', createdAt: 'x', updatedAt: 'x', completedAt: null } as Issue
+    const issue = { id: 'i', team: 'ENG', number: 1, title: 't', description: '', status: 'todo', statusId: 's-todo', priority: 0, assignee: '~jan', labels: [], project: null, parent: null, sortOrder: 'a0', createdBy: 'ana', createdAt: 'x', updatedAt: 'x', completedAt: null } as Issue
     expect(followers(issue, [], all)).toContain('~jan')
     expect(issueNotes(null, issue, 'bob', all)).toEqual([]) // assigned, but has no inbox
   })
@@ -49,7 +49,7 @@ describe('mentions', () => {
 
 describe('notes', () => {
   const base: Issue = {
-    id: 'i1', team: 'ENG', number: 1, title: 't', description: '', status: 'todo', priority: 0, assignee: null, labels: [],
+    id: 'i1', team: 'ENG', number: 1, title: 't', description: '', status: 'todo', statusId: 's-todo', priority: 0, assignee: null, labels: [],
     project: null, parent: null, sortOrder: 'a0', createdBy: 'bob', createdAt: '', updatedAt: '',
   }
   test('assigning someone tells them, assigning yourself tells nobody', () => {
@@ -57,9 +57,14 @@ describe('notes', () => {
     expect(issueNotes(base, { ...base, assignee: 'ana' }, 'ana', people)).toEqual([])
   })
   test('a status change tells the followers once, never the person who made it', () => {
-    expect(issueNotes({ ...base, assignee: 'bob' }, { ...base, assignee: 'bob', status: 'done' }, 'ana', people)).toEqual([{ to: 'bob', type: 'status', status: 'done' }])
-    expect(issueNotes(base, { ...base, status: 'in_progress' }, 'ana', people)).toEqual([{ to: 'bob', type: 'status', status: 'in_progress' }])
-    expect(issueNotes(base, { ...base, status: 'in_progress' }, 'bob', people)).toEqual([])
+    expect(issueNotes({ ...base, assignee: 'bob' }, { ...base, assignee: 'bob', status: 'done', statusId: 's-done' }, 'ana', people)).toEqual([{ to: 'bob', type: 'status', status: 'done', statusId: 's-done' }])
+    expect(issueNotes(base, { ...base, status: 'in_progress', statusId: 's-progress' }, 'ana', people)).toEqual([{ to: 'bob', type: 'status', status: 'in_progress', statusId: 's-progress' }])
+    expect(issueNotes(base, { ...base, status: 'in_progress', statusId: 's-progress' }, 'bob', people)).toEqual([])
+  })
+  test('a move to another status of the same category is a status change too, naming the status', () => {
+    expect(issueNotes(base, { ...base, statusId: 's-ready' }, 'ana', people)).toEqual([{ to: 'bob', type: 'status', status: 'todo', statusId: 's-ready' }])
+    // a status not known yet: only the category (the database takes the issue's own)
+    expect(issueNotes(base, { ...base, status: 'done', statusId: '' }, 'ana', people)).toEqual([{ to: 'bob', type: 'status', status: 'done' }])
   })
   test('followers: creator, assignee, commenters and mentioned people, plus subscribers, minus unsubscribed', () => {
     const c = { id: 'c1', issue: 'i1', author: 'cy', createdAt: '', body: 'ask @ana' }
@@ -72,8 +77,8 @@ describe('notes', () => {
     expect(followLists(base, [], people, ['cy'])).toEqual({ subscribers: ['cy'], unsubscribed: ['bob'] })
   })
   test('moving to a new assignee tells them once (assigned), not twice', () => {
-    const notes = issueNotes(base, { ...base, assignee: 'cy', status: 'in_progress' }, 'ana', people)
-    expect(notes).toEqual([{ to: 'cy', type: 'assigned' }, { to: 'bob', type: 'status', status: 'in_progress' }])
+    const notes = issueNotes(base, { ...base, assignee: 'cy', status: 'in_progress', statusId: 's-progress' }, 'ana', people)
+    expect(notes).toEqual([{ to: 'cy', type: 'assigned' }, { to: 'bob', type: 'status', status: 'in_progress', statusId: 's-progress' }])
   })
 })
 

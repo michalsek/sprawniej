@@ -40,9 +40,10 @@ import {
 } from '@/backend/workspaces'
 import { useSession } from '@/session'
 import { canLeave, myWho, ruleFor, whoIs } from './roles'
-import type { Comment, Display, Filters, Issue, Label, Project, Team, View } from '@/model/schema'
+import type { Comment, Display, Filters, Issue, Label, Project, Status, Team, View } from '@/model/schema'
 import { AUTO_ARCHIVE_MONTHS, handleOf } from '@/model/schema'
-import { statusOf } from '@/model/status'
+import { LABEL_COLORS, STATUS_COLORS } from '@/model/colors'
+import { categoryOf, CATEGORIES, isIssueCategory, ISSUE_CATEGORIES, type StatusKind } from '@/model/status'
 import type { TeamDraft } from '@/model/teamDraft'
 import { equal } from '@/lib/equal'
 import { clearUnsent, makeThemeSaver, markUnsent, readUnsent, showTheme, useTheme, writeDevice, type ThemeChoice } from '@/lib/theme'
@@ -51,6 +52,7 @@ import { cleanHandle, HANDLE_WORDS, handleProblem } from './handles'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { changedOnly, keyBetween, keysBetween } from './ordering'
 import { isAdmin, isUnread, ownerCount } from './select'
+import { canHide, pickStatus, statusesOf, statusNamed } from './statuses'
 import { issueRef, useData } from './store'
 
 const now = () => new Date().toISOString()
@@ -99,7 +101,7 @@ export function noteRows(issueId: string, notes: readonly Note[], c: Ctx): NoteR
   return notes.flatMap((n) => {
     const to = c.registry.profileId(n.to)
     if (!to) return []
-    return [{ id: ulid(), workspace_id: c.workspaceId, recipient_id: to, type: n.type, issue_id: issueId, comment_id: n.comment ?? null, status: n.status ?? null }]
+    return [{ id: ulid(), workspace_id: c.workspaceId, recipient_id: to, type: n.type, issue_id: issueId, comment_id: n.comment ?? null, status: n.status ?? null, status_id: n.statusId || null }]
   })
 }
 
@@ -115,9 +117,13 @@ export function followNumber(team: string, from: number, to: number, loc: Pick<L
 
 // ---------- issues ----------
 
-/** fields a person can change (Pick, not Omit: Omit drops named keys on passthrough schemas) */
+/**
+ * fields a person can change (Pick, not Omit: Omit drops named keys on passthrough schemas). Pick a status with
+ * `statusId`; `status` alone (a category) means that category's default status, and nothing when the issue is in that
+ * category already.
+ */
 export type IssuePatch = Partial<
-  Pick<Issue, 'title' | 'description' | 'status' | 'priority' | 'assignee' | 'labels' | 'project' | 'parent' | 'sortOrder' | 'duplicateOf' | 'dueDate' | 'estimate'>
+  Pick<Issue, 'title' | 'description' | 'status' | 'statusId' | 'priority' | 'assignee' | 'labels' | 'project' | 'parent' | 'sortOrder' | 'duplicateOf' | 'dueDate' | 'estimate'>
 >
 
 /** an issue's fields as columns (labels are rows of their own: labelChanges) */
@@ -126,6 +132,7 @@ export function issueColumns(patch: IssuePatch, c: Pick<WriteContext, 'registry'
   if (patch.title !== undefined) out.title = patch.title
   if (patch.description !== undefined) out.description = patch.description
   if (patch.status !== undefined) out.status = patch.status
+  if (patch.statusId) out.status_id = patch.statusId
   if (patch.priority !== undefined) out.priority = patch.priority
   if (patch.assignee !== undefined) {
     const id = pid(c, patch.assignee)
@@ -172,11 +179,26 @@ export function followerChanges(issue: Pick<Issue, 'id' | 'subscribers' | 'unsub
   return out
 }
 
-export function updateIssue(id: string, patch: IssuePatch): void {
+/**
+ * A status picked for an issue, as fields: its id and its category (sent only when the category changes, for older
+ * versions; the database follows status_id either way). A category alone is its default status; picking the category
+ * the issue has already changes nothing. While the workspace's statuses aren't known, only the category is sent.
+ */
+export function statusPatch(old: Pick<Issue, 'status' | 'statusId'>, patch: IssuePatch, statuses: Record<string, Status>): IssuePatch {
+  if (patch.statusId === undefined && patch.status === undefined) return patch
+  const { statusId, status, ...rest } = patch
+  if (statusId === undefined && status === old.status) return rest
+  const picked = pickStatus(statusId ?? status ?? '', statuses)
+  if (!picked) return rest
+  return { ...rest, status: picked.status, ...(picked.statusId !== undefined && { statusId: picked.statusId }) }
+}
+
+export function updateIssue(id: string, asked: IssuePatch): void {
   const c = context()
   const s = useData.getState()
   const old = s.issues[id]
   if (!c || !s.me || !old) return
+  const patch = statusPatch(old, asked, s.statuses)
   // labels as a set, only ones that exist (a label just made may be picked twice)
   const labels = patch.labels && [...new Set(patch.labels)].filter((l) => s.labels[l])
   const next: Issue = { ...old, ...patch, ...(labels && { labels }) }
@@ -186,8 +208,9 @@ export function updateIssue(id: string, patch: IssuePatch): void {
   const fields = issueColumns(changed, c)
   const changes: AnyChange[] = []
   if (Object.keys(fields).length) {
+    // completed_at follows the category: Done to another done status keeps it
     const status = fields.status !== undefined && fields.status !== old.status
-    const done = (st: string) => statusOf(st as Issue['status']).group === 'completed'
+    const done = (st: string) => categoryOf(st as Issue['status']).group === 'completed'
     changes.push(upd('issues', { id }, fields, { updated_at: now(), ...(status && { completed_at: done(next.status) ? now() : null }) }))
   }
   if (labels) changes.push(...labelChanges(id, old.labels, labels, c))
@@ -251,6 +274,8 @@ export interface NewIssue {
   team: string
   title: string
   description?: string
+  /** the status to start in; or `status`, a category, for its default status (Todo's when neither is given) */
+  statusId?: string
   status?: Issue['status']
   priority?: Issue['priority']
   assignee?: string | null
@@ -289,14 +314,17 @@ export function createIssue(input: NewIssue): Issue {
   const first = inTeam.reduce<string | null>((min, i) => (min === null || i.sortOrder < min ? i.sortOrder : min), null)
   const parent = input.parent ? s.issues[input.parent] : undefined
   const at = now()
-  const completed = statusOf(input.status ?? 'todo').group === 'completed'
+  const picked = pickStatus(input.statusId ?? input.status ?? 'todo', s.statuses) ?? pickStatus(input.status ?? 'todo', s.statuses) ?? { status: 'todo' as const }
+  const completed = categoryOf(picked.status).group === 'completed'
   const issue: Issue = {
     id: ulid(),
     team: input.team,
     number,
     title: input.title.trim(),
     description: input.description ?? '',
-    status: input.status ?? 'todo',
+    status: picked.status,
+    // while the workspace's statuses aren't known, the database gives it the category's default
+    statusId: picked.statusId ?? '',
     priority: input.priority ?? 0,
     assignee: input.assignee ?? null,
     labels: [...new Set(input.labels ?? [])].filter((l) => s.labels[l]),
@@ -324,6 +352,7 @@ export function createIssue(input: NewIssue): Issue {
     title: issue.title,
     description: issue.description,
     status: issue.status,
+    ...(issue.statusId && { status_id: issue.statusId }),
     priority: issue.priority,
     assignee_id: pid(c, issue.assignee) ?? null,
     project_id: issue.project,
@@ -520,8 +549,7 @@ export const INBOX_KEEP = { read: 30 * DAY, unread: 90 * DAY }
 
 // ---------- labels ----------
 
-/** a calm set of label colours; new labels take the next one */
-export const LABEL_COLORS = ['#eb5757', '#f2994a', '#f2c94c', '#4cb782', '#26b5ce', '#5e6ad2', '#bb87fc', '#f7a8d8', '#95a2b3']
+export { LABEL_COLORS } from '@/model/colors'
 
 /** two labels with one name can't be told apart in pickers and filters */
 const labelNamed = (labels: Record<string, Label>, name: string, but?: string) =>
@@ -580,6 +608,73 @@ export function deleteLabel(id: string) {
     after: viewsWithout(s.views, 'labels', id),
     cascade: all.filter((i) => i.labels.includes(id)).map((i) => del('issue_labels', { issue_id: i.id, label_id: id })),
   })
+}
+
+// ---------- statuses ----------
+// Every member may add, rename, recolour, reorder and hide the workspace's statuses (like labels). They are never
+// deleted: hiding keeps them on the things that have them, and each category keeps at least one shown status (the
+// database refuses otherwise, also when two people hide the last two at once).
+
+/** the categories each kind of status belongs to */
+const KIND_CATEGORIES: Record<StatusKind, readonly string[]> = { issue: ISSUE_CATEGORIES, project: [] }
+
+/** a category's colour for its new statuses: the colour its first status started with */
+const seedColor = (kind: StatusKind, category: string) => (kind === 'issue' && isIssueCategory(category) ? CATEGORIES.find((c) => c.id === category)!.seed : STATUS_COLORS[0])
+
+/**
+ * A new status at the end of its category, in the category's colour. A name another status of this kind has (case
+ * aside) gives that one back instead (two can't be told apart in pickers and filters). Returns undefined for a
+ * category the kind doesn't have, or an empty name.
+ */
+export function createStatus(kind: StatusKind, category: string, name: string): Status | undefined {
+  const c = context()
+  const s = useData.getState()
+  const typed = name.trim()
+  if (!typed || typed.length > 40 || !KIND_CATEGORIES[kind].includes(category)) return undefined
+  const existing = statusNamed(s.statuses, kind, typed)
+  if (existing) return existing
+  const last = statusesOf(s.statuses, kind).filter((x) => x.category === category).at(-1)
+  const status: Status = { id: ulid(), kind, category, name: typed, color: seedColor(kind, category), position: keyBetween(last?.position ?? null, null), hidden: false }
+  if (c) {
+    const { id, color, position, hidden } = status
+    write({ changes: [ins('statuses', { id }, { id, workspace_id: c.workspaceId, kind, category, name: typed, color, position, hidden }, { extra: {} })] })
+  }
+  return useData.getState().statuses[status.id] ?? status
+}
+
+/**
+ * Rename, recolour, hide or show a status; only what changed is sent. An empty or taken name changes nothing, and
+ * neither does hiding the last shown status of a category.
+ */
+export function updateStatus(id: string, patch: Partial<Pick<Status, 'name' | 'color' | 'hidden'>>) {
+  const c = context()
+  const statuses = useData.getState().statuses
+  const status = statuses[id]
+  if (!c || !status) return
+  const fields: Writable<'statuses', 'update'> = {}
+  const name = patch.name?.trim()
+  if (name !== undefined && name !== status.name) {
+    if (!name || name.length > 40 || statusNamed(statuses, status.kind, name, id)) return
+    fields.name = name
+  }
+  if (patch.color !== undefined && patch.color !== status.color) fields.color = patch.color
+  if (patch.hidden !== undefined && patch.hidden !== status.hidden) {
+    if (patch.hidden && !canHide(status, statuses)) return
+    fields.hidden = patch.hidden
+  }
+  const changes = updated('statuses', { id }, fields)
+  if (changes.length) write({ changes })
+}
+
+/** Put a status between two others of its category (ids; null = first or last). Only the moved status changes. */
+export function moveStatus(id: string, place: { prev: string | null; next: string | null }) {
+  const c = context()
+  const statuses = useData.getState().statuses
+  const status = statuses[id]
+  if (!c || !status) return
+  const at = (x: string | null) => (x && statuses[x]?.category === status.category && statuses[x].kind === status.kind ? statuses[x].position : null)
+  const position = keyBetween(at(place.prev), at(place.next))
+  if (position !== status.position) write({ changes: [upd('statuses', { id }, { position })] })
 }
 
 // ---------- views ----------

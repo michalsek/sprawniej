@@ -24,7 +24,8 @@ export function keysBetween(prev: string | null, next: string | null, n: number)
 export function groupPatch(grouping: Grouping, value: string | number | null): IssuePatch {
   switch (grouping) {
     case 'status':
-      return { status: value as Issue['status'] }
+      // a status id (or, while the workspace's statuses aren't known, a category: updateIssue tells them apart)
+      return { statusId: value as string }
     case 'priority':
       return { priority: value as Issue['priority'] }
     case 'assignee':

@@ -11,7 +11,7 @@
  *           { labels: { and: [{ or: [{ name: { eq: 'AI' } }, { parent: { name: { eq: 'AI' } } }] }] } }] }
  */
 import type { Filters } from '@/model/schema'
-import { STATUSES, type StatusGroup, type StatusId } from '@/model/status'
+import { CATEGORIES, type StatusGroup, type IssueCategory } from '@/model/status'
 import { mapStatus } from './linearStatus'
 import type { LLabel, LState } from './linearApi'
 
@@ -162,7 +162,7 @@ export function mapViewFilter(filterData: unknown, ctx: FilterContext): MappedFi
               const state = [...ctx.states.values()].find((s) => s.name.toLowerCase() === v.toLowerCase())
               return mapStatus(state ?? { name: v, type: '' })
             }),
-          type: (vals) => convert<StatusId>(vals, (v) => (typeof v === 'string' && GROUPS[v] ? STATUSES.filter((s) => s.group === GROUPS[v]).map((s) => s.id) : undefined)),
+          type: (vals) => convert<IssueCategory>(vals, (v) => (typeof v === 'string' && GROUPS[v] ? CATEGORIES.filter((s) => s.group === GROUPS[v]).map((s) => s.id) : undefined)),
         }),
       ),
     assignee: (f) => field('assignees', f, byProp({ id: personIds }, noneProp)),

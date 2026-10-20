@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { closeChannels, enabled, expectDenied, getWorld, newIssue, newTeam, newWorkspace, ok, ulid, type World } from './support'
+import { closeChannels, enabled, expectDenied, getWorld, issueInsert, newIssue, newTeam, newWorkspace, ok, ulid, type World } from './support'
 
 describe.skipIf(!enabled)('issue numbers', () => {
   let w: World
@@ -45,9 +45,9 @@ describe.skipIf(!enabled)('issue numbers', () => {
 
   test('numbers, authors and times are the database’s to set', async () => {
     const base = () => ({ id: ulid(), workspace_id: w.ws, team_id: num, title: 'x', sort_order: 'a0' })
-    await expectDenied(w.ana.db.from('issues').insert({ ...base(), number: 9999 }))
-    await expectDenied(w.ana.db.from('issues').insert({ ...base(), created_by: w.bob.profileId }))
-    await expectDenied(w.ana.db.from('issues').insert({ ...base(), changed_at: '2020-01-01T00:00:00Z' }))
+    await expectDenied(w.ana.db.from('issues').insert(issueInsert({ ...base(), number: 9999 })))
+    await expectDenied(w.ana.db.from('issues').insert(issueInsert({ ...base(), created_by: w.bob.profileId })))
+    await expectDenied(w.ana.db.from('issues').insert(issueInsert({ ...base(), changed_at: '2020-01-01T00:00:00Z' })))
     const issue = await newIssue(w.ana, w.ws, num)
     expect(issue.created_by).toBe(w.ana.profileId)
     await expectDenied(w.ana.db.from('issues').update({ number: 9999 }).eq('id', issue.id))

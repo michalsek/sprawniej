@@ -2,10 +2,10 @@
 import type { ReactNode } from 'react'
 import { Archive, User } from 'lucide-react'
 import { PersonAvatar } from '@/components/Avatar'
-import type { Change, HistoryEvent } from '@/data/history'
+import type { Change, HistoryEvent, StatusRef } from '@/data/history'
 import { issueRef, useData } from '@/data/store'
-import type { Person } from '@/model/schema'
-import { PRIORITY_NAMES, statusOf } from '@/model/status'
+import type { Person, Status } from '@/model/schema'
+import { PRIORITY_NAMES, categoryOf } from '@/model/status'
 import { estimateName, shortDate, timeAgo } from './format'
 import { PriorityIcon, StatusIcon } from './icons'
 
@@ -15,11 +15,27 @@ function list(names: string[]): string {
   return names.length < 2 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`
 }
 
+/**
+ * A status in a history line: the workspace's status as it is called now (hidden or renamed, it's the same one); for
+ * a line from before statuses (only a category), the category's own name, as it was then.
+ */
+function StatusRefName({ of, statuses }: { of: StatusRef; statuses: Record<string, Status> }) {
+  const own = of.id ? statuses[of.id] : undefined
+  const look = own ?? (of.category ? { ...categoryOf(of.category), category: of.category } : undefined)
+  if (!look) return <>another status</>
+  return (
+    <>
+      <StatusIcon status={look} className="inline align-[-2px]" /> <B>{look.name}</B>
+    </>
+  )
+}
+
 function useText(change: Change, by: string | null): ReactNode {
   const people = useData((s) => s.people)
   const projects = useData((s) => s.projects)
   const labels = useData((s) => s.labels)
   const issues = useData((s) => s.issues)
+  const statuses = useData((s) => s.statuses)
   // someone this workspace doesn't know (any more) never shows as a code
   const person = (l: string | null) => (l ? (people[l]?.name ?? 'someone') : '')
   const project = (id: string | null) => (id && projects[id] ? `${projects[id].emoji} ${projects[id].name}` : 'a project')
@@ -28,8 +44,7 @@ function useText(change: Change, by: string | null): ReactNode {
     case 'status':
       return (
         <>
-          moved it from <StatusIcon status={change.from} className="inline align-[-2px]" /> <B>{statusOf(change.from).name}</B> to{' '}
-          <StatusIcon status={change.to} className="inline align-[-2px]" /> <B>{statusOf(change.to).name}</B>
+          moved it from <StatusRefName of={change.from} statuses={statuses} /> to <StatusRefName of={change.to} statuses={statuses} />
         </>
       )
     case 'priority':

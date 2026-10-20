@@ -7,6 +7,8 @@
  * - foreign keys (the hand-written list below, as in tables.sql), unique label names and team keys;
  * - what the triggers fill in: numbers, authors, times, archived_at, edited_at, and check_note (no notes to yourself,
  *   to people outside the workspace, or the same note again within ten minutes) and check_people;
+ * - statuses: an issue's category follows its status, and a status follows a category set alone (follow_status); a
+ *   note's status (note_status); each category keeps a shown status (keep_a_status); names unique per kind;
  * - the rules: only the author edits a comment, only admins delete a team or rename the workspace, your inbox is
  *   yours (an insert that asks other people's notes back fails, E54), and refusals of updates and deletes come back
  *   empty;
@@ -25,6 +27,8 @@ type Loose = Record<string, unknown>
 export const WS = 'ws-1'
 export const profileIdOf = (login: string) => `p-${login}`
 export const teamIdOf = (key: string) => `t-${key.toLowerCase()}`
+/** the status a workspace starts with for a category (the database seeds one per category) */
+export const statusIdOf = (category: string) => `status-${category}`
 
 // ---------- time ----------
 
@@ -75,20 +79,21 @@ const GRANTS: Partial<Record<LiveTable, { insert: string[]; update: string[] }>>
   teams: { insert: ['id', 'workspace_id', 'key', 'name', 'emoji', 'auto_archive', 'extra'], update: ['name', 'emoji', 'auto_archive', 'extra'] },
   team_members: { insert: ['workspace_id', 'team_id', 'profile_id'], update: [] },
   labels: { insert: ['id', 'workspace_id', 'name', 'color', 'extra'], update: ['name', 'color', 'extra'] },
+  statuses: { insert: ['id', 'workspace_id', 'kind', 'category', 'name', 'color', 'position', 'hidden', 'extra'], update: ['name', 'color', 'position', 'hidden', 'extra'] },
   projects: {
     insert: ['id', 'workspace_id', 'name', 'emoji', 'description', 'status', 'lead_id', 'target_date', 'extra'],
     update: ['name', 'emoji', 'description', 'status', 'lead_id', 'target_date', 'extra'],
   },
   project_teams: { insert: ['workspace_id', 'project_id', 'team_id'], update: [] },
   issues: {
-    insert: ['id', 'workspace_id', 'team_id', 'title', 'description', 'status', 'priority', 'assignee_id', 'project_id', 'parent_id', 'due_date', 'estimate', 'sort_order', 'duplicate_of', 'extra'],
-    update: ['title', 'description', 'status', 'priority', 'assignee_id', 'project_id', 'parent_id', 'due_date', 'estimate', 'sort_order', 'duplicate_of', 'archived_at', 'extra'],
+    insert: ['id', 'workspace_id', 'team_id', 'title', 'description', 'status', 'status_id', 'priority', 'assignee_id', 'project_id', 'parent_id', 'due_date', 'estimate', 'sort_order', 'duplicate_of', 'extra'],
+    update: ['title', 'description', 'status', 'status_id', 'priority', 'assignee_id', 'project_id', 'parent_id', 'due_date', 'estimate', 'sort_order', 'duplicate_of', 'archived_at', 'extra'],
   },
   issue_labels: { insert: ['workspace_id', 'issue_id', 'label_id'], update: [] },
   issue_followers: { insert: ['workspace_id', 'issue_id', 'profile_id', 'following'], update: ['following'] },
   comments: { insert: ['id', 'workspace_id', 'issue_id', 'body', 'extra'], update: ['body', 'extra'] },
   views: { insert: ['id', 'workspace_id', 'team_id', 'name', 'emoji', 'description', 'filters', 'display', 'extra'], update: ['name', 'emoji', 'description', 'filters', 'display', 'extra'] },
-  inbox: { insert: ['id', 'workspace_id', 'recipient_id', 'type', 'issue_id', 'comment_id', 'status', 'extra'], update: ['read_at'] },
+  inbox: { insert: ['id', 'workspace_id', 'recipient_id', 'type', 'issue_id', 'comment_id', 'status', 'status_id', 'extra'], update: ['read_at'] },
   read_state: { insert: ['profile_id', 'workspace_id', 'read_until', 'extra'], update: ['profile_id', 'workspace_id', 'read_until', 'extra'] },
 }
 
@@ -362,22 +367,34 @@ export class FakeDb {
       if (t === 'labels' && [...this.rows(t), ...plan.map((p) => p.row)].some((l) => l.id !== row.id && String(l.name).toLowerCase() === String(row.name).toLowerCase())) {
         return failed('23505', 'duplicate key value violates unique constraint "labels_name"')
       }
+      if (t === 'statuses' && [...this.rows(t), ...plan.map((p) => p.row)].some((x) => x.id !== row.id && x.kind === row.kind && String(x.name).toLowerCase() === String(row.name).toLowerCase())) {
+        return failed('23505', 'duplicate key value violates unique constraint "statuses_name"')
+      }
       if (t === 'teams' && [...this.rows(t), ...plan.map((p) => p.row)].some((x) => x.id !== row.id && x.key === row.key)) {
         return failed('23505', 'duplicate key value violates unique constraint "teams_workspace_id_key_key"')
       }
       const bad = this.refs(t, row, Object.keys(row), adding)
       if (bad) return bad
+      if (t === 'issues' && !there) {
+        const follows = this.followStatus(row, undefined, adding)
+        if ('error' in follows) return follows
+      }
       if (row.id !== undefined) adding.set(t, new Set([...(adding.get(t) ?? []), String(row.id)]))
       plan.push({ row, there })
     }
     // every row passed: the statement lands
     const back: Loose[] = []
-    for (const { row, there } of plan) {
+    for (const { row: asked, there } of plan) {
+      const row = t === 'inbox' ? this.noteStatus(asked) : asked
       if (t === 'inbox' && !this.noteGoes(row)) continue
       const full = { ...(there ?? {}), ...this.filled(t, row), changed_at: this.changedAt() }
       this.t(t).set(keyString(t, full), full)
       this.say(t, there ? 'UPDATE' : 'INSERT', full)
       back.push(full)
+    }
+    if (t === 'statuses' && back.some((r) => r.hidden && !this.shownLeft(r))) {
+      for (const r of back) this.t(t).delete(keyString(t, r))
+      return failed('23514', "Each group needs at least one status that isn't hidden. Add or show another one first.")
     }
     if (q.returning && back.some((r) => !this.visible(t, r))) {
       // the rows asked back must be ones you may read (E54); in Postgres the whole insert fails
@@ -387,6 +404,50 @@ export class FakeDb {
     return { data: q.returning ? back : null, error: null, status: 201 }
   }
 
+  // ---------- statuses ----------
+
+  /** default_status: the first shown status of a category */
+  defaultStatus(kind: string, category: unknown): string | undefined {
+    return this.rows('statuses')
+      .filter((s) => s.kind === kind && s.category === category && !s.hidden)
+      .sort((a, b) => (String(a.position) < String(b.position) ? -1 : String(a.position) > String(b.position) ? 1 : String(a.id) < String(b.id) ? -1 : 1))[0]?.id as string | undefined
+  }
+
+  /** keep_a_status: another shown status of the same kind and category is left */
+  private shownLeft(s: Loose): boolean {
+    return this.rows('statuses').some((x) => x.kind === s.kind && x.category === s.category && !x.hidden)
+  }
+
+  /**
+   * follow_status: the category follows status_id; a category set alone takes its default status. The status and
+   * category the row ends up with, or the error the database raises.
+   */
+  private followStatus(row: Loose, was: Loose | undefined, adding?: Map<LiveTable, Set<string>>): { status: unknown; status_id: unknown } | Result {
+    const idChanged = 'status_id' in row && row.status_id != null && row.status_id !== was?.status_id
+    if (!idChanged) {
+      const category = row.status ?? was?.status ?? 'todo'
+      if (was && category === was.status) return { status: category, status_id: was.status_id }
+      const d = this.defaultStatus('issue', category)
+      if (!d) return failed('22023', 'This workspace has no status for that.', 400)
+      return { status: category, status_id: d }
+    }
+    const s = this.get('statuses', { id: row.status_id })
+    if (!s || s.kind !== 'issue') {
+      if (adding?.get('statuses')?.has(String(row.status_id))) return { status: row.status, status_id: row.status_id }
+      return failed('22023', "That status isn't in this workspace.", 400)
+    }
+    return { status: s.category, status_id: s.id }
+  }
+
+  /** note_status: a status note names the status; an id that isn't one is dropped, and the issue's own taken */
+  private noteStatus(n: Loose): Loose {
+    if (n.type !== 'status') return { ...n, status_id: null }
+    const s = n.status_id ? this.get('statuses', { id: n.status_id }) : undefined
+    if (s && s.kind === 'issue') return { ...n, status: s.category }
+    const issue = this.get('issues', { id: n.issue_id })
+    return { ...n, status_id: issue && issue.status === n.status ? issue.status_id : null }
+  }
+
   /** check_note: not to yourself, only to members, and the same note not again within ten minutes */
   private noteGoes(n: Loose): boolean {
     const me = this.actor()
@@ -394,7 +455,7 @@ export class FakeDb {
     if (n.type === 'commented' || n.comment_id != null) return true
     const since = new Date(this.clock.now() - 10 * 60_000).toISOString()
     return !this.rows('inbox').some(
-      (x) => x.recipient_id === n.recipient_id && x.actor_id === me && x.issue_id === n.issue_id && x.type === n.type && (x.status ?? null) === (n.status ?? null) && x.comment_id == null && String(x.at) > since,
+      (x) => x.recipient_id === n.recipient_id && x.actor_id === me && x.issue_id === n.issue_id && x.type === n.type && (x.status ?? null) === (n.status ?? null) && (x.status_id ?? null) === (n.status_id ?? null) && x.comment_id == null && String(x.at) > since,
     )
   }
 
@@ -410,13 +471,15 @@ export class FakeDb {
     const at = this.now()
     const me = this.actor()
     switch (table) {
-      case 'issues':
+      case 'issues': {
+        const follows = this.followStatus(row, undefined) as { status: unknown; status_id: unknown }
         return {
-          description: '', status: 'todo', priority: 0, assignee_id: null, project_id: null, parent_id: null, due_date: null, estimate: null,
-          duplicate_of: null, former_refs: [], linear_id: null, extra: {}, ...row,
+          description: '', priority: 0, assignee_id: null, project_id: null, parent_id: null, due_date: null, estimate: null,
+          duplicate_of: null, former_refs: [], linear_id: null, extra: {}, ...row, ...follows,
           number: this.takeNumber(row.team_id), created_by: me, created_at: at, updated_at: at,
-          completed_at: row.status === 'done' ? at : null, archived_at: null, archived_by: null,
+          completed_at: follows.status === 'done' ? at : null, archived_at: null, archived_by: null,
         }
+      }
       case 'comments':
         return { linear_id: null, extra: {}, ...row, author_id: me, created_at: at, edited_at: null }
       case 'views':
@@ -425,10 +488,12 @@ export class FakeDb {
         return { emoji: '', last_number: 0, auto_archive: 6, linear_id: null, extra: {}, ...row, created_at: at }
       case 'labels':
         return { linear_id: null, extra: {}, ...row }
+      case 'statuses':
+        return { hidden: false, extra: {}, ...row }
       case 'projects':
         return { emoji: '', description: '', status: 'planned', lead_id: null, target_date: null, linear_id: null, extra: {}, ...row, created_at: at }
       case 'inbox':
-        return { comment_id: null, status: null, extra: {}, ...row, actor_id: me, at, read_at: null }
+        return { comment_id: null, status: null, status_id: null, extra: {}, ...row, actor_id: me, at, read_at: null }
       case 'read_state':
         return { extra: {}, ...row }
       default:
@@ -440,10 +505,11 @@ export class FakeDb {
   private change(table: LiveTable, row: Loose, fields: Loose): Loose {
     const at = this.now()
     const next: Loose = { ...row, ...fields }
+    if (table === 'issues' && ('status' in fields || 'status_id' in fields)) Object.assign(next, this.followStatus(fields, row))
     if (table === 'issues') {
-      const seen = ['title', 'description', 'status', 'priority', 'assignee_id', 'project_id', 'parent_id', 'due_date', 'estimate', 'sort_order', 'duplicate_of', 'team_id']
-      if (seen.some((k) => k in fields && fields[k] !== row[k]) || (row.archived_at && 'archived_at' in fields && fields.archived_at === null)) next.updated_at = at
-      if ('status' in fields && fields.status !== row.status) next.completed_at = fields.status === 'done' ? at : null
+      const seen = ['title', 'description', 'status', 'status_id', 'priority', 'assignee_id', 'project_id', 'parent_id', 'due_date', 'estimate', 'sort_order', 'duplicate_of', 'team_id']
+      if (seen.some((k) => k in fields && next[k] !== row[k]) || (row.archived_at && 'archived_at' in fields && fields.archived_at === null)) next.updated_at = at
+      if (next.status !== row.status) next.completed_at = next.status === 'done' ? at : null
       if ('archived_at' in fields) {
         if (!row.archived_at && fields.archived_at) Object.assign(next, { archived_at: at, archived_by: this.actor() })
         else if (fields.archived_at === null) next.archived_by = null
@@ -467,6 +533,16 @@ export class FakeDb {
     for (const r of rows) {
       const bad = this.refs(t, { ...r, ...q.fields }, cols.filter((c) => q.fields[c] !== r[c]), new Map())
       if (bad) return bad
+      if (t === 'issues' && ('status' in q.fields || 'status_id' in q.fields)) {
+        const follows = this.followStatus(q.fields, r)
+        if ('error' in follows) return follows
+      }
+      if (t === 'statuses' && q.fields.hidden === true && !r.hidden && !this.rows(t).some((x) => x.id !== r.id && x.kind === r.kind && x.category === r.category && !x.hidden)) {
+        return failed('23514', "Each group needs at least one status that isn't hidden. Add or show another one first.")
+      }
+      if (t === 'statuses' && typeof q.fields.name === 'string' && this.rows(t).some((x) => x.id !== r.id && x.kind === r.kind && String(x.name).toLowerCase() === String(q.fields.name).toLowerCase())) {
+        return failed('23505', 'duplicate key value violates unique constraint "statuses_name"')
+      }
     }
     const back = rows.map((r) => this.change(t, r, q.fields))
     return { data: q.returning ? back : null, error: null, status: 200 }

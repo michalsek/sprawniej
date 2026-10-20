@@ -15,6 +15,11 @@ interface Grants {
   teams: { insert: 'id' | 'workspace_id' | 'key' | 'name' | 'emoji' | 'auto_archive' | 'extra'; update: 'name' | 'emoji' | 'auto_archive' | 'extra' }
   team_members: { insert: 'workspace_id' | 'team_id' | 'profile_id'; update: never }
   labels: { insert: 'id' | 'workspace_id' | 'name' | 'color' | 'extra'; update: 'name' | 'color' | 'extra' }
+  /** kind and category never change; nobody deletes one (they are hidden) */
+  statuses: {
+    insert: 'id' | 'workspace_id' | 'kind' | 'category' | 'name' | 'color' | 'position' | 'hidden' | 'extra'
+    update: 'name' | 'color' | 'position' | 'hidden' | 'extra'
+  }
   projects: {
     insert: 'id' | 'workspace_id' | 'name' | 'emoji' | 'description' | 'status' | 'lead_id' | 'target_date' | 'extra'
     update: 'name' | 'emoji' | 'description' | 'status' | 'lead_id' | 'target_date' | 'extra'
@@ -22,11 +27,11 @@ interface Grants {
   project_teams: { insert: 'workspace_id' | 'project_id' | 'team_id'; update: never }
   issues: {
     insert:
-      | 'id' | 'workspace_id' | 'team_id' | 'title' | 'description' | 'status' | 'priority' | 'assignee_id' | 'project_id'
-      | 'parent_id' | 'due_date' | 'estimate' | 'sort_order' | 'duplicate_of' | 'extra'
+      | 'id' | 'workspace_id' | 'team_id' | 'title' | 'description' | 'status' | 'status_id' | 'priority' | 'assignee_id'
+      | 'project_id' | 'parent_id' | 'due_date' | 'estimate' | 'sort_order' | 'duplicate_of' | 'extra'
     update:
-      | 'title' | 'description' | 'status' | 'priority' | 'assignee_id' | 'project_id' | 'parent_id' | 'due_date'
-      | 'estimate' | 'sort_order' | 'duplicate_of' | 'archived_at' | 'extra'
+      | 'title' | 'description' | 'status' | 'status_id' | 'priority' | 'assignee_id' | 'project_id' | 'parent_id'
+      | 'due_date' | 'estimate' | 'sort_order' | 'duplicate_of' | 'archived_at' | 'extra'
   }
   issue_labels: { insert: 'workspace_id' | 'issue_id' | 'label_id'; update: never }
   issue_followers: { insert: 'workspace_id' | 'issue_id' | 'profile_id' | 'following'; update: 'following' }
@@ -37,7 +42,7 @@ interface Grants {
     insert: 'id' | 'workspace_id' | 'team_id' | 'name' | 'emoji' | 'description' | 'filters' | 'display' | 'extra'
     update: 'name' | 'emoji' | 'description' | 'filters' | 'display' | 'extra'
   }
-  inbox: { insert: 'id' | 'workspace_id' | 'recipient_id' | 'type' | 'issue_id' | 'comment_id' | 'status' | 'extra'; update: 'read_at' }
+  inbox: { insert: 'id' | 'workspace_id' | 'recipient_id' | 'type' | 'issue_id' | 'comment_id' | 'status' | 'status_id' | 'extra'; update: 'read_at' }
   read_state: { insert: 'profile_id' | 'workspace_id' | 'read_until' | 'extra'; update: 'profile_id' | 'workspace_id' | 'read_until' | 'extra' }
 }
 

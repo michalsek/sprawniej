@@ -8,14 +8,38 @@ import { useShallow } from 'zustand/react/shallow'
 import { PersonAvatar } from '@/components/Avatar'
 import { LabelDot } from '@/components/LabelChip'
 import type { PickerItem } from '@/components/Picker'
+import { issueStatuses } from '@/data/statuses'
 import { issueRef, useData } from '@/data/store'
 import { handleOf, isGuest, type Issue } from '@/model/schema'
-import { ESTIMATES, PRIORITY_ORDER, PRIORITY_NAMES, STATUSES, type Priority, type StatusId } from '@/model/status'
+import { categoryOf, ESTIMATES, PRIORITY_ORDER, PRIORITY_NAMES, type IssueCategory, type Priority } from '@/model/status'
 import { EstimateIcon } from './DueDate'
 import { estimateName } from './format'
-import { PriorityIcon, StatusIcon } from './icons'
+import { IssueStatusIcon, PriorityIcon, StatusIcon } from './icons'
 
-export const statusItems: PickerItem<StatusId>[] = STATUSES.map((s) => ({ value: s.id, label: s.name, icon: <StatusIcon status={s.id} /> }))
+/**
+ * The issue statuses to pick from, in the workspace's order (by category, then its own order). Hidden ones only when
+ * `all` (the Status filter lists every status, so a view can still pick one) or when one of them is `current` (the
+ * issue has it); either way marked "hidden". A status can also be found by its category's name.
+ */
+export function useStatusItems({ current, all = false }: { current?: readonly string[]; all?: boolean } = {}): PickerItem<string>[] {
+  const statuses = useData((s) => s.statuses)
+  const key = current?.join('|') ?? ''
+  return useMemo(() => {
+    const keep = new Set(key ? key.split('|') : [])
+    return issueStatuses(statuses)
+      .filter((s) => all || !s.hidden || keep.has(s.id))
+      .map((s) => {
+        const group = categoryOf(s.category as IssueCategory).name
+        return {
+          value: s.id,
+          label: s.name,
+          icon: <StatusIcon status={s} />,
+          ...(s.hidden && { hint: 'hidden' }),
+          ...(group !== s.name && { keywords: [group] }),
+        }
+      })
+  }, [statuses, key, all])
+}
 
 export const priorityItems: PickerItem<Priority>[] = [0, ...PRIORITY_ORDER.filter((p) => p !== 0)].map((p) => ({
   value: p as Priority,
@@ -90,7 +114,7 @@ export function useParentItems(issue?: Pick<Issue, 'id' | 'team'>, team?: string
       ...Object.values(issues)
         .filter((i) => i.team === t && !below.has(i.id))
         .sort((a, b) => b.number - a.number)
-        .map((i) => ({ value: i.id as string | null, label: i.title, hint: issueRef(i), keywords: [issueRef(i)], icon: <StatusIcon status={i.status} /> })),
+        .map((i) => ({ value: i.id as string | null, label: i.title, hint: issueRef(i), keywords: [issueRef(i)], icon: <IssueStatusIcon issue={i} /> })),
     ]
   }, [issues, issue, team])
 }

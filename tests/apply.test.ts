@@ -41,6 +41,7 @@ const issueRow = (id: string, more: Partial<Row<'issues'>> = {}): Row<'issues'> 
   title: 'Fix the chart',
   description: 'Fix the thing',
   status: 'todo',
+  status_id: 'status-todo',
   priority: 0,
   assignee_id: ME,
   project_id: 'pr-1',
@@ -112,6 +113,10 @@ function world(): Incoming[] {
       { id: 'l-bug', workspace_id: WS, name: 'Bug', color: '#f00', linear_id: null, changed_at: T(1), extra: {} },
       { id: 'l-ui', workspace_id: WS, name: 'UI', color: '#00f', linear_id: null, changed_at: T(1), extra: { shade: 'dark' } },
     ]),
+    fetch('statuses', [
+      { id: 'status-todo', workspace_id: WS, kind: 'issue', category: 'todo', name: 'Todo', color: '#c4c6cc', position: 'a0', hidden: false, changed_at: T(0), extra: {} },
+      { id: 'status-testing', workspace_id: WS, kind: 'issue', category: 'in_progress', name: 'Testing', color: '#bb87fc', position: 'a1', hidden: true, changed_at: T(1), extra: {} },
+    ]),
     fetch('projects', [{ id: 'pr-1', workspace_id: WS, name: 'Charts', emoji: '📊', description: '', status: 'planned', lead_id: ME, target_date: null, linear_id: null, created_at: T(0), changed_at: T(0), extra: {} }]),
     fetch('project_teams', [{ workspace_id: WS, project_id: 'pr-1', team_id: 't-eng', changed_at: T(1) }]),
     fetch('issues', [issueRow(I1), issueRow(I2, { number: 2, assignee_id: 'p-jan', created_by: 'p-bob', extra: { foo: 'bar' } })]),
@@ -136,8 +141,8 @@ function world(): Incoming[] {
       },
     ]),
     fetch('inbox', [
-      { id: 'n-1', workspace_id: WS, recipient_id: ME, actor_id: 'p-bob', type: 'assigned', issue_id: I1, comment_id: null, status: null, at: T(6), read_at: null, changed_at: T(6), extra: {} },
-      { id: 'n-2', workspace_id: WS, recipient_id: ME, actor_id: 'p-bob', type: 'commented', issue_id: I1, comment_id: 'c-1', status: null, at: T(7), read_at: T(8), changed_at: T(8), extra: {} },
+      { id: 'n-1', workspace_id: WS, recipient_id: ME, actor_id: 'p-bob', type: 'assigned', issue_id: I1, comment_id: null, status: null, status_id: null, at: T(6), read_at: null, changed_at: T(6), extra: {} },
+      { id: 'n-2', workspace_id: WS, recipient_id: ME, actor_id: 'p-bob', type: 'commented', issue_id: I1, comment_id: 'c-1', status: null, status_id: null, at: T(7), read_at: T(8), changed_at: T(8), extra: {} },
     ]),
     fetch('read_state', [{ profile_id: ME, workspace_id: WS, read_until: T(5), changed_at: T(20, '999999'), extra: {} }]),
   ]
@@ -199,6 +204,25 @@ describe('first load', () => {
     const w = open()
     expect(step(w, ...world()).patch).toEqual({})
     expect(step(w, { from: 'fetch', table: 'issues', rows: [issueRow(I1, { title: 'Other' })] }).patch).toEqual({})
+  })
+})
+
+describe('statuses', () => {
+  test('they load with everything else, hidden ones too, and change live, field by field', () => {
+    const w = open()
+    expect(Object.keys(w.data.statuses).sort()).toEqual(['status-testing', 'status-todo'])
+    expect(w.data.statuses['status-testing']).toEqual({ id: 'status-testing', kind: 'issue', category: 'in_progress', name: 'Testing', color: '#bb87fc', position: 'a1', hidden: true })
+    const issues = w.data.issues
+    const r = step(w, msg('statuses', 'UPDATE', { id: 'status-todo', workspace_id: WS, name: 'Ready', changed_at: T(30) }))
+    expect(w.data.statuses['status-todo']).toMatchObject({ name: 'Ready', color: '#c4c6cc' })
+    // a renamed status changes no issue
+    expect(Object.keys(r.patch)).toEqual(['statuses'])
+    expect(w.data.issues).toBe(issues)
+    step(w, msg('statuses', 'INSERT', { id: 'status-qa', workspace_id: WS, kind: 'issue', category: 'in_review', name: 'QA', color: '#26b5ce', position: 'a1', hidden: false, changed_at: T(31), extra: {} }))
+    expect(w.data.statuses['status-qa'].name).toBe('QA')
+    // an issue that moves to it carries its status and category
+    step(w, msg('issues', 'UPDATE', { id: I1, workspace_id: WS, status: 'in_review', status_id: 'status-qa', changed_at: T(32) }))
+    expect(w.data.issues[I1]).toMatchObject({ status: 'in_review', statusId: 'status-qa' })
   })
 })
 

@@ -10,9 +10,12 @@ import { useData } from '@/data/store'
 import type { Issue } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { openComposer } from './composer'
-import { StatusIcon } from './icons'
+import { IssueStatusIcon } from './icons'
 import { IssueRow } from './IssueList'
 import { SubIssueCount } from './SubIssueCount'
+
+/** a new sub-issue starts in Todo's default status */
+const NEW = { status: 'todo', statusId: '' } as const
 
 function AddRow({ parent, onClose }: { parent: Issue; onClose: () => void }) {
   const [title, setTitle] = useState('')
@@ -23,7 +26,7 @@ function AddRow({ parent, onClose }: { parent: Issue; onClose: () => void }) {
   }
   return (
     <div className="flex h-10 items-center gap-3 px-4">
-      <StatusIcon status="todo" />
+      <IssueStatusIcon issue={NEW} />
       <input
         autoFocus
         value={title}

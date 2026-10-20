@@ -582,6 +582,7 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       for (const l of old.labels) if (!labels.includes(l)) out.removedLabels.push({ issue: old.id, label: l })
       for (const l of droppedFollowers(old, [...subscribers, ...unsubscribed], relinked)) out.removedFollowers.push({ issue: old.id, login: l })
     }
+    const status = mapStatus(li.state)
     const fields = {
       ...old,
       id: idOf.get(li.id)!,
@@ -589,7 +590,10 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
       number,
       title: li.title,
       description: rewriteLinks(li.description ?? '', refs).replace(/\s+$/, ''),
-      status: mapStatus(li.state),
+      // the import sends the category only: an issue keeps its status while its category stays, else the database
+      // gives it the category's default
+      status,
+      statusId: old && old.status === status ? old.statusId : '',
       priority: (li.priority >= 0 && li.priority <= 4 ? li.priority : 0) as Priority,
       assignee,
       labels,

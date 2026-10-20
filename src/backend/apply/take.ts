@@ -29,6 +29,7 @@ export class Dirty {
     member: new Set(),
     team: new Set(),
     label: new Set(),
+    status: new Set(),
     project: new Set(),
     issue: new Set(),
     view: new Set(),
@@ -199,6 +200,9 @@ export class Intake {
         break
       case 'labels':
         d.add('label', row.id)
+        break
+      case 'statuses':
+        d.add('status', row.id)
         break
       case 'projects':
         d.add('project', row.id)

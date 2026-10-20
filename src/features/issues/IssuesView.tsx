@@ -12,7 +12,7 @@ import { useDisplay } from '@/data/displays'
 import { groupIssues, inTab, matches } from '@/data/select'
 import { useData } from '@/data/store'
 import type { Display, Filters } from '@/model/schema'
-import { STATUSES, TAB_GROUPS, type IssueTab } from '@/model/status'
+import { CATEGORIES, TAB_GROUPS, type IssueTab } from '@/model/status'
 import { Button } from '@/ui/button'
 import { NewViewDialog } from '@/features/views/NewViewDialog'
 import { DisplayOptions } from './DisplayOptions'
@@ -57,6 +57,7 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
   const people = useData((s) => s.people)
   const comments = useData((s) => s.comments)
   const projects = useData((s) => s.projects)
+  const statuses = useData((s) => s.statuses)
   // issues dropped on the board into a hidden column (Done on Active, another project on a project page) stay in view
   // until you leave
   const [keptOn, setKept] = useState<{ page: string; tab: string; ids: ReadonlySet<string> }>({ page, tab, ids: new Set() })
@@ -64,13 +65,13 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
   const keep = (ids: string[]) => setKept({ page, tab, ids: new Set([...kept, ...ids]) })
   // (whatever the page's filters say: a dropped card lands in its new column, never vanishes)
   const shown = useMemo(() => {
-    const follow = { comments, people }
+    const follow = { comments, people, statuses }
     return all.filter((i) => kept.has(i.id) || (matches(i, filters, follow) && matches(i, extra, follow) && inTab(i, tab)))
-  }, [all, filters, extra, tab, kept, comments, people])
+  }, [all, filters, extra, tab, kept, comments, people, statuses])
   const board = display.layout === 'board'
   // on a team's page, a board offers only that team's projects as places to drop
   const team = filters.teams?.length === 1 ? filters.teams[0] : undefined
-  const groups = useMemo(() => groupIssues(shown, display, { people, projects, team, keep: kept }, tab, board), [shown, display, people, projects, tab, board, team, kept])
+  const groups = useMemo(() => groupIssues(shown, display, { people, projects, statuses, team, keep: kept }, tab, board), [shown, display, people, projects, statuses, tab, board, team, kept])
   const filtering = activeFilters(extra) > 0
 
   /** "+" on a group: a new issue that already belongs in that group (and on this page) */
@@ -81,7 +82,7 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
     if (both.projects?.length === 1 && both.projects[0]) preset.project = both.projects[0]
     if (both.labels?.length) preset.labels = both.labels
     if (both.assignees?.length === 1) preset.assignee = both.assignees[0]
-    if (display.grouping === 'status' && typeof g.value === 'string') preset.status = g.value as NewIssue['status']
+    if (display.grouping === 'status' && typeof g.value === 'string') preset.statusId = g.value
     if (display.grouping === 'priority' && typeof g.value === 'number') preset.priority = g.value as NewIssue['priority']
     if (display.grouping === 'assignee') preset.assignee = g.value as string | null
     if (display.grouping === 'project') preset.project = g.value as string | null
@@ -166,6 +167,6 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
 /** a view has no tabs: the tab you were on (Active, Backlog) becomes a status filter, so the view shows the same issues */
 function withTab(f: Filters, tab: IssueTab): Filters {
   if (tab === 'all') return f
-  const inTabNow = STATUSES.filter((st) => TAB_GROUPS[tab].includes(st.group)).map((st) => st.id)
+  const inTabNow = CATEGORIES.filter((st) => TAB_GROUPS[tab].includes(st.group)).map((st) => st.id)
   return { ...f, statuses: f.statuses?.length ? f.statuses.filter((st) => inTabNow.includes(st)) : inTabNow }
 }

@@ -129,7 +129,7 @@ export class Loader {
 
   /** everything an opening workspace needs (the archive comes later, when something needs it) */
   all(progress?: (text: string) => void): Promise<Incoming[]> {
-    const plain = ['workspaces', 'teams', 'team_members', 'labels', 'projects', 'project_teams', 'views', 'inbox', 'read_state'] as const
+    const plain = ['workspaces', 'teams', 'team_members', 'labels', 'statuses', 'projects', 'project_teams', 'views', 'inbox', 'read_state'] as const
     const members = this.paged('workspace_members', KEYS.workspace_members, '*', this.scope('workspace_members'))
     const told = (n: number) => (n >= PAGE ? progress?.(`Getting your team's issues: ${n.toLocaleString('en')} so far…`) : undefined)
     return Promise.all([

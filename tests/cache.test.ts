@@ -50,6 +50,7 @@ const issueRow = (id: string, s: number, more: Partial<Row<'issues'>> = {}): Row
   title: `Issue ${id}`,
   description: 'Text',
   status: 'todo',
+  status_id: 'status-todo',
   priority: 0,
   assignee_id: ME,
   project_id: null,
