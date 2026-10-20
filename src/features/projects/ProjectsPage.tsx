@@ -1,7 +1,10 @@
-/** Projects: name with emoji, status, lead, target date and how much is done. "New project" starts one. */
+/**
+ * Projects, as a list (name with emoji, status, lead, target date and how much is done, by name) or as a board (a
+ * column per status). List or Board is remembered per page in this browser. "New project" starts one.
+ */
 import { useState } from 'react'
 import { Link, useParams } from 'wouter'
-import { Box, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Box, Columns3, List, MoreHorizontal, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
@@ -10,15 +13,19 @@ import { EmojiPicker } from '@/components/EmojiPicker'
 import { FavouriteButton } from '@/components/FavouriteButton'
 import { EmptyState } from '@/components/EmptyState'
 import { InlineText } from '@/components/InlineText'
+import { Segmented } from '@/components/Segmented'
 import { deleteProject, updateProject } from '@/data/actions'
+import { useDisplay } from '@/data/displays'
 import { projectProgress } from '@/data/select'
 import { statusOfProject } from '@/data/statuses'
 import { useData } from '@/data/store'
 import { shortDate } from '@/features/issues/format'
 import type { Person, Project } from '@/model/schema'
 import { Button } from '@/ui/button'
+import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { NewProjectDialog } from './NewProjectDialog'
+import { ProjectBoard } from './ProjectBoard'
 import { StatusDot } from './ProjectProperties'
 import { useProgressIssues } from './useProjectIssues'
 
@@ -92,16 +99,17 @@ export function ProjectsPage() {
   const projects = useData(useShallow((s) => Object.values(s.projects).filter((p) => (key ? p.teams.includes(key) : true))))
   const issues = useProgressIssues()
   const people = useData((s) => s.people)
+  const { display, setDisplay } = useDisplay(key ? `projects:${key}` : 'projects')
   useCrumbs(team ? [{ label: `${team.emoji} ${team.name}` }, { label: 'Projects' }] : [{ label: 'Projects' }])
-  const [creating, setCreating] = useState(false)
-  const dialog = creating && <NewProjectDialog onOpenChange={setCreating} team={key} />
+  // null: closed; a status id: open, starting in that status ("+" on a board column); '': open, in Planned
+  const [creating, setCreating] = useState<string | null>(null)
+  const dialog = creating !== null && <NewProjectDialog onOpenChange={(open) => !open && setCreating(null)} team={key} statusId={creating || undefined} />
   const newButton = (
-    <Button variant="outline" onClick={() => setCreating(true)}>
+    <Button variant="outline" onClick={() => setCreating('')}>
       <Plus /> New project
     </Button>
   )
-  const sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name))
-  if (!sorted.length) {
+  if (!projects.length) {
     return (
       <>
         <EmptyState icon={<Box />} title="No projects yet" action={newButton}>
@@ -111,24 +119,43 @@ export function ProjectsPage() {
       </>
     )
   }
+  const board = display.layout === 'board'
+  const sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name))
   return (
-    <div className="flex-1 overflow-y-auto px-4 md:px-8 pt-6">
-      <div className="mb-4 flex justify-end">{newButton}</div>
-      <div className="flex h-10 items-center gap-4 border-b px-4 text-sm text-muted-foreground">
-        <span className="flex-1 pl-12">Name</span>
-        <span className="w-32">Status</span>
-        <span className="w-44">Lead</span>
-        <span className="w-28">Target date</span>
-        <span className="w-40">Progress</span>
-        <span className="w-16" />
+    <div className={board ? 'flex min-h-0 flex-1 flex-col gap-4 px-4 pt-6 md:px-8' : 'flex-1 overflow-y-auto px-4 pt-6 md:px-8'}>
+      <div className={cn('flex items-center justify-end gap-2', !board && 'mb-4')}>
+        {newButton}
+        <Segmented
+          label="Layout"
+          value={display.layout}
+          onChange={(layout) => setDisplay({ layout })}
+          options={[
+            { value: 'list', name: 'List', label: <><List /> <span className="hidden sm:inline">List</span></> },
+            { value: 'board', name: 'Board', label: <><Columns3 /> <span className="hidden sm:inline">Board</span></> },
+          ]}
+        />
       </div>
-      {sorted.map((p) => {
-        const { done, total } = projectProgress(p.id, issues)
-        const pct = total ? Math.round((done / total) * 100) : 0
-        return (
-          <ProjectRow key={p.id} project={p} pct={pct} lead={p.lead ? people[p.lead] : undefined} />
-        )
-      })}
+      {board ? (
+        <div className="min-h-0 flex-1">
+          <ProjectBoard projects={projects} issues={issues} onAdd={(statusId) => setCreating(statusId)} />
+        </div>
+      ) : (
+        <>
+          <div className="flex h-10 items-center gap-4 border-b px-4 text-sm text-muted-foreground">
+            <span className="flex-1 pl-12">Name</span>
+            <span className="w-32">Status</span>
+            <span className="w-44">Lead</span>
+            <span className="w-28">Target date</span>
+            <span className="w-40">Progress</span>
+            <span className="w-16" />
+          </div>
+          {sorted.map((p) => {
+            const { done, total } = projectProgress(p.id, issues)
+            const pct = total ? Math.round((done / total) * 100) : 0
+            return <ProjectRow key={p.id} project={p} pct={pct} lead={p.lead ? people[p.lead] : undefined} />
+          })}
+        </>
+      )}
       {dialog}
     </div>
   )
