@@ -1,7 +1,7 @@
 /** Settings › Invite links (admins and owners): the links not used yet, copying them again, deleting them. */
 import { Copy, Link2, MoreHorizontal, Trash2, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
-import { expiresText, INVITE_DAYS, isExpired, type Invite } from '@/backend/workspaces'
+import { expiresText, isExpired, type Invite } from '@/backend/workspaces'
 import { EmptyState } from '@/components/EmptyState'
 import { deleteInvite } from '@/data/actions'
 import { useData } from '@/data/store'
@@ -40,13 +40,7 @@ export function InviteLinks({ invites: { invites, state, reload }, onCreate }: {
 
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <h3 className="font-medium">Invite links</h3>
-          <p className="text-sm text-muted-foreground">Each link works once, for {INVITE_DAYS} days. Whoever opens it can create an account and join.</p>
-        </div>
-        {state === 'ready' && invites.length > 0 && create}
-      </div>
+      {state === 'ready' && invites.length > 0 && <div className="mb-3">{create}</div>}
       {state === 'loading' && <p className="text-sm text-muted-foreground">Loading…</p>}
       {state === 'failed' && (
         <>

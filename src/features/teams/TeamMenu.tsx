@@ -1,5 +1,5 @@
 /**
- * ⋯ next to a team in the sidebar: edit its emoji and name (they save as you change them), leave it, or delete it.
+ * ⋯ next to a team (in the sidebar and Settings › Teams): edit its emoji and name (they save as you change them), leave it, or delete it.
  * Deleting takes the team's issues with it, so it says what goes and asks for the team's name first.
  */
 import { useEffect, useState } from 'react'
@@ -14,6 +14,7 @@ import { deleteTeam, leaveTeam, teamContents, updateTeam } from '@/data/actions'
 import { MESSAGES } from '@/backend/writes/problems'
 import { isAdmin } from '@/data/select'
 import { useData } from '@/data/store'
+import { isSettingsPath } from '@/features/settings/nav'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
@@ -23,7 +24,7 @@ const count = (n: number, one: string, many: string) => `${n.toLocaleString()} $
 export function TeamMenu({ teamKey, className }: { teamKey: string; className?: string }) {
   const team = useData((s) => s.teams[teamKey])
   const admin = useData(isAdmin)
-  const [, navigate] = useLocation()
+  const [location, navigate] = useLocation()
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   // archived issues may not be read yet: the database counts them
@@ -138,7 +139,8 @@ export function TeamMenu({ teamKey, className }: { teamKey: string; className?: 
           const name = `${team.emoji} ${team.name}`
           // only admins and owners may: anyone else is told so
           if (!deleteTeam(team.key)) return
-          navigate('/', { replace: true })
+          // from Settings › Teams you stay on the list; anywhere else the team's pages are gone
+          if (!isSettingsPath(location)) navigate('/', { replace: true })
           toast(`Deleted ${name}`)
         }}
       >

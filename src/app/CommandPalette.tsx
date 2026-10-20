@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation } from 'wouter'
-import { Box, CircleHelp, Download, Inbox, Layers, PanelLeft, Settings, Sparkles, SquarePen, SquareStack, User } from 'lucide-react'
+import { Box, CircleHelp, Inbox, Layers, PanelLeft, Settings, Sparkles, SquarePen, SquareStack, User } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { loadArchive } from '@/backend'
 import { searchIssues } from '@/data/search'
@@ -12,6 +12,8 @@ import { isAdmin } from '@/data/select'
 import { findByRef, issueRef, useData } from '@/data/store'
 import { openComposer } from '@/features/issues/composer'
 import { StatusIcon } from '@/features/issues/icons'
+import { listedPages } from '@/features/settings/nav'
+import { PAGES } from '@/features/settings/pages'
 import { plain } from '@/lib/plain'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/ui/command'
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ui/dialog'
@@ -38,7 +40,8 @@ function Palette() {
   const teams = useData(useShallow((s) => Object.values(s.teams)))
   const views = useData(useShallow((s) => Object.values(s.views)))
   const projects = useData(useShallow((s) => Object.values(s.projects)))
-  const admin = useData(isAdmin)
+  // the settings pages you may open, as the settings menu lists them
+  const settingsPages = useData(useShallow((s) => listedPages(PAGES, isAdmin(s), s)))
   const go = (href: string) => () => navigate(href)
 
   const pages: Entry[] = useMemo(
@@ -48,13 +51,18 @@ function Palette() {
       ...teams.map((t) => ({ id: `team-${t.key}`, label: `${t.name} issues`, words: t.key, icon: <span className="w-5 text-center">{t.emoji}</span>, run: go(`/team/${t.key}/issues/active`) })),
       { id: 'projects', label: 'Projects', icon: <Box />, run: go('/projects') },
       { id: 'views', label: 'Views', icon: <Layers />, run: go('/views') },
-      { id: 'settings', label: 'Settings and people', icon: <Settings />, run: go('/settings') },
+      { id: 'settings', label: 'Settings', icon: <Settings />, run: go('/settings'), words: 'people account' },
       { id: 'help', label: 'Help', icon: <CircleHelp />, run: go('/help') },
       { id: 'whats-new', label: 'What’s new', icon: <Sparkles />, run: go('/whats-new'), words: 'changelog changes release version' },
     ],
     // eslint-style deps: navigate is stable
     // oxlint-disable-next-line react-hooks/exhaustive-deps
     [teams],
+  )
+  const settings: Entry[] = useMemo(
+    () => settingsPages.map((p) => ({ id: `settings-${p.id}`, label: `Settings › ${p.title}`, words: p.words, icon: <p.icon />, run: go(p.path) })),
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [settingsPages],
   )
   const things: Entry[] = useMemo(
     () => [
@@ -67,7 +75,6 @@ function Palette() {
   const actions: Entry[] = [
     { id: 'new', label: 'New issue', icon: <SquarePen />, run: () => openComposer(), shortcut: 'C' },
     { id: 'sidebar', label: 'Show or hide the sidebar', icon: <PanelLeft />, run: () => useChrome.getState().toggleSidebar() },
-    ...(admin ? [{ id: 'import', label: 'Import from Linear', icon: <Download />, run: go('/settings/import') }] : []),
   ]
 
   const q = query.trim().toLowerCase()
@@ -89,7 +96,8 @@ function Palette() {
   const show = (list: Entry[]) => (q ? list.filter((e) => matches(e, q)) : list)
   const groups: [string, Entry[]][] = [
     ['Actions', show(actions)],
-    ['Go to', show(pages)],
+    // each settings page shows once you type, so the list doesn't start long
+    ['Go to', [...show(pages), ...(q ? show(settings) : [])]],
     ['Views and projects', q ? show(things) : []],
   ]
   const pick = (run: () => void) => {

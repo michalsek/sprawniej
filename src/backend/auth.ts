@@ -297,7 +297,7 @@ export async function signInWithGitHub(): Promise<void> {
   }
 }
 
-// ---------- ways to sign in (Settings › Your account) ----------
+// ---------- ways to sign in (Settings › Ways to sign in) ----------
 
 /** set while you're away at GitHub to add it as a way to sign in; Settings reads it when you come back */
 export const ADDING_KEY = 'sprawniej:adding-way'
@@ -375,7 +375,7 @@ export async function addWay(provider: 'github' | 'google'): Promise<void> {
   const p = await providersOn()
   if (p === 'unknown') throw new AuthProblem(UNREACHABLE)
   if (!p[provider]) throw new AuthProblem(provider === 'github' ? GITHUB_OFF : OFF.google)
-  sessionStorage.setItem(RETURN_KEY, location.hash || '#/settings')
+  sessionStorage.setItem(RETURN_KEY, location.hash || '#/settings/account/sign-in')
   sessionStorage.setItem(ADDING_KEY, provider)
   const { error } = await requireClient().auth.linkIdentity({ provider, options: { redirectTo: authRedirectUrl() } })
   if (error) {

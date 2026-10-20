@@ -179,7 +179,7 @@ with `fetch` and the REST API, so `@supabase/supabase-js` stays inside `src/back
 1. **The author rule** (5 above): nothing moves for authors who aren't members with GitHub linked. Moving anyway, as
    nobody, would let anyone who can open a pull request in the repository move issues, and would let another
    workspace that connects the same repository read our pull requests' numbers and links.
-2. **GitHub sign-in is on.** Each teammate adds GitHub in Settings › Your account; `ensure_profile` then fills their
+2. **GitHub sign-in is on.** Each teammate adds GitHub in Settings › Ways to sign in; `ensure_profile` then fills their
    `github_id`.
 3. **Words.** Settings › GitHub, the history link and the guide's GitHub part may say "pull request", "merged" and
    "repository" (CLAUDE.md, Writing).

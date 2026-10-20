@@ -1,4 +1,4 @@
-/** The frame: sidebar on the left, top bar and the page on the right. */
+/** The frame: sidebar (or the settings menu) on the left, top bar and the page on the right. */
 import { useEffect, type ReactNode } from 'react'
 import { useLocation } from 'wouter'
 import { useNarrow } from '@/lib/useNarrow'
@@ -8,6 +8,8 @@ import { NewIssueDialog } from '@/features/issues/NewIssueDialog'
 import { QuickEdit } from '@/features/issues/QuickEdit'
 import { clearSelection } from '@/features/issues/selection'
 import { SelectionBar } from '@/features/issues/SelectionBar'
+import { isSettingsPath } from '@/features/settings/nav'
+import { SettingsSidebar } from '@/features/settings/SettingsSidebar'
 import { CommandPalette } from './CommandPalette'
 import { JoinTeams } from './JoinTeams'
 import { Tour } from './Tour'
@@ -21,12 +23,15 @@ export function Shell({ children }: { children: ReactNode }) {
   const menuOpen = useChrome((s) => s.menuOpen)
   const narrow = useNarrow()
   const [location] = useLocation()
+  // in Settings, its own menu takes the sidebar's place
+  const inSettings = isSettingsPath(location)
   useShortcuts()
   // a phone's menu closes once you've picked where to go
   useEffect(() => {
     useChrome.setState({ menuOpen: false })
+    if (!inSettings) useChrome.setState({ lastAppPath: location })
     clearSelection()
-  }, [location])
+  }, [location, inSettings])
   // fetch the editor while you look around, so the first issue you open is ready at once
   useEffect(() => {
     const t = setTimeout(preloadEditor, 1500)
@@ -47,12 +52,12 @@ export function Shell({ children }: { children: ReactNode }) {
             }}
           >
             <SheetTitle className="sr-only">Menu</SheetTitle>
-            <SheetDescription className="sr-only">Pages, teams and your account</SheetDescription>
-            <Sidebar />
+            <SheetDescription className="sr-only">{inSettings ? 'Settings pages' : 'Pages, teams and your account'}</SheetDescription>
+            {inSettings ? <SettingsSidebar /> : <Sidebar />}
           </SheetContent>
         </Sheet>
       ) : (
-        open && <Sidebar />
+        open && (inSettings ? <SettingsSidebar /> : <Sidebar />)
       )}
       <main className="flex min-w-0 flex-1 flex-col">
         <TopBar />

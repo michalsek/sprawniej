@@ -99,7 +99,7 @@ hold the tokens), so invites are never broadcast.
   email. `anon` may call it (an accepted advisor warning, docs/supabase-work.md).
 - `accept_invite(token)` makes you a member (or brings you back), marks the invite used, and, for an invite made for a
   person from Linear (`for_profile`), turns that person into you (`move_person`, below).
-- Settings › Members makes the links (`InviteDialog.tsx`), with an optional email "so you remember where to send it"
+- Settings › Invite links makes the links (`InviteDialog.tsx`), with an optional email "so you remember where to send it"
   and a role (member or admin). People send them themselves: Sprawniej sends no email.
 - Links point at the app's public address (`publicAppUrl` in `src/config.ts`: `VITE_PUBLIC_URL` at build time, or the
   address it is served from). On localhost a link only works on this computer, and the dialog says so.
@@ -358,6 +358,7 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | `src/editor` | TipTap editor for descriptions and comments, its Markdown, mentions, pictures and merging |
 | `src/features/onboarding` | Sign-in, picking your handle, choosing and creating workspaces, joining with an invite |
 | `src/features/*` | Screens, one folder per area (issues, views, projects, inbox, settings, import, help…) |
+| `src/features/settings/pages.tsx` | The one list of settings pages: the routes, the settings menu and ⌘K follow it (rules in `nav.ts`) |
 | `src/components` | Small shared pieces (avatar, empty state, segmented switch) |
 | `src/ui` | shadcn/ui components |
 | `src/lib` | Small helpers with no app knowledge (search that ignores Polish letters, `cn`, hooks) |

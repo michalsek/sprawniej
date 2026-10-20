@@ -26,6 +26,18 @@ and **Create a workspace**: give it a name and a first team. You're its owner.
 The first time you open your team's issues, four short tips show you around. You can see them again from the
 **Help** page (**Show the tour again**).
 
+### Settings
+
+Open **Settings** from the menu under your name (bottom left), or press `⌘K` and type what you're looking for
+("password", "labels", "members"). In Settings, its own menu takes the sidebar's place:
+
+- **Your account:** **Profile** (your name, switching workspace, signing out) and **Ways to sign in**.
+- **Workspace:** **General** (the workspace's name, leaving it), **Members**, **Invite links**, **People from Linear**
+  (while some haven't joined), **Teams**, **Labels**, **Archive**, **GitHub** and **Import from Linear**. Invite links
+  and Import from Linear are only for owners and admins.
+
+**Back to Sprawniej** at the top of the menu takes you back to where you were.
+
 ### More than one workspace
 
 If you're in several workspaces, Sprawniej asks which one to open (the ones you opened lately come first). To go to
@@ -34,12 +46,12 @@ another one later, open the menu under your name (bottom left) and choose **Swit
 
 ### Your name
 
-To go by another name, open **Settings and people** (in the menu under your name) and type it under **Your
-account**; it saves by itself. Your handle (@you) stays the same.
+To go by another name, open **Settings** (in the menu under your name) and type it under **Your account ›
+Profile**; it saves by itself. Your handle (@you) stays the same.
 
 ### Ways to sign in
 
-**Settings › Your account › Ways to sign in** lists how you can sign in:
+**Settings › Ways to sign in** lists how you can sign in:
 
 - **Email and password.** **Change password** picks a new one. Signed up with GitHub? **Set a password** lets you
   sign in with your email too.
@@ -53,8 +65,8 @@ choose **Change password**. Otherwise, ask whoever looks after Sprawniej for hel
 
 ### Inviting someone
 
-Only owners and admins can invite. Open the menu under your name (bottom left), choose **Settings and people**, and
-under **Invite links** press **Create an invite link**. Make **one link for each person**: you can add their email
+Only owners and admins can invite. Open the menu under your name (bottom left), choose **Settings**, then **Invite
+links** (or **Invite people** on **Members**), and press **Create an invite link**. Make **one link for each person**: you can add their email
 (so you remember where to send it) and pick whether they join as a **Member** or an **Admin**. Press **Create
 link**, then **Copy message** gives you a ready-to-send note with the link, **Copy link** just the link, and **Write
 an email** (when you added their email) opens your own mail app. Sprawniej doesn't send anything itself: you send the
@@ -80,7 +92,7 @@ bring them back, send them a new invite.
 
 ### Leaving a workspace
 
-To leave a workspace yourself, press **Leave workspace** under **Workspace** in Settings. Your issues and comments
+To leave a workspace yourself, press **Leave workspace** in **Settings › General**. Your issues and comments
 stay, with your name; to come back, ask for a new invite. A workspace always keeps at least one owner: if you're the
 only one, make someone else an owner first.
 
@@ -248,6 +260,8 @@ comments, under the same ID.
 Your teams are in the sidebar under **Your teams**. Each team has its own **Issues**, **Projects** and **Views**.
 Press **+** next to *Your teams* to join a team or create a new one. If you're in no team yet, Sprawniej asks which
 teams you work with when you open the workspace; **Skip for now** if you'd rather look around first.
+**Settings › Teams** lists every team in the workspace: **Join** one you're not in, or use **⋯** to edit, leave or
+delete yours, and **Create a team** makes a new one.
 
 Point at a team in the sidebar and press **⋯** to:
 
@@ -327,7 +341,7 @@ request's title or description takes it off the list.
 The change is made as the person who opened the pull request, so the issue's history says who and links to the pull
 request ("Ana moved it from In Progress to In Review · pull request #12"), and everyone following the issue gets a
 note in their Inbox. This only works for **people in the workspace who added GitHub as a way to sign in**
-(Settings › Your account): pull requests by anyone else move nothing and don't show on the issue. **Settings › GitHub** tells you whether yours
+(Settings › Ways to sign in): pull requests by anyone else move nothing and don't show on the issue. **Settings › GitHub** tells you whether yours
 count.
 
 **Connecting a repository** (owners and admins): **Settings › GitHub › Connect a repository**, then type it as
@@ -374,7 +388,8 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
 
 ## On a phone
 
-Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar. Press and hold an
+Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar; in
+Settings, the same button opens the settings menu. Press and hold an
 issue to drag it.
 
 ## Pictures

@@ -3,10 +3,12 @@
  * that person when they join) or link them to someone already here.
  */
 import { useEffect, useState } from 'react'
-import { Copy, Link2, Search, UserPlus } from 'lucide-react'
+import { Link } from 'wouter'
+import { Copy, Link2, Search, UserPlus, Users } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { expiresText, guestEmails, isExpired } from '@/backend/workspaces'
 import { PersonAvatar } from '@/components/Avatar'
+import { EmptyState } from '@/components/EmptyState'
 import { PagedList } from '@/components/PagedList'
 import { profileIdOf } from '@/data/people'
 import { useData } from '@/data/store'
@@ -19,7 +21,6 @@ import { Input } from '@/ui/input'
 import { LinkPersonDialog } from './LinkPersonDialog'
 import { useUnlinked, workOf } from './unlinked'
 import { copy } from './copy'
-import { Section } from './Section'
 import type { Invites } from './useInvites'
 
 export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; admin: boolean; invites: Invites; onInvite: (guest: Person, email?: string) => void }) {
@@ -44,7 +45,21 @@ export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; ad
     }
   }, [ws, admin, who])
 
-  if (!unlinked.length) return null
+  if (!unlinked.length) {
+    return (
+      <EmptyState
+        icon={<Users />}
+        title="No one from Linear is waiting"
+        action={
+          <Button asChild variant="outline">
+            {admin ? <Link href="/settings/workspace/import">Import from Linear</Link> : <Link href="/settings/workspace/members">Back to Members</Link>}
+          </Button>
+        }
+      >
+        People the Linear import brings who haven't joined yet show here.
+      </EmptyState>
+    )
+  }
   const shown = fuzzy(unlinked, query, (g) => [g.name])
   const emailOf = (g: Person) => {
     const id = profileIdOf(g.login)
@@ -56,14 +71,12 @@ export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; ad
   }
 
   return (
-    <Section
-      title="People from Linear"
-      description={
-        admin
+    <>
+      <p className="mb-5 text-[15px] text-muted-foreground">
+        {admin
           ? "They came with the Linear import and haven't joined yet. Invite them: when they join, their issues, comments and views become theirs. Already here under another name? Link them instead."
-          : "They came with the Linear import and haven't joined yet. An admin can invite them."
-      }
-    >
+          : "They came with the Linear import and haven't joined yet. An admin can invite them."}
+      </p>
       <div className="flex flex-col gap-4">
         {unlinked.length > 10 && (
           <div className="relative max-w-sm">
@@ -118,6 +131,6 @@ export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; ad
         />
       </div>
       {linking && <LinkPersonDialog guest={linking} onClose={() => setLinking(undefined)} />}
-    </Section>
+    </>
   )
 }

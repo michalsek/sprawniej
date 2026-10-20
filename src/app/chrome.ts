@@ -1,4 +1,7 @@
-/** State of the frame around pages: sidebar open or not, and the breadcrumbs the current page asked for. */
+/**
+ * State of the frame around pages: sidebar open or not, the breadcrumbs the current page asked for, and the last page
+ * outside Settings (where "Back to Sprawniej" goes).
+ */
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -13,6 +16,8 @@ interface Chrome {
   /** the slide-in menu on a phone */
   menuOpen: boolean
   crumbs: Crumb[]
+  /** the last page you were on outside Settings (not kept after a reload) */
+  lastAppPath: string
   toggleSidebar: () => void
 }
 
@@ -22,6 +27,7 @@ export const useChrome = create<Chrome>()(
       sidebarOpen: true,
       menuOpen: false,
       crumbs: [],
+      lastAppPath: '/',
       toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
     }),
     { name: 'sprawniej-chrome', partialize: (s) => ({ sidebarOpen: s.sidebarOpen }) },

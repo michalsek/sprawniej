@@ -1,4 +1,4 @@
-/** Settings › Your account › Ways to sign in: an email and a password, GitHub (and Google, once it's switched on). */
+/** Settings › Ways to sign in: an email and a password, GitHub (and Google, once it's switched on). */
 import { useCallback, useEffect, useEffectEvent, useState } from 'react'
 import { KeyRound, Loader2, Mail, Plus, Unlink } from 'lucide-react'
 import { toast } from 'sonner'
@@ -107,8 +107,6 @@ export function SignInWays() {
 
   return (
     <div>
-      <h3 className="font-medium">Ways to sign in</h3>
-      <p className="mb-3 text-sm text-muted-foreground">Use any of these to sign in to Sprawniej.</p>
       {!ways && !failed && <p className="text-sm text-muted-foreground">Loading…</p>}
       {failed && !ways && (
         <>

@@ -3,15 +3,16 @@
  * only what the rules allow is offered (src/data/roles.ts), and anything else shows why.
  */
 import { useMemo, useState } from 'react'
-import { Loader2, MoreHorizontal, Search, UserMinus } from 'lucide-react'
+import { Loader2, MoreHorizontal, Search, UserMinus, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'
+import { Link } from 'wouter'
 import { useShallow } from 'zustand/react/shallow'
 import { PersonAvatar } from '@/components/Avatar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { PagedList } from '@/components/PagedList'
 import { removeFromWorkspace, setRole } from '@/data/actions'
 import { choicesFor, myWho, ROLE_NAMES, ROLES, type Who } from '@/data/roles'
-import { ownerCount } from '@/data/select'
+import { isAdmin, ownerCount } from '@/data/select'
 import { useData } from '@/data/store'
 import { fuzzy } from '@/lib/fuzzy'
 import { isRole, type Person, type Role } from '@/model/schema'
@@ -77,6 +78,7 @@ export function Members() {
 
   const sorted = [...rows].sort((a, b) => RANK[a.who.role] - RANK[b.who.role] || a.person.name.localeCompare(b.person.name))
   const me = useData(useShallow(myWho))
+  const admin = useData(isAdmin)
   const shown = fuzzy(sorted, query, (r) => [r.person.name, r.who.login])
   const admins = sorted.filter((r) => r.who.role !== 'member' && r.who.login !== meLogin).map((r) => r.person.name)
 
@@ -106,6 +108,15 @@ export function Members() {
 
   return (
     <div className="flex flex-col gap-4">
+      {admin && (
+        <div>
+          <Button asChild variant="outline">
+            <Link href="/settings/workspace/invites">
+              <UserPlus /> Invite people
+            </Link>
+          </Button>
+        </div>
+      )}
       {rows.length > 10 && (
         <div className="relative max-w-sm">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />

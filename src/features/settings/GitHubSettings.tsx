@@ -5,6 +5,7 @@
 import { useCallback, useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2, Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { Link } from 'wouter'
 import { listRepos, type GitHubRepo } from '@/backend/github'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { EmptyState } from '@/components/EmptyState'
@@ -21,7 +22,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } f
 import { Input } from '@/ui/input'
 import { lastText } from './githubText'
 
-/** the connected repositories, read when Settings opens, after a change and when the window gets focus */
+/** the connected repositories, read when Settings › GitHub opens, after a change and when the window gets focus */
 function useRepos(ws: string | null, admin: boolean) {
   const [repos, setRepos] = useState<GitHubRepo[]>([])
   const [state, setState] = useState<'loading' | 'ready' | 'failed'>('loading')
@@ -239,9 +240,17 @@ function Yours() {
   const linked = useData((s) => (login ? (s.people[login]?.githubId ?? 0) > 0 : false))
   return (
     <p className="text-sm text-muted-foreground">
-      {linked
-        ? 'Your pull requests move your issues: you sign in with GitHub.'
-        : 'Your pull requests move issues once GitHub is one of your ways to sign in (Your account, below).'}
+      {linked ? (
+        'Your pull requests move your issues: you sign in with GitHub.'
+      ) : (
+        <>
+          Your pull requests move issues once GitHub is one of your{' '}
+          <Link href="/settings/account/sign-in" className="text-foreground underline underline-offset-2">
+            ways to sign in
+          </Link>
+          .
+        </>
+      )}
     </p>
   )
 }

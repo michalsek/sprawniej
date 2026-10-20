@@ -1,5 +1,5 @@
 /**
- * The open workspace's invite links that aren't used yet, for admins. They aren't live: they're read when Settings
+ * The open workspace's invite links that aren't used yet, for admins. They aren't live: they're read when the page
  * opens, when anyone joins, leaves or changes role (a link may have just been used), when the window gets focus, and
  * after making or deleting one.
  */

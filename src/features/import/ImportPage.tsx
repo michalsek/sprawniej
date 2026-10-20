@@ -3,13 +3,12 @@
  * Reading happens straight from Linear; the check step works out what is new or changed and the steps that save it
  * (prepareImport.ts); Import saves them (importRun.ts, through actions.importFromLinear), with a progress bar. An
  * import that stops partway says so and can be tried again: nothing comes over twice. Leaving the page while it
- * saves doesn't stop it, and coming back shows it again.
+ * saves doesn't stop it, and coming back shows it again. The settings frame sets the crumbs and keeps members out.
  */
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'wouter'
 import { ulid } from 'ulid'
 import { CheckCircle2, ExternalLink, Loader2 } from 'lucide-react'
-import { useCrumbs } from '@/app/chrome'
 import { PersonAvatar } from '@/components/Avatar'
 import { backend } from '@/backend'
 import { ImportProblem } from '@/backend/importRows'
@@ -74,7 +73,6 @@ function doneText(c: ImportResult['counts']): string {
 }
 
 export function ImportPage() {
-  useCrumbs([{ label: 'Settings', href: '/settings' }, { label: 'Import from Linear' }])
   const [stage, setStage] = useState<Stage>({ at: 'key' })
   const [key, setKey] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
@@ -147,7 +145,7 @@ export function ImportPage() {
               {busy ? <Loader2 className="animate-spin" /> : null} {busy ?? 'Try again'}
             </Button>
             <Button asChild variant="outline">
-              <Link href="/settings">Back to Settings</Link>
+              <Link href="/settings/workspace">Back to Settings</Link>
             </Button>
           </>
         }

@@ -15,12 +15,14 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 
-function NavItem({ href, icon, children, count, indent }: { href: string; icon: ReactNode; children: ReactNode; count?: number; indent?: boolean }) {
+/** a link in the sidebar, lit while you're on its page (or below it, unless `exact`) */
+export function NavItem({ href, icon, children, count, indent, exact }: { href: string; icon: ReactNode; children: ReactNode; count?: number; indent?: boolean; exact?: boolean }) {
   const [location] = useLocation()
-  const active = location === href || (href !== '/' && location.startsWith(`${href}/`))
+  const active = location === href || (!exact && href !== '/' && location.startsWith(`${href}/`))
   return (
     <Link
       href={href}
+      aria-current={active ? 'page' : undefined}
       className={cn(
         'flex h-9 items-center gap-3 rounded-lg px-3 text-[15px] text-sidebar-foreground/90 transition-colors hover:bg-sidebar-accent/60 [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/80',
         active && 'bg-sidebar-accent text-sidebar-foreground',
@@ -34,7 +36,7 @@ function NavItem({ href, icon, children, count, indent }: { href: string; icon: 
   )
 }
 
-function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
+export function Section({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
     <div className="mt-6">
       <div className="mb-1 flex items-center px-3 text-[13px] font-medium text-muted-foreground">
@@ -98,7 +100,7 @@ function Me() {
           <div className="px-2 py-1.5 text-xs text-muted-foreground">Workspace: {workspace?.name}</div>
           <DropdownMenuItem asChild>
             <Link href="/settings">
-              <Settings /> Settings and people
+              <Settings /> Settings
             </Link>
           </DropdownMenuItem>
           <DropdownMenuItem asChild>
@@ -114,14 +116,9 @@ function Me() {
           <DropdownMenuItem onSelect={switchWorkspace}>
             <Repeat /> Switch workspace
           </DropdownMenuItem>
-          <DropdownMenuItem asChild>
-            <Link href="/settings">
-              <CircleUser /> Your account
-            </Link>
-          </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem asChild>
-            <Link href="/settings">
+            <Link href="/settings/account">
               <LogOut /> Sign out…
             </Link>
           </DropdownMenuItem>
