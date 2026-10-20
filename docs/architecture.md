@@ -252,6 +252,7 @@ people's changes rarely touch the same thing. Checked in the browser in phase 5 
 | One archives an issue, the other edits it | The edit lands; the issue stays archived |
 | Delete, archive or move issues away from one team | Numbers are never given out twice |
 | Drag issues around | Only the moved issue changes; the same issue: later drop wins |
+| Drag projects around the board | Only the moved project changes (its status and place); the same project: later drop wins, and both screens agree |
 | Rename, recolour or reorder statuses | Field by field; the same field of the same status: later save wins |
 | Add statuses with the same name | The second is undone: "There's already a status with this name." |
 | Hide the last two shown statuses of a group | They wait for each other; the second is undone: "Each group needs at least one status that isn't hidden. …" |
@@ -309,8 +310,14 @@ History lines name statuses as they are called now; lines from before statuses n
 moved into a status that is still being saved waits for it (`PARENTS` in `src/backend/writes/requests.ts`). A status
 that still has its category's starting colour is painted in the theme's colour for that category (`paintColor`).
 
-**Project statuses** will use the same table (`kind = 'project'`) and the same trigger function on `projects`, with
-the six project categories; the table already allows them.
+**Project statuses** work the same way, in the same table (`kind = 'project'`), with six categories: Backlog,
+Planned, In progress, Paused, Completed, Canceled. `projects.status` is the category, as always; `projects.status_id`
+is the status, kept in step by the same trigger (`a_category`, `follow_status('project')`). Grouping issues by project
+leaves out completed and canceled projects, by category. The app sends only `status_id` (picking a status, a drop on
+the board, a new project, which starts in Planned's default unless a column's "+" made it); an older version sends
+only `status` and lands on its category's default; the import sends both (docs/linear-import.md). The helpers are in
+`src/data/statuses.ts` too (`projectStatuses`, `statusOfProject`, `pickProjectStatus`); a project dropped into a
+status still being saved waits for it, as an issue does.
 
 ## Issue numbers
 
@@ -439,11 +446,21 @@ Dropping an issue between two others gives it a key between theirs (`src/data/or
 changes, and two people reordering at once never clash. List and board use the same order. Dropping into another
 column or group also changes that field (status, assignee, priority or project), in the same change.
 
-Dragging is done with dnd-kit (`src/features/issues/useIssueDrag.ts`). While you drag, the order on screen is local
-state; nothing is saved until you drop. In a list, sub-issues sit under their parent, so a dropped issue gets its key
+Dragging is done with dnd-kit. What every board and list shares is in `src/features/board/columnsDrag.ts`: the
+sensors (mouse, touch press-and-hold, keyboard Space), the collision recipe for several columns, and the live order
+while a card moves between columns. `src/features/issues/useIssueDrag.ts` (issues) and
+`src/features/projects/useProjectDrag.ts` (the project board) decide what a drop changes. While you drag, the order on
+screen is local state; nothing is saved until you drop. In a list, sub-issues sit under their parent, so a dropped issue gets its key
 from the nearest issues at its own level (top-level issues among top-level ones, sub-issues among their siblings).
 Reordering only means something in Manual order; under another ordering a drop can still change the group, and
 otherwise we explain where to switch to Manual.
+
+Projects have a `sortOrder` too, for their place in a board column. A project dropped in another column takes that
+column's status and a key between its new neighbours; within a column, only its key changes. The List shows projects
+by name, so it has no order to keep. A project an older version made has no key yet and shows after the others, by
+name; when a drop lands next to such projects, they get keys first, in the order they show, in the same save, so the
+dropped one lands where it was let go. A hidden status keeps its column while projects are in it, marked Hidden:
+projects can be dragged out of it, not into it.
 
 Favourites in the sidebar use the same kind of keys: each person's own `sortOrder` per favourite, so a drop (or Move
 up, Move down) saves only the moved one, plus any after it that share its key (`src/data/favourites.ts`,

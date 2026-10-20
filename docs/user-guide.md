@@ -396,9 +396,21 @@ Press the star (☆) on a view to keep it in your sidebar (see Favourites).
 ## Projects
 
 A **project** is a bigger goal made of several issues, like "New onboarding". **New project** on the Projects page
-starts one. On its page you can change its emoji, name and description in place, and set its status, who leads it,
-a target date and which teams work on it. The bar shows how many of its issues are done. In the list of projects,
-click an emoji to change it, or use **⋯** to rename or delete a project.
+starts one; a new project starts in Planned. On its page you can change its emoji, name and description in place, and
+set its status, who leads it, a target date and which teams work on it. The bar shows how many of its issues are done.
+
+The Projects page (for the whole workspace, and for each team) shows projects as a **List** or a **Board**; switch
+with the buttons next to New project. Sprawniej remembers your choice for each page, in this browser.
+
+- **List**: every project by name, with its status, lead, target date and progress. Click an emoji to change it, or
+  use **⋯** to rename or delete a project.
+- **Board**: a column for each project status (Backlog, Planned, In progress, Paused, Completed, Canceled, and any
+  your workspace adds), with how many projects are in it. Drag a card to another column to change its status, or up
+  and down to put it in order; the order is the same for everyone. **+** at the top of a column starts a project in
+  that status. On a phone, press and hold a card to pick it up. With the keyboard, move to a card, press Space to pick
+  it up, the arrow keys to move it, Space to drop it and Esc to put it back.
+- A hidden status keeps its column, marked **Hidden**, while projects are in it. You can drag projects out of it, but
+  not into it.
 
 Add issues to a project from the project's page, or pick the project on any issue. Deleting a project (**⋯ › Delete
 project**) keeps its issues; they just no longer belong to a project. Press the star (☆) on a project to keep it in your

@@ -151,7 +151,7 @@ must belong to the workspace.
 ### statuses
 
 The workspace's own statuses: a name and a colour within one fixed **category** (docs/architecture.md, "Categories
-and statuses"). Shared by every kind of thing that has a status: `kind` says which (`issue`; `project` comes later).
+and statuses"). Shared by every kind of thing that has a status: `kind` says which (`issue` or `project`).
 
 | Column | Meaning |
 | --- | --- |
@@ -165,18 +165,28 @@ and statuses"). Shared by every kind of thing that has a status: `kind` says whi
 | `changed_at`, `extra` | see Common columns |
 
 Statuses show in category order, then by `position`, then by `id`. The **default status** of a category is its first
-shown one: where an issue lands when only its category is known (an older version of the app, GitHub, the import).
-Every workspace starts with one per category, named and coloured as before (`private.status_defaults`, copied by the
-`seed_statuses` trigger when a workspace is made, also by an older app). Every member adds and changes them (`name`,
+shown one: where an issue or a project lands when only its category is known (an older version of the app, GitHub,
+the import). Every workspace starts with one per category, named and coloured as before: seven for issues, six for
+projects (Backlog, Planned, In progress, Paused, Completed, Canceled), from `private.status_defaults`, copied by the
+`seed_statuses` trigger when a workspace is made, also by an older app. Every member adds and changes them (`name`,
 `color`, `position`, `hidden`, `extra`); nobody deletes one, and each category keeps at least one shown status
 (`c_keep_a_status`, `23514`: "Each group needs at least one status that isn't hidden. Add or show another one
 first."). Broadcast on `ws:`.
 
 ### projects
 
-`id`, `workspace_id`, `name`, `emoji`, `description`, `status` (`backlog`, `planned`, `in_progress`, `paused`,
-`completed`, `canceled`), `lead_id` (`lead`), `target_date` (`targetDate`, a day), `linear_id`, `created_at`,
-`changed_at`, `extra`.
+| Column | Meaning |
+| --- | --- |
+| `id`, `workspace_id`, `name`, `emoji`, `description` | as their names say |
+| `status` | its **category**, one of `backlog`, `planned` (the column default), `in_progress`, `paused`, `completed`, `canceled`: what decides something (grouping issues by project leaves out completed and canceled ones). Older apps read and write only this |
+| `status_id` (`statusId`) | its status, one of the workspace's project statuses of that category; never null. Kept in step with `status` by the `a_category` trigger (below) |
+| `sort_order` (`sortOrder`) | its place in its board column, a fractional index (compared byte by byte, collate "C"); null for a project an older app made, which shows after the others, by name, until someone drops a project next to it |
+| `lead_id` (`lead`), `target_date` (`targetDate`, a day) | null when none |
+| `linear_id`, `created_at`, `changed_at`, `extra` | see Common columns |
+
+The app sends `status_id` and never `status` (the database fills it in). When the project statuses came
+(`20261021150000_project_statuses.sql`), every project got the status of its category, and `sort_order` in name order
+per workspace (`a0` … `az`, `b10` …), so each column started in the order the list showed.
 
 ### project_teams
 
@@ -490,7 +500,10 @@ for rows that will only be updated (Postgres checks the proposed row before it f
 - `private.wiring`: the one list of shared tables, with their keys, workspace column, broadcast topic, standard
   policies, stamp trigger and whether deleting leaves a note. `private.wire(table)` sets a table up from it.
 - `private.import_spec`: what `import_rows` may write per table. Issues go in with their category (`status`) only:
-  a new one gets the category's default status, an updated one keeps its status while the category stays.
+  a new one gets the category's default status, an updated one keeps its status while the category stays. Projects
+  go in with `status_id` too (a Linear status matched by name, then by kind: docs/linear-import.md; empty means the
+  category's default), and with `sort_order`, which is written only for a new project, so a second import keeps the
+  order people arranged here.
 - Statuses: `private.status_defaults` (what every workspace starts with, per kind and category), `seed_statuses(ws,
   kind)` (copies them; every kind when null), `seed_new_workspace` (the trigger), `default_status(ws, kind, category)`
   (the first shown status of a category), `follow_status` (the trigger that keeps a category and a status in step),
@@ -517,10 +530,11 @@ New functions are closed by default: nobody runs one unless a migration grants i
 
 - `a_stamp` on every table `private.wiring` gives a stamp (all but invites, invite uses, history, used numbers and deletions): `changed_at` (`touch`); on issues also authors, times and who archived
   (`issue_times`); on comments the author and `edited_at` (`comment_times`). Imports keep the times they bring.
-- `a_category` on issues (before `a_stamp`, so the times see the final category; `follow_status('issue')`): a new
-  `status_id` sets `status` to its category (a status of another workspace or kind: `22023` "That status isn't in this
-  workspace."; hidden ones are allowed); `status` changed alone (an older app, GitHub, the import) moves `status_id` to
-  that category's default; an insert without `status_id` gets its category's default. Both sent: `status_id` wins.
+- `a_category` on issues (before `a_stamp`, so the times see the final category; `follow_status('issue')`) and on
+  projects (`follow_status('project')`): a new `status_id` sets `status` to its category (a status of another
+  workspace or kind: `22023` "That status isn't in this workspace."; hidden ones are allowed); `status` changed alone
+  (an older app, GitHub, the import) moves `status_id` to that category's default; an insert without `status_id` gets
+  its category's default. Both sent: `status_id` wins.
 - `a_author` on views (`owner_id`), inbox (`actor_id`), invites (`invited_by`), github_repos and notion_connections (`added_by`): whoever is signed in.
 - `b_number` on issues: the next number of the team (Issue numbers in docs/architecture.md).
 - `b_status` on inbox (`note_status`): a status note sent with `status_id` gets that status's category (an id that
@@ -569,8 +583,10 @@ let them add, change and delete them, except:
 On top of that, **column grants** list what people may write; everything else is filled in by the database
 (`changed_at`, numbers, authors, times, `linear_id`). For example, issues take `title`, `description`, `status`,
 `status_id`, `priority`, `assignee_id`, `project_id`, `parent_id`, `due_date`, `estimate`, `sort_order`, `duplicate_of`,
-`archived_at` and `extra` on update, but not `team_id` or `number`. The list is in
-`supabase/migrations/20261019000005_rls.sql` and the migrations that add tables or columns since (GitHub, statuses),
+`archived_at` and `extra` on update, but not `team_id` or `number`; projects take `status_id` and `sort_order` on
+top of `status` (which older apps still send). The list is in
+`supabase/migrations/20261019000005_rls.sql` and the migrations that add tables or columns since (GitHub, statuses,
+project statuses),
 with a copy in `src/backend/changes.ts`.
 
 ## Realtime

@@ -55,6 +55,8 @@ database.
 | Subscribers | Subscribers (people who follow it anyway, by creating it, being assigned or commenting, aren't listed twice) |
 | Labels | Labels (group labels are flattened: `Area/Charts` becomes `Area: Charts`) |
 | Project (name, icon, description, state, lead, target date) | Project |
+| Project status | One of the workspace's shown project statuses: by name first (`On hold`), then by Linear's kind of status (`started` is In progress; `backlog`, `planned`, `paused`, `completed` and `canceled` their own groups), which is that group's first shown status. The import never makes statuses. A project imported again keeps its status here while Linear's kind stays in its group. Older Linear workspaces only give the kind (`state`). |
+| Project order | New projects go to the bottom of their board column, in Linear's order; projects already here keep their place |
 | Parent issue | Parent (sub-issues) |
 | Sort order | New issues go on top of their team, in Linear's order; issues already here keep their place |
 | Comments | Comments, with the original author and date. Authors set to "No one" are shown as "From Linear: Name". |

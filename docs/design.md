@@ -64,6 +64,10 @@ What differs per kind (group names, counts, the Default tooltip) is in `KIND_TEX
 
 Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
 
+A project status is a **dot** in the status's own colour (`StatusDot` in `src/features/projects/ProjectProperties.tsx`,
+painted like issue statuses: a status with its group's starting colour follows the theme). The six a workspace starts
+with: Backlog and Paused grey, Canceled grey, Planned light grey, In progress yellow, Completed indigo.
+
 ## Type and spacing
 
 - Inter, 15 px for most text, 13 to 14 px for quiet text. Page titles 24 px semibold.
@@ -89,7 +93,8 @@ Icons are in `src/features/issues/icons.tsx`. Don't draw new versions elsewhere.
   raised background (`src/components/Segmented.tsx`), like Punchcard's Day / Week / Month.
 - **Tabs that are pages** (Active / Backlog / All issues): separate outlined buttons (`src/components/Tabs.tsx`).
 - **Issue row**: priority, ID, status, title (with `code` in backticks), sub-issue counter, labels, assignee, date.
-- **Board card**: ID and assignee, then status and title, then priority, counter and labels.
+- **Board card**: ID and assignee, then status and title, then priority, counter and labels. A project card: emoji,
+  name and lead, then the target date and the progress bar. An empty column says "Drop a project here".
 - **Empty states**: an icon, a short title, one sentence in plain words about what goes here, and one button
   (`src/components/EmptyState.tsx`).
 
