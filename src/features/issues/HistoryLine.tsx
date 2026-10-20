@@ -169,24 +169,18 @@ export function HistoryLine({ event }: { event: HistoryEvent }) {
 }
 
 /**
- * The first line: who created the issue, from its own fields, and the Notion page it was made from. `by` is empty when
- * nobody did: a page whose author isn't a member, or someone whose account is gone.
+ * The first line: who created the issue, from its own fields, and the Notion page it was made from. Made from a page
+ * by nobody (its author isn't a member), it says only that.
  */
 export function CreatedLine({ by, at, via }: { by: string; at: string; via?: Via }) {
   const person = useData((s) => (by ? s.people[by] : undefined))
   const notion = isNotionVia(via) ? via.notion.url : undefined
-  if (!by) {
+  if (!by && notion) {
     return (
       <li className="flex items-start gap-2.5 px-1 text-sm text-muted-foreground">
-        {notion ? <NotionMark className="mt-px" /> : <Who />}
+        <NotionMark className="mt-px" />
         <span>
-          {notion ? (
-            <>
-              Created from <NotionLink url={notion}>Notion</NotionLink>
-            </>
-          ) : (
-            'Created the issue'
-          )}
+          Created from <NotionLink url={notion}>Notion</NotionLink>
           <When at={at} />
         </span>
       </li>
