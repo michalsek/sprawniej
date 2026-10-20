@@ -65,6 +65,7 @@ export type JoinStage =
   | 'full'
   | 'expired'
   | 'left'
+  | 'no-places'
   | 'member'
   | 'welcome'
   | 'account'
@@ -72,20 +73,25 @@ export type JoinStage =
   | 'name'
   | 'joining'
 
+/**
+ * `noPlaces`: making an account with the link was refused because accounts still being made hold all its places. The
+ * link itself reads open, so only that refusal tells.
+ */
 export function joinStage(i: {
   info: InviteInfo | null | undefined
   failed: boolean
   signedIn: boolean
   profile: 'loading' | 'failed' | 'none' | 'ready'
   pressedJoin: boolean
+  noPlaces?: boolean
 }): JoinStage {
   if (i.failed) return 'failed'
   if (i.info === undefined) return 'loading'
   if (i.info === null) return 'unknown'
   if (i.info.state !== 'open') return i.info.state
   if (!i.pressedJoin) return 'welcome'
-  if (!i.signedIn) return 'account'
+  if (!i.signedIn) return i.noPlaces ? 'no-places' : 'account'
   if (i.profile === 'loading' || i.profile === 'failed') return 'profile'
-  if (i.profile === 'none') return 'name'
+  if (i.profile === 'none') return i.noPlaces ? 'no-places' : 'name'
   return 'joining'
 }

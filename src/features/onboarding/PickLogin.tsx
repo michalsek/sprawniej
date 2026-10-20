@@ -4,7 +4,7 @@
  */
 import { useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
-import { CODE_KEY, giveSignupCode, INVITE_REFUSED, signupCodeNeeded, useAuth } from '@/backend/auth'
+import { CODE_KEY, giveSignupCode, INVITE_NO_PLACES, INVITE_REFUSED, signupCodeNeeded, useAuth } from '@/backend/auth'
 import { createProfile, LOGIN_PATTERN, ProfileProblem, suggestLogin, type MyProfile } from '@/backend/profiles'
 import { HandleInput } from '@/components/HandleInput'
 import { useSignOut } from '@/components/SignOut'
@@ -17,7 +17,7 @@ import { SignupCodeField } from './Welcome'
 /**
  * `initialName`: the name to start from when the sign-in has none (an invite for someone from Linear has theirs).
  * `invite`: the invite link's token, which lets a new account in without a code. `onInviteRefused`: it couldn't (the
- * link was used, ended, is full or expired).
+ * link was used, ended, is full or expired, or has no places left), with the reason.
  */
 export function PickLogin({
   onDone,
@@ -28,7 +28,7 @@ export function PickLogin({
   onDone: (p: MyProfile) => void
   initialName?: string
   invite?: string
-  onInviteRefused?: () => void
+  onInviteRefused?: (why: string) => void
 }) {
   const user = useAuth((s) => s.user)
   // signing out on the way in through an invite comes back to the invite
@@ -67,7 +67,7 @@ export function PickLogin({
       const why = err instanceof Error ? err.message : String(err)
       if (!askCode) setInviteRefused(true)
       setProblem(why)
-      if (why === INVITE_REFUSED) onInviteRefused?.()
+      if (why === INVITE_REFUSED || why === INVITE_NO_PLACES) onInviteRefused?.(why)
       return false
     }
   }

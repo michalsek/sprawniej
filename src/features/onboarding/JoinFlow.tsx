@@ -8,7 +8,7 @@ import { useLocation } from 'wouter'
 import { Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { MyProfileState } from '@/app/useMyProfile'
-import { useAuth } from '@/backend/auth'
+import { INVITE_NO_PLACES, useAuth } from '@/backend/auth'
 import { inviteInfo, inviteProblem, type InviteInfo, type JoinProblem } from '@/backend/workspaces'
 import { PersonAvatar } from '@/components/Avatar'
 import { useSignOut } from '@/components/SignOut'
@@ -62,10 +62,10 @@ function GoHome({ title, children }: { title: string; children: string }) {
 
 const NO_SUCH_LINK = 'It may have been deleted, or part of the link is missing. Ask whoever invited you for a new one.'
 
-/** the join problems that are how the link stands, so the page shows that link's screen */
+/** the join problems that are how the link stands, so the page shows that link's screen (every one of them) */
 type LinkState = Extract<JoinProblem, InviteInfo['state']>
-const LINK_STATES: readonly JoinProblem[] = ['used', 'ended', 'full', 'expired', 'left'] satisfies LinkState[]
-const isLinkState = (k: JoinProblem): k is LinkState => LINK_STATES.includes(k)
+const LINK_STATES: Record<LinkState, true> = { used: true, ended: true, full: true, expired: true, left: true }
+const isLinkState = (k: JoinProblem): k is LinkState => Object.hasOwn(LINK_STATES, k)
 
 export function JoinFlow({ link, profile }: { link: { token: string | null } | 'old'; profile: MyProfileState }) {
   if (link === 'old') return <GoHome title="This invite link is from an older Sprawniej">Ask whoever invited you for a new link.</GoHome>
@@ -98,6 +98,8 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
   const [mode, setMode] = useState<Mode>('sign-up')
   const [sentTo, setSentTo] = useState<string>()
   const [joinProblem, setJoinProblem] = useState<string>()
+  // whom making an account with the link was refused for, because its places are held (the account's id, or '')
+  const [noPlacesFor, setNoPlacesFor] = useState<string>()
   const joining = useRef(false)
   const { signOut, dialog: signOutDialog } = useSignOut(location.hash)
 
@@ -120,7 +122,7 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
     }
   }, [token, uid, attempt])
 
-  const stage = joinStage({ info, failed, signedIn: !!user, profile: profile.state, pressedJoin: pressed })
+  const stage = joinStage({ info, failed, signedIn: !!user, profile: profile.state, pressedJoin: pressed, noPlaces: noPlacesFor === (uid ?? '') })
   const ws = info?.workspaceName ?? ''
   const by = info?.invitedBy?.name ?? 'whoever invited you'
 
@@ -151,6 +153,12 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
 
   const handle = profile.state === 'ready' ? handleOf(profile.mine.person) : undefined
   const signedInAs = user?.email || (handle ? `@${handle}` : '')
+
+  // ask the link again, to say exactly why
+  const inviteRefused = (why: string) => {
+    if (why === INVITE_NO_PLACES) setNoPlacesFor(uid ?? '')
+    setAttempt((n) => n + 1)
+  }
 
   const goHome = () => {
     forget()
@@ -184,7 +192,13 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
     case 'expired':
       return <GoHome title="This invite has expired">{`Ask ${by} for a new one.`}</GoHome>
     case 'left':
-      return <GoHome title={`This link was made before you left ${ws}`}>{`To come back, ask ${by} for a new link.`}</GoHome>
+      return (
+        <GoHome title={`This link was made before you left ${ws}`}>{`You left or were removed after it was made. To come back, ask ${by} for a new link.`}</GoHome>
+      )
+    case 'no-places':
+      return (
+        <GoHome title="This invite link has no places left">{`People who are still creating their accounts hold its places. Ask ${by} for a new one.`}</GoHome>
+      )
     case 'member':
       return (
         <Step
@@ -274,13 +288,13 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
           }
         >
           <p className="mb-6">You'll use it to sign in to Sprawniej from now on.</p>
-          <SignInForm mode={mode} onMode={setMode} onCheckEmail={setSentTo} invite={token} onInviteRefused={() => setAttempt((n) => n + 1)} />
+          <SignInForm mode={mode} onMode={setMode} onCheckEmail={setSentTo} invite={token} onInviteRefused={inviteRefused} />
         </Step>
       )
     case 'profile':
       return profile.state === 'failed' ? <ProfileFailed problem={profile.problem} onRetry={profile.retry} /> : <Waiting title="Just a moment…" />
     case 'name':
-      return <PickLogin initialName={info?.forName ?? undefined} onDone={profile.picked} invite={token} onInviteRefused={() => setAttempt((n) => n + 1)} />
+      return <PickLogin initialName={info?.forName ?? undefined} onDone={profile.picked} invite={token} onInviteRefused={inviteRefused} />
     case 'joining':
       return joinProblem ? (
         <Step

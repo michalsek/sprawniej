@@ -1,7 +1,7 @@
 /** The first screen: sign in (with GitHub, or an email and a password), or create an account. */
 import { useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
-import { CODE_KEY, friendlyAuthError, githubAvailable, INVITE_REFUSED, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
+import { CODE_KEY, friendlyAuthError, githubAvailable, INVITE_NO_PLACES, INVITE_REFUSED, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Separator } from '@/ui/separator'
@@ -23,7 +23,7 @@ export type Mode = 'sign-in' | 'sign-up'
  * `onCheckEmail`: a new account has to open an emailed link first. "Continue with GitHub" shows once we know GitHub
  * sign-in is switched on, or when Sprawniej can't be reached to ask (the button then says so).
  * A new account needs a sign-up code, unless it comes from an invite link (`invite`, its token). `onInviteRefused`: the
- * link couldn't make an account (it was used, ended, is full or expired).
+ * link couldn't make an account (it was used, ended, is full or expired, or has no places left), with the reason.
  */
 export function SignInForm({
   mode = 'sign-in',
@@ -36,7 +36,7 @@ export function SignInForm({
   onMode?: (m: Mode) => void
   onCheckEmail?: (email: string) => void
   invite?: string
-  onInviteRefused?: () => void
+  onInviteRefused?: (why: string) => void
 }) {
   const urlProblem = useAuth((s) => s.urlProblem)
   const [email, setEmail] = useState('')
@@ -81,7 +81,7 @@ export function SignInForm({
     } catch (err) {
       const why = friendlyAuthError(err)
       setProblem(why)
-      if (why === INVITE_REFUSED) onInviteRefused?.()
+      if (why === INVITE_REFUSED || why === INVITE_NO_PLACES) onInviteRefused?.(why)
     } finally {
       setBusy(null)
     }

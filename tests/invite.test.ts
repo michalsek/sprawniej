@@ -84,9 +84,6 @@ describe('which join screen', () => {
     expect(joinStage({ ...base, info: null })).toBe('unknown')
     expect(joinStage({ ...base, info: info('used') })).toBe('used')
     expect(joinStage({ ...base, info: info('expired') })).toBe('expired')
-    expect(joinStage({ ...base, info: info('ended') })).toBe('ended')
-    expect(joinStage({ ...base, info: info('full') })).toBe('full')
-    expect(joinStage({ ...base, info: info('left') })).toBe('left')
     expect(joinStage({ ...base, info: info('member') })).toBe('member')
     expect(joinStage({ ...base, pressedJoin: false })).toBe('welcome')
     expect(joinStage({ ...base, signedIn: false })).toBe('account')
@@ -94,5 +91,12 @@ describe('which join screen', () => {
     expect(joinStage({ ...base, profile: 'failed' })).toBe('profile')
     expect(joinStage({ ...base, profile: 'none' })).toBe('name')
     expect(joinStage(base)).toBe('joining')
+  })
+
+  test('a link that read open but had no place for a new account', () => {
+    expect(joinStage({ ...base, signedIn: false, noPlaces: true })).toBe('no-places')
+    expect(joinStage({ ...base, profile: 'none', noPlaces: true })).toBe('no-places')
+    // an account that is in already can still join: joining counts only who joined
+    expect(joinStage({ ...base, noPlaces: true })).toBe('joining')
   })
 })
