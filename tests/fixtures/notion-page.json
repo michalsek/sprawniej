@@ -1,0 +1,111 @@
+{
+  "source": {
+    "type": "automation",
+    "automation_id": "1c2d3e4f-0000-4000-8000-000000000001",
+    "action_id": "1c2d3e4f-0000-4000-8000-000000000002",
+    "event_id": "1c2d3e4f-0000-4000-8000-000000000003",
+    "user_id": "1c2d3e4f-0000-4000-8000-000000000004",
+    "attempt": 1
+  },
+  "data": {
+    "object": "page",
+    "id": "2a3b4c5d-6e7f-4a8b-9c0d-1e2f3a4b5c6d",
+    "created_time": "2026-10-20T09:00:00.000Z",
+    "last_edited_time": "2026-10-20T09:30:00.000Z",
+    "created_by": { "object": "user", "id": "1c2d3e4f-0000-4000-8000-000000000010" },
+    "last_edited_by": { "object": "user", "id": "1c2d3e4f-0000-4000-8000-000000000011" },
+    "cover": null,
+    "icon": null,
+    "parent": {
+      "type": "data_source_id",
+      "data_source_id": "1c2d3e4f-0000-4000-8000-000000000020",
+      "database_id": "1c2d3e4f-0000-4000-8000-000000000021"
+    },
+    "archived": false,
+    "in_trash": false,
+    "is_locked": false,
+    "properties": {
+      "Task name": {
+        "id": "title",
+        "type": "title",
+        "title": [
+          {
+            "type": "text",
+            "text": { "content": "Fix the login page", "link": null },
+            "annotations": { "bold": false, "italic": false, "strikethrough": false, "underline": false, "code": false, "color": "default" },
+            "plain_text": "Fix the login page",
+            "href": null
+          }
+        ]
+      },
+      "Status": { "id": "a%3Ab", "type": "status", "status": { "id": "c%3Ad", "name": "In progress", "color": "blue" } },
+      "Priority": { "id": "e%3Af", "type": "select", "select": { "id": "g%3Ah", "name": "High", "color": "red" } },
+      "Assignee": {
+        "id": "i%3Aj",
+        "type": "people",
+        "people": [
+          {
+            "object": "user",
+            "id": "1c2d3e4f-0000-4000-8000-000000000012",
+            "name": "Bob Example",
+            "avatar_url": null,
+            "type": "person",
+            "person": { "email": "Bob@Example.com" }
+          }
+        ]
+      },
+      "Created by": {
+        "id": "k%3Al",
+        "type": "created_by",
+        "created_by": {
+          "object": "user",
+          "id": "1c2d3e4f-0000-4000-8000-000000000010",
+          "name": "Ana Example",
+          "avatar_url": null,
+          "type": "person",
+          "person": { "email": "ana@example.com" }
+        }
+      },
+      "Due": { "id": "m%3An", "type": "date", "date": { "start": "2026-10-31", "end": null, "time_zone": null } },
+      "Description": {
+        "id": "o%3Ap",
+        "type": "rich_text",
+        "rich_text": [
+          {
+            "type": "text",
+            "text": { "content": "The button does ", "link": null },
+            "annotations": { "bold": false, "italic": false, "strikethrough": false, "underline": false, "code": false, "color": "default" },
+            "plain_text": "The button does ",
+            "href": null
+          },
+          {
+            "type": "text",
+            "text": { "content": "nothing", "link": null },
+            "annotations": { "bold": true, "italic": false, "strikethrough": false, "underline": false, "code": false, "color": "default" },
+            "plain_text": "nothing",
+            "href": null
+          },
+          {
+            "type": "text",
+            "text": { "content": " on Safari.", "link": null },
+            "annotations": { "bold": false, "italic": false, "strikethrough": false, "underline": false, "code": false, "color": "default" },
+            "plain_text": " on Safari.",
+            "href": null
+          }
+        ]
+      },
+      "Labels": {
+        "id": "q%3Ar",
+        "type": "multi_select",
+        "multi_select": [
+          { "id": "s%3At", "name": "Bug", "color": "red" },
+          { "id": "u%3Av", "name": "Web", "color": "gray" }
+        ]
+      },
+      "Team": { "id": "w%3Ax", "type": "select", "select": { "id": "y%3Az", "name": "ENG", "color": "default" } }
+    },
+    "url": "https://www.notion.so/Fix-the-login-page-2a3b4c5d6e7f4a8b9c0d1e2f3a4b5c6d",
+    "public_url": null,
+    "request_id": "1c2d3e4f-0000-4000-8000-000000000030"
+  }
+}

@@ -409,6 +409,12 @@ deno_version = 2
 verify_jwt = false
 entrypoint = "./functions/github-webhook/index.js"
 
+# Notion pages become issues (docs/notion.md). Notion signs nothing: the address carries a key the database checks.
+# The code is bundled from src/notion by `bun run deploy:notion` (the bundle isn't in git).
+[functions.notion-webhook]
+verify_jwt = false
+entrypoint = "./functions/notion-webhook/index.js"
+
 [analytics]
 enabled = true
 port = 54327

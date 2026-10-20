@@ -1,0 +1,198 @@
+/**
+ * What a page sent from Notion ("Send webhook") means as an issue (docs/notion.md). Notion sends the page's
+ * properties, never its text. Property names and their values are matched without case, accents, spaces or
+ * punctuation, so "Due date", "due-date" and "DUE DATE" are the same. Pure, so it's unit-tested (tests/notion.test.ts);
+ * the Edge Function (handler.ts) runs it. Nothing here runs in the browser.
+ */
+import { plainName } from '@/lib/plain'
+import type { Priority, StatusId } from '@/model/status'
+import { descriptionFor, type RichText } from './markdown'
+
+// ---------- the payload ----------
+
+export interface NotionUser {
+  object?: string
+  id?: string
+  name?: string
+  /** "person" or "bot" */
+  type?: string
+  /** only people have one, and only inside person properties (people, created_by) */
+  person?: { email?: string }
+}
+
+export interface Property {
+  id?: string
+  type?: string
+  title?: RichText[]
+  rich_text?: RichText[]
+  status?: { name?: string } | null
+  select?: { name?: string } | null
+  multi_select?: { name?: string }[]
+  people?: NotionUser[]
+  created_by?: NotionUser
+  date?: { start?: string | null; end?: string | null } | null
+}
+
+/** the page as the webhook reads it */
+export interface Page {
+  /** Notion's page id: 32 hex digits, lower case, no dashes */
+  id: string
+  /** its address on notion.so (or a notion.site page), or one made from its id */
+  url: string
+  /** in the trash, or archived: nothing is made */
+  trashed: boolean
+  properties: Record<string, Property>
+}
+
+const isRecord = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object' && !Array.isArray(x)
+
+/** Notion's own addresses: www.notion.so, notion.so and a team's *.notion.site */
+export const NOTION_URL = /^https:\/\/([a-z0-9-]+\.)*notion\.(so|site)\//
+
+/** the page in a delivery (`{"source": …, "data": {"object": "page", …}}`); null when it isn't one */
+export function readPage(json: unknown): Page | null {
+  if (!isRecord(json) || !isRecord(json.data)) return null
+  const d = json.data
+  if (d.object !== 'page' || typeof d.id !== 'string') return null
+  const id = d.id.replace(/-/g, '').toLowerCase()
+  if (!/^[0-9a-f]{32}$/.test(id)) return null
+  const url = typeof d.url === 'string' && d.url.length <= 2000 && NOTION_URL.test(d.url) ? d.url : `https://www.notion.so/${id}`
+  return {
+    id,
+    url,
+    trashed: d.in_trash === true || d.archived === true,
+    properties: isRecord(d.properties) ? (d.properties as Record<string, Property>) : {},
+  }
+}
+
+// ---------- which property is which ----------
+
+/** the names each field is found under (as plainName gives them) */
+export const NAMES = {
+  status: ['status'],
+  priority: ['priority'],
+  assignee: ['assignee', 'assignees', 'assignedto', 'owner'],
+  due: ['due', 'duedate', 'deadline', 'dueon'],
+  labels: ['labels', 'label', 'tags'],
+  team: ['team'],
+  description: ['description', 'details', 'notes'],
+}
+
+/** the first property called one of `names` that has one of `types` */
+function named(props: Record<string, Property>, names: string[], types: string[]): Property | undefined {
+  for (const [name, p] of Object.entries(props)) {
+    if (typeof p?.type === 'string' && names.includes(plainName(name)) && types.includes(p.type)) return p
+  }
+  return undefined
+}
+
+/** the first property of a type, whatever it's called */
+function ofType(props: Record<string, Property>, type: string): Property | undefined {
+  return Object.values(props).find((p) => p?.type === type)
+}
+
+const plainText = (parts: RichText[] | undefined) => (Array.isArray(parts) ? parts.map((p) => p?.plain_text ?? '').join('') : '')
+
+/** a select's or a status's value */
+const choice = (p: Property | undefined): string => (p?.type === 'status' ? p.status?.name : p?.select?.name) ?? ''
+
+const emailOf = (u: NotionUser | undefined): string | null => {
+  const e = u?.person?.email
+  return typeof e === 'string' && e.includes('@') ? e.trim().toLowerCase() : null
+}
+
+// ---------- the values ----------
+
+/** status names, as plainName gives them; anything else is Todo */
+export const STATUS_WORDS: Record<StatusId, string[]> = {
+  backlog: ['backlog', 'icebox', 'later'],
+  todo: ['todo', 'notstarted', 'new', 'open', 'ready', 'planned'],
+  in_progress: ['inprogress', 'doing', 'started', 'wip', 'active'],
+  in_review: ['inreview', 'review', 'reviewing', 'qa', 'testing'],
+  done: ['done', 'complete', 'completed', 'finished', 'shipped', 'released'],
+  canceled: ['canceled', 'cancelled', 'wontdo', 'dropped', 'rejected'],
+  duplicate: ['duplicate'],
+}
+
+/** priority names; anything else is No priority */
+export const PRIORITY_WORDS: Record<Exclude<Priority, 0>, string[]> = {
+  1: ['urgent', 'critical', 'highest', 'p0'],
+  2: ['high', 'p1'],
+  3: ['medium', 'normal', 'p2'],
+  4: ['low', 'lowest', 'p3', 'p4'],
+}
+
+export function statusFrom(name: string): StatusId {
+  const word = plainName(name)
+  return (Object.keys(STATUS_WORDS) as StatusId[]).find((s) => STATUS_WORDS[s].includes(word)) ?? 'todo'
+}
+
+export function priorityFrom(name: string): Priority {
+  const word = plainName(name)
+  return (([1, 2, 3, 4] as const).find((p) => PRIORITY_WORDS[p].includes(word)) ?? 0) as Priority
+}
+
+/** "2026-10-20", also from "2026-10-20T10:00:00.000+02:00"; null when it isn't a real day */
+export function dayFrom(start: string | null | undefined): string | null {
+  const day = typeof start === 'string' ? start.slice(0, 10) : ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return null
+  const d = new Date(`${day}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === day ? day : null
+}
+
+export const MAX_TITLE = 500
+export const MAX_LABELS = 20
+export const MAX_EMAILS = 20
+
+/** what the page says about the issue; people are emails here, the database knows who they are */
+export interface PageIssue {
+  title: string
+  /** Markdown, ending with a link back to the page */
+  description: string
+  status: StatusId
+  priority: Priority
+  /** the assignee property's people with an email, in order: the first who is a member is assigned */
+  assigneeEmails: string[]
+  /** the Created by property's person: the issue is theirs when they are a member */
+  authorEmail: string | null
+  dueDate: string | null
+  /** label names; only labels the workspace has count */
+  labelNames: string[]
+  /** a team's key or name (the Team property); otherwise the connection's team */
+  teamHint: string | null
+  /** every email above, for the database to match: at most 20 */
+  emails: string[]
+}
+
+export function issueFromPage(page: Page): PageIssue {
+  const props = page.properties
+  const title = plainText(ofType(props, 'title')?.title).replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || 'Untitled'
+
+  const statusProp = named(props, NAMES.status, ['status', 'select']) ?? ofType(props, 'status')
+  const priorityProp = named(props, NAMES.priority, ['select', 'status'])
+
+  const people = named(props, NAMES.assignee, ['people'])?.people
+  const assigneeEmails = [...new Set((Array.isArray(people) ? people : []).map(emailOf).filter((e): e is string => !!e))]
+  const authorEmail = emailOf(ofType(props, 'created_by')?.created_by)
+
+  const labelsProp = named(props, NAMES.labels, ['multi_select', 'select'])
+  const labelNames = labelsProp?.type === 'multi_select'
+    ? (Array.isArray(labelsProp.multi_select) ? labelsProp.multi_select : []).map((o) => o?.name ?? '')
+    : [choice(labelsProp)]
+
+  const teamProp = named(props, NAMES.team, ['select', 'status', 'rich_text'])
+  const teamHint = (teamProp?.type === 'rich_text' ? plainText(teamProp.rich_text) : choice(teamProp)).trim() || null
+
+  return {
+    title,
+    description: descriptionFor(named(props, NAMES.description, ['rich_text'])?.rich_text, page.url),
+    status: statusFrom(choice(statusProp)),
+    priority: priorityFrom(choice(priorityProp)),
+    assigneeEmails,
+    authorEmail,
+    dueDate: dayFrom(named(props, NAMES.due, ['date'])?.date?.start),
+    labelNames: [...new Set(labelNames.map((n) => n.trim()).filter(Boolean))].slice(0, MAX_LABELS),
+    teamHint,
+    emails: [...new Set([authorEmail, ...assigneeEmails].filter((e): e is string => !!e))].slice(0, MAX_EMAILS),
+  }
+}

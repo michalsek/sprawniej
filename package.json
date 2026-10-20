@@ -11,7 +11,9 @@
     "test:db": "SPRAWNIEJ_DB_TESTS=1 bun test --timeout 30000 tests/db",
     "preview": "vite preview",
     "build:github": "bun build src/github/server.ts --target browser --minify --outfile supabase/functions/github-webhook/index.js",
-    "deploy:github": "bun run build:github && bunx supabase functions deploy github-webhook --use-api"
+    "deploy:github": "bun run build:github && bunx supabase functions deploy github-webhook --use-api",
+    "build:notion": "bun build src/notion/server.ts --target browser --minify --outfile supabase/functions/notion-webhook/index.js",
+    "deploy:notion": "bun run build:notion && bunx supabase functions deploy notion-webhook --use-api"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

@@ -5,3 +5,4 @@ dev-dist
 .DS_Store
 supabase/.env
 supabase/functions/github-webhook/index.js
+supabase/functions/notion-webhook/index.js
