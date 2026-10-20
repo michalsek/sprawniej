@@ -2,6 +2,7 @@ import { Redirect, Route, Router, Switch } from 'wouter'
 import { useHashLocation } from 'wouter/use-hash-location'
 import { isSetUp } from '@/backend/client'
 import { Toaster } from '@/ui/sonner'
+import { useTheme } from '@/lib/theme'
 import { TooltipProvider } from '@/ui/tooltip'
 import { myTeamKeys } from '@/data/select'
 import { useData } from '@/data/store'
@@ -25,6 +26,12 @@ function Home() {
   // the first of your teams as the sidebar lists them
   const first = useData((s) => myTeamKeys(s)[0])
   return <Redirect to={first ? `/team/${first}/issues/active` : '/my-issues'} replace />
+}
+
+/** toasts in the look on screen */
+function Toasts() {
+  const resolved = useTheme((s) => s.resolved)
+  return <Toaster position="bottom-right" theme={resolved} />
 }
 
 /** Hash routes (#/team/ENG/issues/active) because GitHub Pages serves one static file. */
@@ -56,7 +63,7 @@ export function App() {
           </Shell>
         </Gate>
       </Router>
-      <Toaster position="bottom-right" theme="dark" />
+      <Toasts />
     </TooltipProvider>
   )
 }
