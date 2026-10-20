@@ -32,7 +32,8 @@ The first time you open your team's issues, four short tips show you around. You
 Open **Settings** from the menu under your name (bottom left), or press `⌘K` and type what you're looking for
 ("password", "labels", "members"). In Settings, its own menu takes the sidebar's place:
 
-- **Your account:** **Profile** (your name and @handle, switching workspace, signing out) and **Ways to sign in**.
+- **Your account:** **Profile** (your name and @handle, light or dark, switching workspace, signing out) and **Ways
+  to sign in**.
 - **Workspace:** **General** (the workspace's name, leaving it), **Members**, **Invite links**, **People from Linear**
   (while some haven't joined), **Teams**, **Labels**, **Archive**, **GitHub** and **Import from Linear**. Invite links
   and Import from Linear are only for owners and admins.
@@ -70,10 +71,11 @@ and history stay yours. What changes:
 ### Light or dark
 
 Sprawniej comes in a light look and a dark one. At first it follows your device: light by day, dark at night, if
-your device switches. To pick one yourself, press `⌘` `K` (or `Ctrl` `K`) and type **light** or **dark**: **Use
-light appearance** and **Use dark appearance** keep that look whatever your device does, and **Follow your device's
-appearance** goes back to following it. The one in use has a check. Your choice saves by itself and follows you to
-every device you sign in on. Only you see it.
+your device switches. To pick one yourself, open **Settings › Your account › Profile** and choose under
+**Appearance**: **Light** or **Dark** keep that look whatever your device does, and **System** goes back to following
+it. It's quicker from anywhere: press `⌘` `K` (or `Ctrl` `K`) and type **appearance** (or **light** / **dark**) to
+find **Use light appearance**, **Use dark appearance** and **Follow your device's appearance**; the one in use has a
+check. Your choice saves by itself and follows you to every device you sign in on. Only you see it.
 
 ### Ways to sign in
 
@@ -418,7 +420,7 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
 
 - `⌘` `K` (or `Ctrl` `K`), or `/`: search issues and jump anywhere.
 - `C`: new issue.
-- `⌘` `K`, then **light** or **dark**: switch between the light and the dark look.
+- `⌘` `K`, then **appearance** (or **light** / **dark**): switch between the light and the dark look.
 - `S`: change the status of the issue under the mouse (or the open one).
 - `P`: change the priority.
 - `A`: change who it's assigned to.
