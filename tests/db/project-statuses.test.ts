@@ -2,7 +2,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { PROJECT_CATEGORY_INFO } from '@/model/status'
 import { closeChannels, defaultStatuses, enabled, expectError, getWorld, newWorkspace, ok, projectInsert, ulid, type Someone, type World } from './support'
 
-// A project's status and place (supabase/migrations/20261021150000_project_statuses.sql): every workspace starts with
+// A project's status and place (supabase/migrations/20261021180000_project_statuses.sql): every workspace starts with
 // six project statuses, projects.status (the category) and projects.status_id stay in step both ways, and
 // projects.sort_order is the place in a board column, which a second import leaves alone.
 
