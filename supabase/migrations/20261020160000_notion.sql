@@ -186,7 +186,7 @@ declare
   url_re constant text := '^https://([a-z0-9-]+\.)*notion\.(so|site)/[A-Za-z0-9._~/?#@!$&''*+,;=%-]*$';
   c public.notion_connections;
   page text := lower(replace(coalesce(p_page ->> 'id', ''), '-', ''));
-  link text := left(p_page ->> 'url', 2000);
+  link text := p_page ->> 'url';
   had record;
   team uuid;
   iid text := p_issue ->> 'id';
@@ -203,7 +203,8 @@ begin
     raise exception 'This address was replaced.' using errcode = '42501';
   end if;
   if page !~ page_re then raise exception 'That isn''t a Notion page.' using errcode = '22023'; end if;
-  if link is null or link !~ url_re then link := 'https://www.notion.so/' || page; end if;
+  -- not Notion's, or too long (the webhook does the same): one made from the page's id
+  if link is null or length(link) > 2000 or link !~ url_re then link := 'https://www.notion.so/' || page; end if;
 
   -- the same page again: the issue it made
   select * into had from private.notion_page_issue(c.workspace_id, page);

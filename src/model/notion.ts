@@ -21,7 +21,7 @@ export const NOTION_URL_PATTERN = "^https://([a-z0-9-]+\\.)*notion\\.(so|site)/[
 export const NOTION_URL = new RegExp(NOTION_URL_PATTERN)
 
 /** the longest page address kept */
-export const MAX_URL = 2000
+const MAX_URL = 2000
 
 /** the page's address when it is one of Notion's, otherwise one made from its id (`id`: a checked page id) */
 export function pageUrl(url: unknown, id: string): string {
