@@ -21,6 +21,9 @@ import { DueChip, EstimateIcon } from './DueDate'
 import { estimateName, shortDate } from './format'
 import { IssueStatusName, PriorityIcon } from './icons'
 
+/** its checklists show as they were */
+const ARCHIVED = { note: 'Restore this issue to tick its boxes.' }
+
 function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-h-9 items-center gap-3">
@@ -109,7 +112,9 @@ export function ArchivedIssuePage({ issue }: { issue: ArchivedIssue }) {
           {stacked && <div className="mt-4 rounded-lg border px-2 py-2">{properties}</div>}
           {issue.description ? (
             <div className="prose-sprawniej mt-4">
-              <Markdown references>{issue.description}</Markdown>
+              <Markdown references ticks={ARCHIVED}>
+                {issue.description}
+              </Markdown>
             </div>
           ) : (
             <p className="mt-4 text-muted-foreground">No description.</p>

@@ -1,9 +1,11 @@
 /**
  * The activity under an issue: comments, with the issue's history between them (who changed what, and when).
  * Write with the same editor as descriptions (@ mentions people, who then hear about it in their Inbox). Your own comments can be edited (saved as you type) or deleted. A comment you haven't
- * sent yet stays in this browser, so leaving the page doesn't lose it.
+ * sent yet stays in this browser, so leaving the page doesn't lose it. The boxes of a checklist in your own comment
+ * can be ticked without opening it for editing; other people's can't.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { setCheckedAtLine } from '@/data/checklist'
 import { MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { PersonAvatar } from '@/components/Avatar'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
@@ -21,10 +23,17 @@ import { useIssueHistory } from './useHistory'
 
 const draftKey = (issue: string) => `sprawniej:comment-draft:${issue}`
 
-function CommentItem({ comment, mine }: { comment: Comment; mine: boolean }) {
+function CommentItem({ comment, mine, archived }: { comment: Comment; mine: boolean; archived?: boolean }) {
   const author = useData((s) => s.people[comment.author])
   const [editing, setEditing] = useState(false)
   const [confirm, setConfirm] = useState(false)
+  const ticks = useMemo(
+    () =>
+      mine
+        ? { onTick: (line: number, checked: boolean) => updateComment(comment.issue, comment.id, setCheckedAtLine(comment.body, line, checked)) }
+        : { note: archived ? 'Restore this issue to tick its boxes.' : `Only ${author?.name ?? 'the person who wrote it'} can tick this.` },
+    [mine, archived, comment.issue, comment.id, comment.body, author?.name],
+  )
   return (
     <li className="group rounded-lg border p-4" id={`comment-${comment.id}`}>
       <div className="mb-2 flex items-center gap-2 text-sm">
@@ -67,7 +76,9 @@ function CommentItem({ comment, mine }: { comment: Comment; mine: boolean }) {
         </div>
       ) : (
         <div className="prose-sprawniej [&>p:first-child]:mt-0 [&>p:last-child]:mb-0">
-          <Markdown references>{comment.body}</Markdown>
+          <Markdown references ticks={ticks}>
+            {comment.body}
+          </Markdown>
         </div>
       )}
       <ConfirmDialog open={confirm} onOpenChange={setConfirm} title="Delete this comment?" confirm="Delete" onConfirm={() => deleteComment(comment.issue, comment.id)}>
@@ -130,7 +141,7 @@ export function Comments({ issue, archived }: { issue: Issue; archived?: Archive
     setTimeout(() => el.classList.remove('ring-2', 'ring-ring/60'), 1600)
   }, [issue.id])
   const items = [
-    ...(comments ?? []).map((c) => ({ at: c.createdAt, key: c.id, node: <CommentItem key={c.id} comment={c} mine={!archived && c.author === me} /> })),
+    ...(comments ?? []).map((c) => ({ at: c.createdAt, key: c.id, node: <CommentItem key={c.id} comment={c} mine={!archived && c.author === me} archived={!!archived} /> })),
     ...(history.events ?? []).map((e) => ({ at: e.at, key: `h${e.id}-${e.change.kind}`, node: <HistoryLine key={`h${e.id}-${e.change.kind}`} event={e} /> })),
   ].sort((a, b) => a.at.localeCompare(b.at))
   return (

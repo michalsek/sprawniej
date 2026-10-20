@@ -16,6 +16,7 @@ import { GroupIcon } from './GroupIcon'
 import { DueChip, EstimateChip } from './DueDate'
 import { shortDate } from './format'
 import { SubIssueCount } from './SubIssueCount'
+import { ChecklistCount } from './ChecklistCount'
 import { TitleText } from './TitleText'
 import { dragAnnouncements } from './dragText'
 import { CarryCount } from './CarryCount'
@@ -66,6 +67,7 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
         <TitleText title={issue.title} />
       </span>
       <SubIssueCount id={issue.id} className="shrink-0" />
+      <ChecklistCount description={issue.description} className="shrink-0" />
       <span className="ml-auto flex shrink-0 items-center gap-2">
         <span className="hidden items-center gap-2 md:flex">{issue.labels.map((id) => labels[id] && <LabelChip key={id} label={labels[id]} />)}</span>
         {issue.estimate != null && <EstimateChip points={issue.estimate} className="hidden md:inline-flex" />}

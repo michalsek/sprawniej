@@ -19,6 +19,7 @@ import { DueChip, EstimateChip } from './DueDate'
 import { PriorityIcon, IssueStatusIcon } from './icons'
 import { GroupIcon } from './GroupIcon'
 import { SubIssueCount } from './SubIssueCount'
+import { ChecklistCount } from './ChecklistCount'
 import { TitleText } from './TitleText'
 import { dragAnnouncements } from './dragText'
 import { CarryCount } from './CarryCount'
@@ -76,6 +77,7 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted }: CardProp
         {issue.dueDate && <DueChip day={issue.dueDate} closed={isClosed(issue)} />}
         {issue.estimate != null && <EstimateChip points={issue.estimate} />}
         <SubIssueCount id={issue.id} />
+        <ChecklistCount description={issue.description} />
         {issue.labels.map((id) => labels[id] && <LabelChip key={id} label={labels[id]} />)}
       </div>
     </Link>
