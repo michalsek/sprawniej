@@ -144,7 +144,8 @@ Optional. docs/github-app.md has the design; these are the steps for a project.
    - Webhook: active, URL `https://<ref>.supabase.co/functions/v1/github-webhook`, and a secret you make with
      `openssl rand -hex 32`. Keep it in your shell only.
    - Repository permissions: **Pull requests: Read-only** (Metadata: Read-only comes with it). Nothing else.
-   - Subscribe to events: **Pull request**. Where can it be installed: **Only on this account**.
+   - Subscribe to events: **Pull request** (any others are answered at once and ignored). Where can it be installed:
+     **Only on this account**.
 2. **Give the function the secret**, for this one command only, never in a file:
    ```sh
    GITHUB_WEBHOOK_SECRET=... bunx supabase secrets set "GITHUB_WEBHOOK_SECRET=$GITHUB_WEBHOOK_SECRET" --project-ref <ref>

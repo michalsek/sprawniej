@@ -6,7 +6,8 @@ request, so the issue's history and their teammates' Inbox show them, with a lin
 
 Status: **agreed and built** (2.1.0). The user agreed section 6 on 2026-10-20: the author rule, GitHub sign-in is
 on, the wording, pull request links on the issue page later. The steps for a project are in docs/supabase-setup.md
-(GitHub: pull requests move issues).
+(GitHub: pull requests move issues). The team's App is **Gitniej (Sprawniej)**, https://github.com/apps/gitniej-sprawniej
+(`VITE_GITHUB_APP_URL`).
 
 ## The pieces
 
@@ -35,7 +36,7 @@ settings › GitHub Apps › New GitHub App):
 | Webhook | Active. URL `https://<project ref>.supabase.co/functions/v1/github-webhook` |
 | Webhook secret | a long random string (`openssl rand -hex 32`), kept only in your shell and in Supabase |
 | Repository permissions | **Pull requests: Read-only**, Metadata: Read-only (always on). Nothing else. |
-| Subscribe to events | **Pull request** only |
+| Subscribe to events | **Pull request** (others may be on; they are ignored, see 3) |
 | Where can it be installed | **Only on this account** |
 
 Then install it (the App's page › Install App) on the repositories that should move issues, and give the secret to
@@ -100,9 +101,13 @@ advisors, docs/data-format.md.
 
 `verify_jwt = false` in `config.toml` (GitHub sends no Supabase sign-in; the signature is the check).
 
-1. **Signature.** Reads the body as raw bytes, computes HMAC-SHA256 with `GITHUB_WEBHOOK_SECRET` (Web Crypto) and
+1. **Signature.** For `pull_request` and `ping` (2 below): reads the body as raw bytes, computes HMAC-SHA256 with `GITHUB_WEBHOOK_SECRET` (Web Crypto) and
    compares it with `X-Hub-Signature-256` in constant time. Wrong or missing: 401, nothing read. No secret set: 500.
-2. **Event.** `ping`: 200. Anything but `pull_request`: 204. A body over 1 MB: 413.
+2. **Event.** Only `pull_request` and `ping` mean something; the event name is in the `X-GitHub-Event` header, so
+   every other event (issues, issue comments, labels, reviews, review comments and threads, issue dependencies and
+   anything else the App is subscribed to) gets 204 at once: its body isn't read, its signature isn't checked and
+   nothing about it is logged. Those are ignored for now; reading one later is a change here and a new test. `ping`
+   (after the signature check, so it tells whether the secret is right): 200. A body over 1 MB: 413.
 3. **What it means** (pure, unit-tested):
 
    | `pull_request` action | Moves to | Only from |

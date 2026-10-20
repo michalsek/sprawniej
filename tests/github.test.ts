@@ -201,10 +201,14 @@ describe('the handler', () => {
     expect((await deliver(pr(), { env: { key: undefined } })).status).toBe(500)
   })
 
-  test('answers a ping and ignores other events', async () => {
+  test('answers a ping, signed, and every other event at once without reading it', async () => {
     expect((await deliver({ zen: 'Keep it simple' }, { event: 'ping' })).status).toBe(200)
-    const other = await deliver({}, { event: 'issues' })
-    expect(other).toEqual({ status: 200, body: { ignored: 'issues' }, calls: [] })
+    expect((await deliver({ zen: 'Keep it simple' }, { event: 'ping', secret: 'not it' })).status).toBe(401)
+    for (const event of ['issues', 'issue_comment', 'label', 'pull_request_review', 'pull_request_review_comment', 'pull_request_review_thread', 'issue_dependencies', '']) {
+      const req = new Request('https://x.supabase.co/functions/v1/github-webhook', { method: 'POST', body: '{"secret": "stuff"}', headers: { 'x-github-event': event } })
+      const res = await handle(req, { secret: SECRET, url: 'https://x.supabase.co', key: 'k', fetch: (() => Promise.reject(new Error('no'))) as unknown as typeof fetch })
+      expect({ event, status: res.status, bodyUsed: req.bodyUsed, text: await res.text() }).toEqual({ event, status: 204, bodyUsed: false, text: '' })
+    }
   })
 
   test('a too big delivery is refused', async () => {

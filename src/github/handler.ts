@@ -38,17 +38,21 @@ interface Payload {
   repository?: { id?: number; full_name?: string }
 }
 
+/** the events the App may send that mean something here; every other one is answered at once */
+export const HANDLED = ['pull_request', 'ping']
+
 export async function handle(req: Request, env: Env): Promise<Response> {
   if (req.method !== 'POST') return json(405, { error: 'GitHub sends POST.' })
+  // issues, comments, reviews and the rest: not read, not checked, not logged
+  const event = req.headers.get('x-github-event')
+  if (!event || !HANDLED.includes(event)) return new Response(null, { status: 204 })
   if (!env.secret || !env.url || !env.key) return json(500, { error: 'The webhook secret or the project settings are missing.' })
   if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY) return json(413, { error: 'Too big.' })
   const body = new Uint8Array(await req.arrayBuffer())
   if (body.length > MAX_BODY) return json(413, { error: 'Too big.' })
   if (!(await signatureOk(env.secret, body, req.headers.get('x-hub-signature-256')))) return json(401, { error: 'Wrong signature.' })
 
-  const event = req.headers.get('x-github-event')
   if (event === 'ping') return json(200, { ok: true })
-  if (event !== 'pull_request') return json(200, { ignored: event })
 
   let p: Payload
   try {
