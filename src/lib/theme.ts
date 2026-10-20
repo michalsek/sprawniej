@@ -28,7 +28,7 @@ export const parseTheme = (v: unknown): ThemeChoice => (THEME_CHOICES.includes(v
 
 export const resolveTheme = (choice: ThemeChoice, systemDark: boolean): Resolved => (choice === 'system' ? (systemDark ? 'dark' : 'light') : choice)
 
-export interface AfterSignIn {
+interface AfterSignIn {
   choice: ThemeChoice
   /** this browser's choice goes to the account */
   send: boolean

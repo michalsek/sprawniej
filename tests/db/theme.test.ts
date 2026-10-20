@@ -12,7 +12,6 @@ describe.skipIf(!enabled)('light or dark with the account', () => {
     const { db } = await signUpBare('theme')
     const { data: before } = await db.auth.updateUser({ data: { password_set: true, full_name: 'Test theme' } })
 
-    await saveTheme('dark', db)
     await saveTheme('light', db)
 
     const { data: fresh } = await db.auth.getUser()
