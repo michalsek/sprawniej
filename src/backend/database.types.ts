@@ -1515,6 +1515,48 @@ export type Database = {
         Returns: Json
       }
       notion_new_secret: { Args: { p_connection: string }; Returns: string }
+      set_checklist_item: {
+        Args: {
+          p_checked: boolean
+          p_issue: string
+          p_item: number
+          p_text: string
+        }
+        Returns: {
+          archived_at: string | null
+          archived_by: string | null
+          assignee_id: string | null
+          changed_at: string
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string
+          due_date: string | null
+          duplicate_of: string | null
+          estimate: number | null
+          extra: Json
+          former_refs: string[]
+          id: string
+          linear_id: string | null
+          number: number
+          parent_id: string | null
+          priority: number
+          project_id: string | null
+          sort_order: string
+          status: string
+          status_id: string
+          team_id: string
+          title: string
+          updated_at: string
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "issues"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       set_guest_email: {
         Args: { p_email: string; p_profile: string }
         Returns: undefined
