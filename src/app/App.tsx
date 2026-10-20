@@ -56,7 +56,7 @@ export function App() {
           </Shell>
         </Gate>
       </Router>
-      <Toaster position="bottom-right" />
+      <Toaster position="bottom-right" theme="dark" />
     </TooltipProvider>
   )
 }

@@ -6,6 +6,7 @@ import { useMemo } from 'react'
 import { Box, CircleSlash } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { PersonAvatar } from '@/components/Avatar'
+import { LabelDot } from '@/components/LabelChip'
 import type { PickerItem } from '@/components/Picker'
 import { issueRef, useData } from '@/data/store'
 import { handleOf, isGuest, type Issue } from '@/model/schema'
@@ -48,7 +49,7 @@ export function useLabelItems(): PickerItem<string>[] {
     () =>
       [...labels]
         .sort((a, b) => a.name.localeCompare(b.name))
-        .map((l) => ({ value: l.id, label: l.name, icon: <span className="size-2.5 shrink-0 rounded-full" style={{ background: l.color }} /> })),
+        .map((l) => ({ value: l.id, label: l.name, icon: <LabelDot color={l.color} className="size-2.5" /> })),
     [labels],
   )
 }

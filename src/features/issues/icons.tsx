@@ -15,7 +15,7 @@ export function StatusIcon({ status, className }: { status: StatusId; className?
     return (
       <svg viewBox="0 0 14 14" className={box} aria-label="Done">
         <circle cx="7" cy="7" r="6" fill={color} />
-        <path d="M4.3 7.2 6.2 9l3.5-3.8" fill="none" stroke="#18181b" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M4.3 7.2 6.2 9l3.5-3.8" fill="none" stroke="var(--status-mark)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     )
   }
@@ -23,7 +23,7 @@ export function StatusIcon({ status, className }: { status: StatusId; className?
     return (
       <svg viewBox="0 0 14 14" className={box} aria-label={statusOf(status).name}>
         <circle cx="7" cy="7" r="6" fill={color} />
-        <path d="m5 5 4 4m0-4-4 4" stroke="#18181b" strokeWidth="1.5" strokeLinecap="round" />
+        <path d="m5 5 4 4m0-4-4 4" stroke="var(--status-mark)" strokeWidth="1.5" strokeLinecap="round" />
       </svg>
     )
   }
@@ -53,8 +53,8 @@ export function PriorityIcon({ priority, className }: { priority: Priority; clas
     return (
       <svg viewBox="0 0 14 14" className={box} aria-label="Urgent">
         <rect x="1" y="1" width="12" height="12" rx="3" fill="var(--urgent)" />
-        <path d="M7 3.8v4" stroke="#18181b" strokeWidth="1.6" strokeLinecap="round" />
-        <circle cx="7" cy="10.1" r="0.95" fill="#18181b" />
+        <path d="M7 3.8v4" stroke="var(--urgent-mark)" strokeWidth="1.6" strokeLinecap="round" />
+        <circle cx="7" cy="10.1" r="0.95" fill="var(--urgent-mark)" />
       </svg>
     )
   }

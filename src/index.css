@@ -2,11 +2,63 @@
 @import "tw-animate-css";
 @import "@fontsource-variable/inter";
 
-/* Dark only (v1). Colours follow shadcn's zinc scale, the look of our internal tools (Punchcard). See docs/design.md. */
+/*
+ * Light and dark, each person's choice (src/lib/theme.ts; index.html sets .dark before the first paint). Colours
+ * follow shadcn's zinc scale, the look of our internal tools (Punchcard). See docs/design.md. The page colours are
+ * copied in src/lib/theme.ts (THEME_COLORS) and index.html's theme-color; tests/themeScript.test.ts compares them.
+ */
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
   --radius: 0.5rem;
+  --background: #fafafa;
+  --foreground: #18181b;
+  --card: #fafafa;
+  --card-foreground: #18181b;
+  --popover: #ffffff;
+  --popover-foreground: #18181b;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --secondary: #f0f0f2;
+  --secondary-foreground: #18181b;
+  --muted: #f0f0f2;
+  --muted-foreground: #63636b;
+  --accent: #ededf0;
+  --accent-foreground: #18181b;
+  --destructive: #b91c1c;
+  --border: #e4e4e7;
+  --input: #d4d4d8;
+  --ring: #52525b;
+  --sidebar: #f2f2f4;
+  --sidebar-foreground: #27272a;
+  --sidebar-accent: #e6e6e9;
+
+  /* colours that carry meaning: statuses, urgent (a deeper yellow and orange than in dark, to read on a light page) */
+  --status-backlog: #80858e;
+  --status-todo: #6b7079;
+  --status-progress: #b07d00;
+  --status-review: #26975f;
+  --status-done: #5e6ad2;
+  --status-canceled: #80858e;
+  --urgent: #d9661a;
+  /* the check or cross inside the Done and Canceled discs, and the "!" in the Urgent square */
+  --status-mark: #ffffff;
+  --urgent-mark: #18181b;
+  /* a thin edge round label dots, so pale colours (yellow, pink, white) still show on a light page */
+  --dot-edge: rgb(0 0 0 / 0.12);
+
+  /* code in descriptions and comments */
+  --code-comment: #6b6b73;
+  --code-keyword: #7c3aed;
+  --code-string: #15803d;
+  --code-number: #c2410c;
+  --code-title: #1d4ed8;
+  --code-type: #be185d;
+}
+
+.dark {
+  color-scheme: dark;
   --background: #1c1c1f;
   --foreground: #f4f4f5;
   --card: #1c1c1f;
@@ -29,7 +81,6 @@
   --sidebar-foreground: #e4e4e7;
   --sidebar-accent: #27272a;
 
-  /* colours that carry meaning: statuses, urgent */
   --status-backlog: #8a8f98;
   --status-todo: #c4c6cc;
   --status-progress: #f2c94c;
@@ -37,6 +88,23 @@
   --status-done: #5e6ad2;
   --status-canceled: #8a8f98;
   --urgent: #f2994a;
+  --status-mark: #18181b;
+  --urgent-mark: #18181b;
+  --dot-edge: transparent;
+
+  --code-comment: #8b8b93;
+  --code-keyword: #c4b5fd;
+  --code-string: #86efac;
+  --code-number: #fdba74;
+  --code-title: #93c5fd;
+  --code-type: #f9a8d4;
+}
+
+/* switching between light and dark happens at once: nothing fades from one to the other (src/lib/theme.ts) */
+.theme-switching *,
+.theme-switching *::before,
+.theme-switching *::after {
+  transition: none !important;
 }
 
 @theme inline {
@@ -158,9 +226,9 @@
   cursor: pointer;
 }
 /* code highlighting (lowlight / highlight.js classes), quiet on purpose */
-.hljs-comment, .hljs-quote { color: #71717a; font-style: italic; }
-.hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: #c4b5fd; }
-.hljs-string, .hljs-attr, .hljs-template-tag { color: #86efac; }
-.hljs-number, .hljs-literal { color: #fdba74; }
-.hljs-title, .hljs-section, .hljs-function { color: #93c5fd; }
-.hljs-type, .hljs-class { color: #f9a8d4; }
+.hljs-comment, .hljs-quote { color: var(--code-comment); font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in { color: var(--code-keyword); }
+.hljs-string, .hljs-attr, .hljs-template-tag { color: var(--code-string); }
+.hljs-number, .hljs-literal { color: var(--code-number); }
+.hljs-title, .hljs-section, .hljs-function { color: var(--code-title); }
+.hljs-type, .hljs-class { color: var(--code-type); }

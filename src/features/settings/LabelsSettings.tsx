@@ -4,6 +4,7 @@ import { Plus, Search, Trash2 } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { InlineText } from '@/components/InlineText'
+import { LabelDot } from '@/components/LabelChip'
 import { PagedList } from '@/components/PagedList'
 import { createLabel, deleteLabel, LABEL_COLORS, updateLabel } from '@/data/actions'
 import { useData } from '@/data/store'
@@ -18,7 +19,7 @@ function ColorButton({ label }: { label: Label }) {
   return (
     <Popover>
       <PopoverTrigger className="flex size-8 shrink-0 items-center justify-center rounded-md hover:bg-accent/60" aria-label={`Colour of ${label.name}`}>
-        <span className="size-3 rounded-full" style={{ background: label.color }} />
+        <LabelDot color={label.color} className="size-3" />
       </PopoverTrigger>
       <PopoverContent align="start" className="grid w-auto grid-cols-5 gap-1 p-2">
         {LABEL_COLORS.map((c) => (
@@ -30,7 +31,7 @@ function ColorButton({ label }: { label: Label }) {
             aria-label={`Use ${c}`}
             aria-pressed={c === label.color}
           >
-            <span className="size-3.5 rounded-full" style={{ background: c }} />
+            <LabelDot color={c} className="size-3.5" />
           </button>
         ))}
       </PopoverContent>

@@ -8,6 +8,7 @@ import { useShallow } from 'zustand/react/shallow'
 import { toast } from 'sonner'
 import { Box, CalendarClock, CircleSlash, Tag } from 'lucide-react'
 import { PersonAvatar } from '@/components/Avatar'
+import { LabelDot } from '@/components/LabelChip'
 import { Picker } from '@/components/Picker'
 import { createIssue, createLabel, type NewIssue } from '@/data/actions'
 import { issueRef, useData } from '@/data/store'
@@ -189,7 +190,7 @@ function Composer() {
         >
           <button type="button" className={chip}>
             {draft.labels.length ? (
-              draft.labels.map((id) => labels[id] && <span key={id} className="size-2 rounded-full" style={{ background: labels[id].color }} />)
+              draft.labels.map((id) => labels[id] && <LabelDot key={id} color={labels[id].color} />)
             ) : (
               <Tag className="size-3.5" />
             )}
