@@ -35,7 +35,7 @@ settings › GitHub Apps › New GitHub App):
 | Callback URL, Setup URL, "Request user authorization" | empty / off (nobody signs in through the App) |
 | Webhook | Active. URL `https://<project ref>.supabase.co/functions/v1/github-webhook` |
 | Webhook secret | a long random string (`openssl rand -hex 32`), kept only in your shell and in Supabase |
-| Repository permissions | **Pull requests: Read-only**, Metadata: Read-only (always on). Nothing else. |
+| Repository permissions | **Pull requests: Read-only**, Metadata: Read-only (always on). The function never calls GitHub, so more (Issues for the extra events) gives it nothing. |
 | Subscribe to events | **Pull request** (others may be on; they are ignored, see 3) |
 | Where can it be installed | **Only on this account** |
 
