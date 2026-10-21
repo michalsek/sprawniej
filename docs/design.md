@@ -179,8 +179,8 @@ Two groups follow their box, not the text, so they stay when the text gets small
   (`PageDetails.tsx`: name and emoji, then grey names and plain values in two columns, read only, team names as
   links), then quick filters (`QuickFilters.tsx`): a grey label, one quiet line ("Just for you…, Shows N issues"),
   the tabs as a compact Segmented, and rows 36 px tall: icon, name (cut with an ellipsis, the full name on hover) and
-  the count on the right in quiet grey. A picked row has the `accent` background and a check; a picked row at 0 is
-  quiet grey. Rows are one Tab stop: ↑ ↓ Home End move, Space or Enter picks. Beside the list the panel never uses a
+  the count on the right in quiet grey. A picked row has the `accent` background and a check, and comes first in its
+  tab; a picked row at 0 is quiet grey. Rows are one Tab stop: ↑ ↓ Home End move, Space or Enter picks. Beside the list the panel never uses a
   dialog, menu or listbox role (they would turn off the app's keys).
 - **Empty states**: an icon, a short title, one sentence in plain words about what goes here, and one button
   (`src/components/EmptyState.tsx`).

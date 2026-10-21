@@ -381,15 +381,18 @@ At the top it says what the page is: a team's key and members, a view's team and
 lead, target date, teams and progress. To change those, use the page's own title and buttons.
 
 Below that are **quick filters**, in four tabs: **Assignees**, **Labels**, **Priority** and **Projects** (a page
-leaves out what it already is, like Assignees on My issues). Each row shows a person, label, priority or project and
-how many issues it would show. Click a row to show only those issues, and click it again to let go. Pick several rows
-in one tab to see any of them ("Ana or Ben"); picks in different tabs must all match ("Ana, and Bug"). The numbers
-follow what you pick in the other tabs. A tab with many rows has a box to find one.
+leaves out what it already is, like Assignees on My issues). Each line shows a person, label, priority or project and
+how many issues it would show. Click one to show only those issues, and click it again to let go. Pick several in one
+tab to see any of them ("Ana or Ben"); picks in different tabs must all match ("Ana, and Bug"). What you picked stays
+at the top of its tab. The numbers follow what you pick in the other tabs. A tab with a long list has a box to find
+a name.
 
-Quick filters are just for you and go away when you leave the page, even on a view: your teammates' view stays as it
-is. While some are picked, a line under the toolbar says "Quick filter: …"; click it to see them in the panel, or its
-**×** to clear them. On a view, **Add to view** puts them into the view for everyone (with **Undo** for a moment). On
-other pages, **Save as view** keeps them in the new view together with your filters.
+Quick filters are just for you, even on a view: your teammates' view stays as it is. Each page keeps its own (every
+tab of a team, every view, every project, My issues) until you close the browser tab, so you can open an issue, go
+back and find them as you left them. While some are picked, a line under the toolbar says "Quick filter: …"; click it
+to see them in the panel, or its **×** to clear them. On a view, **Add to view** puts them into the view for everyone
+(with **Undo** for a moment); what the view already says isn't added twice. On other pages, **Save as view** keeps
+them in the new view together with your filters.
 
 On a smaller screen the side panel opens over the page from the right instead, when you ask for it.
 
@@ -682,8 +685,8 @@ While writing a description or a comment:
 Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar; in Settings, the
 same button opens the settings menu. Press and hold an issue to drag it, or a favourite in the sidebar to change their
 order. In the lists of projects and views, the star always shows on a phone. The side panel
-button at the top right opens the side panel from the right; tap rows to pick quick filters, and it says how many
-issues they show. It closes when you go to another page. Tap a checklist box to tick it (the
+button at the top right opens the side panel from the right; tap a name to pick it, and the panel says how many
+issues your picks show. It closes when you go to another page. Tap a checklist box to tick it (the
 keyboard stays away). A wide table scrolls sideways.
 
 ## Pictures
