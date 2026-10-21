@@ -72,7 +72,7 @@ export function Guests({ ws, admin, invites, onInvite }: { ws: string | null; ad
 
   return (
     <>
-      <p className="mb-5 text-[15px] text-muted-foreground">
+      <p className="mb-5 text-ui text-muted-foreground">
         {admin
           ? "They came with the Linear import and haven't joined yet. Invite them: when they join, their issues, comments and views become theirs. Already here under another name? Link them instead."
           : "They came with the Linear import and haven't joined yet. An admin can invite them."}

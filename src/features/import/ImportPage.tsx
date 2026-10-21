@@ -56,9 +56,9 @@ function Panel({ step, title, children, footer }: { step: number; title: string;
   return (
     <div className="flex-1 overflow-y-auto px-4 md:px-8">
       <div className="mx-auto max-w-3xl py-8">
-        <h1 className="text-2xl font-semibold">{title}</h1>
+        <h1 className="text-page-title font-semibold">{title}</h1>
         <Steps now={step} />
-        <div className="mt-4 text-[15px] leading-relaxed text-foreground/85">{children}</div>
+        <div className="mt-4 text-ui leading-relaxed text-foreground/85">{children}</div>
         {footer && <div className="mt-8 flex flex-wrap items-center gap-3">{footer}</div>}
       </div>
     </div>
@@ -341,12 +341,12 @@ export function ImportPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={guests.get(u.id)!}>
-                    <PersonAvatar login={guests.get(u.id)} className="size-5 text-[8px]" /> {linearName(u)} (hasn’t joined)
+                    <PersonAvatar login={guests.get(u.id)} className="size-5 text-initials" /> {linearName(u)} (hasn’t joined)
                   </SelectItem>
                   <SelectItem value={NOBODY}>No one</SelectItem>
                   {here.map((p) => (
                     <SelectItem key={p.login} value={p.login}>
-                      <PersonAvatar person={p} className="size-5 text-[8px]" /> {p.name || handleOf(p)}
+                      <PersonAvatar person={p} className="size-5 text-initials" /> {p.name || handleOf(p)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -390,7 +390,7 @@ export function ImportPage() {
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {rows.map(([one, many, n]) => (
             <li key={many} className="rounded-lg border px-4 py-3">
-              <span className="block text-2xl font-semibold tabular-nums">{n.toLocaleString()}</span>
+              <span className="block text-page-title font-semibold tabular-nums">{n.toLocaleString()}</span>
               <span className="text-sm text-muted-foreground">{n === 1 ? one : many}</span>
             </li>
           ))}

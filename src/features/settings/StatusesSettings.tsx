@@ -123,7 +123,7 @@ function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, belo
               required
               maxLength={MAX_NAME}
               autoFocus={fresh}
-              className="h-8 min-w-0 text-[15px]"
+              className="h-8 min-w-0 text-ui"
             />
           </span>
           {status.hidden && <Hint text={text.hiddenHint}>Hidden</Hint>}

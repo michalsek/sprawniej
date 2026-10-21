@@ -34,8 +34,8 @@ export class Crash extends Component<{ children: ReactNode }, { error: unknown }
     return (
       <div className="flex min-h-svh items-center justify-center p-6">
         <div className="max-w-md rounded-xl border p-6">
-          <h1 className="text-lg font-semibold">This screen didn’t load</h1>
-          <p className="mt-2 text-[15px] text-muted-foreground">
+          <h1 className="text-heading font-semibold">This screen didn’t load</h1>
+          <p className="mt-2 text-ui text-muted-foreground">
             {offline
               ? 'You seem to be offline, and this part of Sprawniej hasn’t been opened on this device yet. Connect to the internet and reload.'
               : 'Reloading usually fixes it. Your saved changes are safe.'}

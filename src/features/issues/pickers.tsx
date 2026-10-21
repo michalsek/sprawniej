@@ -80,7 +80,7 @@ export function usePeopleItems(avatar?: string): PickerItem<string | null>[] {
 
 /** people in a filter: Me first (whoever is looking at the list, so one view shows each person their own), then everyone */
 export function useFilterPeopleItems(): PickerItem<string | null>[] {
-  const people = usePeopleItems('size-4 text-[7px]')
+  const people = usePeopleItems('size-4 text-initials-sm')
   return useMemo(() => [{ value: ME, label: 'Me', hint: 'whoever is looking', icon: <CircleUserRound className="size-4 text-muted-foreground" /> }, ...people], [people])
 }
 

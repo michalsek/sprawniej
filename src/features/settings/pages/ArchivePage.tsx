@@ -33,7 +33,7 @@ export function ArchivePage() {
       {teams.map((t) => (
         <li key={t.key} className="flex items-center gap-3">
           <span className="w-5 text-center">{t.emoji}</span>
-          <span className="min-w-0 flex-1 truncate text-[15px]">{t.name}</span>
+          <span className="min-w-0 flex-1 truncate text-ui">{t.name}</span>
           <Select value={String(t.autoArchive ?? AUTO_ARCHIVE_MONTHS)} onValueChange={(v) => setAutoArchive(t.key, Number(v))}>
             <SelectTrigger className="w-44" aria-label={`When ${t.name} archives finished issues`}>
               <SelectValue />

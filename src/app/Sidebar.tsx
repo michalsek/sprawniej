@@ -25,7 +25,7 @@ function TeamGroup({ teamKey }: { teamKey: string }) {
   return (
     <div>
       <div className="group/team relative flex items-center rounded-lg hover:bg-sidebar-accent/60">
-        <button type="button" onClick={() => setOpen((o) => !o)} className="flex h-9 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 text-left text-[15px] text-sidebar-foreground/90">
+        <button type="button" onClick={() => setOpen((o) => !o)} className="flex h-9 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 text-left text-ui text-sidebar-foreground/90">
           <span className="w-[18px] text-center text-base leading-none">{team.emoji}</span>
           <span className="truncate">{team.name}</span>
           <ChevronDown className={cn('ml-auto size-4 shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')} />
@@ -61,8 +61,8 @@ function Me() {
         <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-lg p-2 text-left outline-none hover:bg-sidebar-accent/60 focus-visible:ring-2 focus-visible:ring-ring">
           <PersonAvatar person={me} className="size-10 text-sm" />
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[15px] font-semibold">{me.name}</span>
-            <span className="block truncate text-[13px] text-muted-foreground">@{handleOf(me)}</span>
+            <span className="block truncate text-ui font-semibold">{me.name}</span>
+            <span className="block truncate text-label text-muted-foreground">@{handleOf(me)}</span>
           </span>
           <ChevronsUpDown className="size-4 shrink-0 text-muted-foreground" />
         </DropdownMenuTrigger>
@@ -106,7 +106,7 @@ export function Sidebar() {
   return (
     <aside className="flex h-full w-full shrink-0 flex-col border-r bg-sidebar md:w-[17.5rem]">
       <div className="flex h-16 items-center gap-3 pr-3 pl-5">
-        <Link href="/" className="flex items-center gap-3 text-xl font-semibold tracking-tight">
+        <Link href="/" className="flex items-center gap-3 text-title font-semibold tracking-tight">
           <Logo />
           Sprawniej
         </Link>

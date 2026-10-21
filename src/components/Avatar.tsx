@@ -6,7 +6,7 @@ import { initials, personColor } from '@/lib/person'
 
 export function PersonAvatar({ person, login, className }: { person?: Person; login?: string | null; className?: string }) {
   const [broken, setBroken] = useState(false)
-  const box = cn('inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full text-[9px] font-semibold text-white', className)
+  const box = cn('inline-flex size-5 shrink-0 items-center justify-center overflow-hidden rounded-full text-initials font-semibold text-white', className)
   const key = person?.login ?? login
   if (!key) {
     return (

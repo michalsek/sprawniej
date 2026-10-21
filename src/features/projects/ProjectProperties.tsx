@@ -38,7 +38,7 @@ export function ProjectProperties({ value, onChange }: { value: Value; onChange:
       </Picker>
       <Picker placeholder="Who leads it…" items={peopleItems} value={value.lead} onSelect={(lead) => onChange({ lead })}>
         <button type="button" className={chip}>
-          {lead || value.lead ? <PersonAvatar person={lead} login={value.lead} className="size-4 text-[7px]" /> : <UserRound />}
+          {lead || value.lead ? <PersonAvatar person={lead} login={value.lead} className="size-4 text-initials-sm" /> : <UserRound />}
           {lead?.name ?? value.lead ?? 'Lead'}
         </button>
       </Picker>

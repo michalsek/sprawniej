@@ -35,7 +35,7 @@ function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; 
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState(false)
   return (
-    <div className="group flex items-center gap-4 rounded-md px-4 py-1.5 text-[15px] hover:bg-accent/60">
+    <div className="group flex items-center gap-4 rounded-md px-4 py-1.5 text-ui hover:bg-accent/60">
       <EmojiPicker value={p.emoji} onChange={(emoji) => updateProject(p.id, { emoji })} label={`Change the emoji of ${p.name}`} className="size-9 border-transparent text-lg hover:border-border" />
       {renaming ? (
         <span className="min-w-0 flex-1">

@@ -19,7 +19,7 @@ export function TopBar() {
         <PanelLeft className="size-5" />
       </button>
       <div className="hidden h-5 w-px bg-border md:block" />
-      <nav className="flex min-w-0 items-center gap-2 text-[15px]" aria-label="Breadcrumbs">
+      <nav className="flex min-w-0 items-center gap-2 text-ui" aria-label="Breadcrumbs">
         <Link href="/" className="hidden text-muted-foreground hover:text-foreground md:inline">
           Sprawniej
         </Link>
@@ -43,7 +43,7 @@ export function TopBar() {
         <button
           type="button"
           onClick={openPalette}
-          className="flex size-10 items-center justify-center gap-2 rounded-lg border bg-input/20 text-[15px] text-muted-foreground hover:bg-input/40 md:w-80 md:justify-start md:px-3"
+          className="flex size-10 items-center justify-center gap-2 rounded-lg border bg-input/20 text-ui text-muted-foreground hover:bg-input/40 md:w-80 md:justify-start md:px-3"
           aria-label="Search"
         >
           <Search className="size-4" />

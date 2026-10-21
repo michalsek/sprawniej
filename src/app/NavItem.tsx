@@ -4,7 +4,7 @@ import { Link, useLocation } from 'wouter'
 import { cn } from '@/lib/utils'
 
 /** how a sidebar link looks (favourites use it too) */
-export const NAV_LINK = 'flex h-9 items-center gap-3 rounded-lg px-3 text-[15px] text-sidebar-foreground/90 [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/80'
+export const NAV_LINK = 'flex h-9 items-center gap-3 rounded-lg px-3 text-ui text-sidebar-foreground/90 [&_svg]:size-[18px] [&_svg]:shrink-0 [&_svg]:text-sidebar-foreground/80'
 
 /** a link in the sidebar, lit while you're on its page (or below it, unless `exact`) */
 export function NavItem({ href, icon, children, count, indent, exact }: { href: string; icon: ReactNode; children: ReactNode; count?: number; indent?: boolean; exact?: boolean }) {
@@ -23,7 +23,7 @@ export function NavItem({ href, icon, children, count, indent, exact }: { href: 
     >
       {icon}
       <span className="truncate">{children}</span>
-      {!!count && <span className="ml-auto rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-5 text-primary-foreground">{count}</span>}
+      {!!count && <span className="ml-auto rounded-full bg-primary px-1.5 text-xs font-semibold leading-5 text-primary-foreground">{count}</span>}
     </Link>
   )
 }
@@ -32,7 +32,7 @@ export function NavItem({ href, icon, children, count, indent, exact }: { href: 
 export function NavGroup({ title, children, action }: { title: string; children: ReactNode; action?: ReactNode }) {
   return (
     <div className="mt-6">
-      <div className="mb-1 flex items-center px-3 text-[13px] font-medium text-muted-foreground">
+      <div className="mb-1 flex items-center px-3 text-label font-medium text-muted-foreground">
         {title}
         {action && <span className="ml-auto">{action}</span>}
       </div>

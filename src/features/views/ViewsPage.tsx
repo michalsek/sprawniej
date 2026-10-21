@@ -29,15 +29,15 @@ function ViewRow({ view, owner }: { view: View; owner?: Person }) {
       <EmojiPicker value={view.emoji} onChange={(emoji) => updateView(view.id, { emoji })} label={`Change the emoji of ${view.name}`} className="size-9 border-transparent text-lg hover:border-border" />
       {renaming ? (
         <span className="min-w-0 flex-1 py-1">
-          <InlineText value={view.name} onSave={(name) => updateView(view.id, { name })} label="View name" required autoFocus onDone={() => setRenaming(false)} className="text-[15px] font-medium" />
+          <InlineText value={view.name} onSave={(name) => updateView(view.id, { name })} label="View name" required autoFocus onDone={() => setRenaming(false)} className="text-ui font-medium" />
         </span>
       ) : (
         <Link href={`/view/${view.id}`} className="min-w-0 flex-1 py-1">
-          <span className="block truncate text-[15px] font-medium">{view.name}</span>
+          <span className="block truncate text-ui font-medium">{view.name}</span>
           {view.description && <span className="block truncate text-sm text-muted-foreground">{view.description}</span>}
         </Link>
       )}
-      <span className="hidden w-56 items-center gap-2 truncate text-[15px] sm:flex">
+      <span className="hidden w-56 items-center gap-2 truncate text-ui sm:flex">
         <PersonAvatar person={owner} login={view.owner} />
         <span className="truncate">{owner?.name ?? view.owner}</span>
       </span>

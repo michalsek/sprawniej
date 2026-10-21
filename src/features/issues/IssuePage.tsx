@@ -46,7 +46,7 @@ function Property({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const pick =
-  'flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[15px] hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/60'
+  'flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-ui hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/60'
 
 export function IssuePage() {
   const { ref = '' } = useParams<{ ref: string }>()
@@ -167,7 +167,7 @@ export function IssuePage() {
         <DueDatePicker value={issue.dueDate} onChange={(dueDate) => updateIssue(issue.id, { dueDate })}>
           <button type="button" className={pick}>
             {issue.dueDate ? (
-              <DueChip day={issue.dueDate} closed={isClosed(issue)} className="border-0 px-0 text-[15px]" />
+              <DueChip day={issue.dueDate} closed={isClosed(issue)} className="border-0 px-0 text-ui" />
             ) : (
               <span className="text-muted-foreground">None</span>
             )}

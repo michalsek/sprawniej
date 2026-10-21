@@ -79,7 +79,7 @@ export function LinkPersonDialog({ guest, onClose }: { guest: Person; onClose: (
             <CommandEmpty>Nobody by that name.</CommandEmpty>
             {choices.map((c) => (
               <CommandItem key={c.key} value={c.key} keywords={[c.person.name, handleOf(c.person)]} onSelect={() => setPicked(c.key)} className="gap-3 py-2">
-                <PersonAvatar person={c.person} className="size-7 text-[10px]" />
+                <PersonAvatar person={c.person} className="size-7 text-initials-md" />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{c.person.name}</span>
                   <span className="block truncate text-xs text-muted-foreground">{c.hint}</span>

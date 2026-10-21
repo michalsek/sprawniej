@@ -43,7 +43,7 @@ export function DisplayOptions({ display, onChange, onReset, tab }: Props) {
   return (
     <Popover open={open && !dragging} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" className="h-10 gap-2 text-[15px]" aria-label="Display">
+        <Button variant="outline" className="h-10 gap-2 text-ui" aria-label="Display">
           <SlidersHorizontal /> <span className="hidden sm:inline">Display</span>
         </Button>
       </PopoverTrigger>

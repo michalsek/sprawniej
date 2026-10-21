@@ -162,7 +162,7 @@ function Composer() {
           rows={1}
           placeholder="Issue title"
           aria-label="Title"
-          className="field-sizing-content w-full resize-none bg-transparent text-xl font-semibold outline-none placeholder:text-muted-foreground/70"
+          className="field-sizing-content w-full resize-none bg-transparent text-title font-semibold outline-none placeholder:text-muted-foreground/70"
         />
         <Editor
           key={round}
@@ -187,7 +187,7 @@ function Composer() {
         </Picker>
         <Picker placeholder="Assign to…" items={peopleItems} value={draft.assignee} onSelect={(a) => set({ assignee: a })}>
           <button type="button" className={chip}>
-            <PersonAvatar person={assignee} login={draft.assignee} className="size-4 text-[7px]" /> {assignee?.name ?? 'Assignee'}
+            <PersonAvatar person={assignee} login={draft.assignee} className="size-4 text-initials-sm" /> {assignee?.name ?? 'Assignee'}
           </button>
         </Picker>
         <Picker

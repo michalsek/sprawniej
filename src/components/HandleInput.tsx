@@ -9,7 +9,7 @@ export function HandleInput({ className, ...input }: ComponentProps<'input'>) {
   return (
     <div
       className={cn(
-        'flex h-10 overflow-hidden rounded-md border bg-input/30 text-[15px] focus-within:ring-2 focus-within:ring-ring',
+        'flex h-10 overflow-hidden rounded-md border bg-input/30 text-ui focus-within:ring-2 focus-within:ring-ring',
         'has-[[aria-invalid=true]]:border-destructive has-[[aria-invalid=true]]:ring-destructive',
         className,
       )}

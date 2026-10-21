@@ -45,7 +45,7 @@ export function LabelsSettings() {
 
   return (
     <div className="flex flex-col gap-1">
-      {labels.length === 0 && <p className="pb-2 text-[15px] text-muted-foreground">No labels yet. Labels like “Bug” or “Design” help you sort and filter issues.</p>}
+      {labels.length === 0 && <p className="pb-2 text-ui text-muted-foreground">No labels yet. Labels like “Bug” or “Design” help you sort and filter issues.</p>}
       {labels.length > 10 && (
         <div className="relative mb-2 max-w-sm">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -62,7 +62,7 @@ export function LabelsSettings() {
           />
         </div>
       )}
-      {query.trim() && !shown.length && <p className="pb-2 text-[15px] text-muted-foreground">No label matches “{query.trim()}”.</p>}
+      {query.trim() && !shown.length && <p className="pb-2 text-ui text-muted-foreground">No label matches “{query.trim()}”.</p>}
       <PagedList
         key={query.trim()}
         items={shown}
@@ -85,7 +85,7 @@ export function LabelsSettings() {
                 allowed={(v) => !labels.some((o) => o.id !== l.id && o.name.toLowerCase() === v.toLowerCase())}
                 label={`Name of ${l.name}`}
                 required
-                className="h-8 text-[15px]"
+                className="h-8 text-ui"
               />
               <span className="w-24 shrink-0 text-right text-sm text-muted-foreground tabular-nums">{n === 1 ? '1 issue' : `${n} issues`}</span>
               <Button variant="ghost" size="icon-sm" className="text-muted-foreground [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100" aria-label={`Delete ${l.name}`} onClick={() => setDeleting(l)}>

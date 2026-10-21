@@ -47,7 +47,7 @@ export function FilterButton({ count, open, onClick, ref }: { count: number; ope
     <Button
       ref={ref}
       variant="outline"
-      className="h-10 gap-2 text-[15px]"
+      className="h-10 gap-2 text-ui"
       aria-label={count ? `Filter, ${count} set` : 'Filter'}
       aria-haspopup="dialog"
       aria-expanded={open}

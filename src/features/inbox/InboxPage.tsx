@@ -70,7 +70,7 @@ function Note({ n, unread }: { n: InboxItem; unread: boolean }) {
         <span className={cn('size-2 shrink-0 rounded-full', unread && 'bg-status-done')} aria-label={unread ? 'Unread' : undefined} />
         {notion ? <NotionMark className="size-8" /> : <PersonAvatar person={actor} login={n.actor} className="size-8 text-xs" />}
         <span className="min-w-0 flex-1">
-          <span className={cn('flex items-center gap-2 truncate text-[15px]', !unread && 'text-foreground/80')}>
+          <span className={cn('flex items-center gap-2 truncate text-ui', !unread && 'text-foreground/80')}>
             {issue ? (
               <>
                 <IssueStatusIcon issue={issue} />
@@ -124,7 +124,7 @@ export function InboxPage() {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex h-12 shrink-0 items-center gap-2 border-b px-4 md:px-8">
-        <h1 className="text-[15px] font-medium">Inbox</h1>
+        <h1 className="text-ui font-medium">Inbox</h1>
         {unread > 0 && <span className="text-sm text-muted-foreground">{unread} unread</span>}
         {inbox.length > 0 && (
           <div className="ml-auto flex items-center gap-1">

@@ -54,7 +54,7 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
       // capture: the link itself leaves ⌘/Shift-clicks to the browser (new tab), before an onClick would run
       onClickCapture={(e) => selectionClick(e, issue.id)}
       className={cn(
-        'group flex h-11 items-center gap-2 rounded-md px-2 text-[15px] sm:gap-3 sm:px-4 hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
+        'group flex h-11 items-center gap-2 rounded-md px-2 text-ui sm:gap-3 sm:px-4 hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
         (ghost || carried) && 'opacity-30',
         picked && !lifted && 'bg-accent ring-1 ring-inset ring-ring',
         lifted && 'cursor-grabbing border bg-popover shadow-lg',
@@ -62,9 +62,9 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
       style={{ paddingLeft: `${1 + depth * 2}rem`, ...style }}
     >
       <PriorityIcon priority={issue.priority} />
-      <span className="hidden min-w-[4.75rem] shrink-0 whitespace-nowrap text-muted-foreground tabular-nums sm:inline">{issueRef(issue)}</span>
+      <span className="hidden min-w-[4.5rem] shrink-0 whitespace-nowrap text-ref text-muted-foreground tabular-nums sm:inline">{issueRef(issue)}</span>
       <IssueStatusIcon issue={issue} />
-      <span className={cn('min-w-0 truncate', closed && 'text-muted-foreground')}>
+      <span className={cn('min-w-0 truncate text-row-title', closed && 'text-muted-foreground')}>
         <TitleText title={issue.title} />
       </span>
       <SubIssueCount id={issue.id} className="shrink-0" />
@@ -110,7 +110,7 @@ function GroupSection({ group, ids, issueOf, onAdd }: SectionProps) {
   return (
     <section ref={setNodeRef} className={cn('rounded-lg', isOver && !open && 'ring-1 ring-ring')}>
       <div className="sticky top-0 z-10 flex h-11 items-center gap-3 rounded-lg bg-accent/70 px-4 backdrop-blur">
-        <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-3 text-[15px] font-medium" aria-expanded={open}>
+        <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-3 text-ui font-medium" aria-expanded={open}>
           <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', !open && '-rotate-90')} />
           <GroupIcon group={group} />
           {group.title}

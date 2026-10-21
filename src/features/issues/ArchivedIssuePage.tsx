@@ -25,7 +25,7 @@ function Property({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex min-h-9 items-center gap-3">
       <span className="w-24 shrink-0 text-sm text-muted-foreground">{label}</span>
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 px-2 text-[15px]">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 px-2 text-ui">{children}</div>
     </div>
   )
 }
@@ -71,7 +71,7 @@ export function ArchivedIssuePage({ issue }: { issue: ArchivedIssue }) {
           none
         )}
       </Property>
-      <Property label="Due date">{issue.dueDate ? <DueChip day={issue.dueDate} closed className="border-0 px-0 text-[15px]" /> : none}</Property>
+      <Property label="Due date">{issue.dueDate ? <DueChip day={issue.dueDate} closed className="border-0 px-0 text-ui" /> : none}</Property>
       <Property label="Estimate">
         {issue.estimate != null ? (
           <>
@@ -104,7 +104,7 @@ export function ArchivedIssuePage({ issue }: { issue: ArchivedIssue }) {
               Restore
             </Button>
           </div>
-          <h1 className="text-2xl font-semibold break-words">{issue.title}</h1>
+          <h1 className="text-issue-title font-semibold break-words">{issue.title}</h1>
           <PullRequests issueId={issue.id} />
           {stacked && <div className="mt-4 rounded-lg border px-2 py-2">{properties}</div>}
           {issue.description ? (

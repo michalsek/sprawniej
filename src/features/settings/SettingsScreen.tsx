@@ -64,8 +64,8 @@ export function SettingsScreen() {
   return (
     <div className="flex-1 overflow-y-auto px-4 md:px-8">
       <div className="mx-auto max-w-3xl py-8">
-        <h1 className="text-2xl font-semibold">{page.title}</h1>
-        {page.description && <p className="mt-1 text-[15px] text-muted-foreground">{page.description}</p>}
+        <h1 className="text-page-title font-semibold">{page.title}</h1>
+        {page.description && <p className="mt-1 text-ui text-muted-foreground">{page.description}</p>}
         <div className="mt-8">
           <page.component key={page.id} admin={admin} />
         </div>

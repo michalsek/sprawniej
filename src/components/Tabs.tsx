@@ -10,7 +10,7 @@ export function LinkTabs({ tabs, current }: { tabs: { href: string; label: strin
           key={t.href}
           href={t.href}
           className={cn(
-            'flex h-10 shrink-0 items-center rounded-lg border px-3 text-[15px] whitespace-nowrap text-muted-foreground hover:bg-accent/60 hover:text-foreground sm:px-4',
+            'flex h-10 shrink-0 items-center rounded-lg border px-3 text-ui whitespace-nowrap text-muted-foreground hover:bg-accent/60 hover:text-foreground sm:px-4',
             t.href === current && 'border-foreground/80 bg-accent text-foreground',
           )}
         >

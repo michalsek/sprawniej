@@ -43,7 +43,7 @@ function AddRow({ parent, onClose }: { parent: Issue; onClose: () => void }) {
         onBlur={() => !title.trim() && onClose()}
         placeholder="Sub-issue title, then Enter"
         aria-label="New sub-issue title"
-        className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted-foreground/70"
+        className="min-w-0 flex-1 bg-transparent text-ui outline-none placeholder:text-muted-foreground/70"
       />
       <Button
         variant="ghost"

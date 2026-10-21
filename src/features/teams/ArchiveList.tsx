@@ -37,7 +37,7 @@ export function ArchiveList({ team, left }: { team: string; left: React.ReactNod
       <div className="flex flex-wrap items-center gap-2 md:gap-3">
         {left}
         {records.length > 0 && (
-          <label className="ml-auto flex h-10 w-full items-center gap-2 rounded-lg border px-3 text-[15px] focus-within:border-ring sm:w-72">
+          <label className="ml-auto flex h-10 w-full items-center gap-2 rounded-lg border px-3 text-ui focus-within:border-ring sm:w-72">
             <Search className="size-4 text-muted-foreground" />
             <input
               value={query}
@@ -72,10 +72,10 @@ export function ArchiveList({ team, left }: { team: string; left: React.ReactNod
           <ul className="flex flex-col">
             {list.slice(0, shown).map((a) => (
               <li key={a.id}>
-                <Link href={`/issue/${issueRef(a)}`} className="flex h-11 items-center gap-3 rounded-md px-2 text-[15px] hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4">
-                  <span className="hidden min-w-[4.75rem] shrink-0 whitespace-nowrap text-muted-foreground tabular-nums sm:inline">{issueRef(a)}</span>
+                <Link href={`/issue/${issueRef(a)}`} className="flex h-11 items-center gap-3 rounded-md px-2 text-ui hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring sm:px-4">
+                  <span className="hidden min-w-[4.5rem] shrink-0 whitespace-nowrap text-ref text-muted-foreground tabular-nums sm:inline">{issueRef(a)}</span>
                   <IssueStatusIcon issue={a} />
-                  <span className="min-w-0 truncate text-foreground/80">
+                  <span className="min-w-0 truncate text-row-title text-foreground/80">
                     <TitleText title={a.title} />
                   </span>
                   <span className="ml-auto shrink-0 text-sm text-muted-foreground">Archived {shortDate(a.archivedAt)}</span>

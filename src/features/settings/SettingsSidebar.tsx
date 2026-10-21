@@ -20,7 +20,7 @@ export function SettingsSidebar() {
         </NavItem>
       </div>
       <nav className="flex-1 overflow-y-auto px-2 pb-4" aria-label="Settings">
-        <h2 className="mt-2 px-3 text-xl font-semibold tracking-tight">Settings</h2>
+        <h2 className="mt-2 px-3 text-title font-semibold tracking-tight">Settings</h2>
         {GROUPS.map((g) => {
           const mine = pages.filter((p) => p.group === g.id)
           return (

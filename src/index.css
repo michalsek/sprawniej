@@ -162,6 +162,58 @@
   --color-destructive-text: var(--destructive-text);
 }
 
+/*
+ * The type scale: every text size in the app, in one place (docs/design.md, "Type"). Each one is a Tailwind class:
+ * `--text-ui` is `text-ui`, with its line height in `--text-ui--line-height`. Change a size here and every screen
+ * follows. Use these, never a size in pixels like `text-[15px]` (tests/typeScale.test.ts checks). A size added here also goes in TEXT_SIZES
+ * (src/lib/utils.ts), so `cn` knows it is a size and not a colour.
+ */
+@theme {
+  /* badges, counts, chips, tooltips, keyboard hints */
+  --text-xs: 0.6875rem; /* 11px */
+  --text-xs--line-height: 1rem;
+  /* small grey labels (the sidebar's "Workspace"), the @handle, code blocks */
+  --text-label: 0.75rem; /* 12px */
+  --text-label--line-height: 1rem;
+  /* buttons, menus, quiet text (dates, property names) */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-sm--line-height: 1.125rem;
+  /* most text: the sidebar, breadcrumbs, lists, settings */
+  --text-ui: 0.875rem; /* 14px */
+  --text-ui--line-height: 1.25rem;
+  /* an issue's title in a list row or on a board card, and its ID ("ENG-12"), quieter */
+  --text-row-title: 0.84375rem; /* 13.5px */
+  --text-row-title--line-height: 1.25rem;
+  --text-ref: 0.78125rem; /* 12.5px */
+  --text-ref--line-height: 1.25rem;
+  /* descriptions, comments and the Help page (.prose-sprawniej); their headings are sized from it */
+  --text-prose: 0.875rem; /* 14px */
+  --text-prose--line-height: 1.625;
+  /* dialog titles, settings sections, releases in What's new */
+  --text-heading: 1.0625rem; /* 17px */
+  --text-heading--line-height: 1.5rem;
+  /* "Sprawniej" at the top of the sidebar and of sign-in, Settings' own title, a new issue's title */
+  --text-title: 1.125rem; /* 18px */
+  --text-title--line-height: 1.625rem;
+  /* an issue's title on its page */
+  --text-issue-title: 1.25rem; /* 20px */
+  --text-issue-title--line-height: 1.75rem;
+  /* a page's title (a view, a project, a settings page) */
+  --text-page-title: 1.375rem; /* 22px */
+  --text-page-title--line-height: 1.875rem;
+  /* initials in a picture-less avatar, by the avatar's size: size-4, size-5 (the usual), size-7 */
+  --text-initials-sm: 0.4375rem; /* 7px */
+  --text-initials-sm--line-height: 1;
+  --text-initials: 0.5625rem; /* 9px */
+  --text-initials--line-height: 1;
+  --text-initials-md: 0.625rem; /* 10px */
+  --text-initials-md--line-height: 1;
+  /*
+   * Tailwind's own text-base (16px) stays: a phone zooms into any field with smaller text, so inputs are text-base
+   * on phones (src/ui/input.tsx). text-lg and up are only for emoji.
+   */
+}
+
 @layer base {
   * {
     @apply border-border outline-ring;
@@ -173,22 +225,27 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    /* the size of text that sets none (the line height stays the browser's 1.5, so nothing inherits a fixed one) */
+    font-size: var(--text-ui);
     font-feature-settings: "cv11", "ss01";
   }
 }
 
 @layer components {
-  /* Long-form text (Help page; later issue descriptions). Kept small on purpose, no typography plugin. */
+  /*
+   * Long-form text (Help page, descriptions, comments). Kept small on purpose, no typography plugin. Headings are
+   * sized in em, from --text-prose, so changing that one size moves them too.
+   */
   .prose-sprawniej {
-    @apply text-[15px] leading-relaxed text-foreground/90;
-    & h1 { @apply mb-4 text-3xl font-semibold text-foreground; }
+    @apply text-prose text-foreground/90;
+    & h1 { @apply mb-4 text-[2em]/[1.2] font-semibold text-foreground; }
     & img { @apply my-3 max-h-[32rem] max-w-full rounded-lg border; background: var(--picture-backdrop); }
     & img.ProseMirror-selectednode, & .ProseMirror-selectednode > img { outline: 2px solid var(--ring); }
     /* a picture whose address hasn't arrived yet: a grey space where it will be */
     & img:not([src]) { @apply inline-block h-24 w-40 bg-muted; }
     & img[hidden] { @apply hidden; }
-    & h2 { @apply mt-10 mb-3 text-xl font-semibold text-foreground; }
-    & h3 { @apply mt-6 mb-2 text-base font-semibold text-foreground; }
+    & h2 { @apply mt-10 mb-3 text-[1.25em]/[1.4] font-semibold text-foreground; }
+    & h3 { @apply mt-6 mb-2 text-[1.075em]/[1.5] font-semibold text-foreground; }
     & p { @apply my-3; }
     & ul { @apply my-3 list-disc pl-6; }
     & ol { @apply my-3 list-decimal pl-6; }
@@ -224,8 +281,9 @@
   }
 
   .prose-sprawniej pre {
-    @apply my-4 overflow-x-auto rounded-lg border bg-muted/60 p-3 font-mono text-[13px];
-    & code { @apply border-0 bg-transparent p-0; }
+    @apply my-4 overflow-x-auto rounded-lg border bg-muted/60 p-3 font-mono text-label;
+    /* the block's own size, not the smaller one of code inside a line */
+    & code { @apply border-0 bg-transparent p-0 text-[1em]; }
   }
 }
 

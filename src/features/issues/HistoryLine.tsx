@@ -126,7 +126,7 @@ function AutoLine({ event }: { event: HistoryEvent }) {
 
 /** whoever did it, or a grey circle when it isn't known who (nobody signed in, or someone no longer known) */
 function Who({ person }: { person?: Person }) {
-  if (person) return <PersonAvatar person={person} className="mt-px size-5 text-[9px]" />
+  if (person) return <PersonAvatar person={person} className="mt-px size-5 text-initials" />
   return (
     <span className="mt-px inline-flex size-5 shrink-0 items-center justify-center rounded-full bg-muted">
       <User className="size-3" />

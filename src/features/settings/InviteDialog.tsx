@@ -135,7 +135,7 @@ export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Per
                 ]}
               />
               {who === 'several' && (
-                <div className="mt-3 flex items-center gap-2 text-[15px]">
+                <div className="mt-3 flex items-center gap-2 text-ui">
                   <label htmlFor="invite-count">Up to</label>
                   <Input
                     id="invite-count"
@@ -165,7 +165,7 @@ export function InviteDialog({ guest, email: knownEmail, onDone }: { guest?: Per
               ]}
             />
             {length === 'custom' && (
-              <div className="mt-3 flex items-center gap-2 text-[15px]">
+              <div className="mt-3 flex items-center gap-2 text-ui">
                 <Input
                   id="invite-days"
                   inputMode="numeric"

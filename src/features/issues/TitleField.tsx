@@ -11,7 +11,7 @@ export function TitleField({ id, value }: { id: string; value: string }) {
       label="Title"
       required
       lines="wrap"
-      className="text-2xl font-semibold leading-snug"
+      className="text-issue-title font-semibold"
     />
   )
 }

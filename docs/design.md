@@ -89,9 +89,40 @@ A project status is a **dot** in the status's own colour (`src/features/projects
 painted like issue statuses: a status with its group's starting colour follows the theme). The six a workspace starts
 with: Backlog, Paused and Canceled grey, Planned light grey, In progress yellow, Completed indigo.
 
-## Type and spacing
+## Type
 
-- Inter, 15 px for most text, 13 to 14 px for quiet text. Page titles 24 px semibold.
+Inter, 14 px for most text. Every size is a token in `src/index.css`, in the `@theme` block called "the type scale",
+and each token is a Tailwind class (`--text-ui` is `text-ui`, its line height `--text-ui--line-height`). To make text
+bigger or smaller, change the token there: every screen follows. Use a token, never a size in pixels like
+`text-[15px]`; `tests/typeScale.test.ts` stops one from coming in.
+
+| Class | Size / line height | For |
+| --- | --- | --- |
+| `text-xs` | 11 / 16 px | badges, counts, chips, tooltips, keyboard hints |
+| `text-label` | 12 / 16 px | small grey labels (*Workspace* in the sidebar), the @handle, code blocks |
+| `text-sm` | 13 / 18 px | buttons, menus, quiet text (dates, property names) |
+| `text-ref` | 12.5 / 20 px | an issue's ID ("ENG-12") in a list row or on a board card, in quiet grey |
+| `text-row-title` | 13.5 / 20 px | an issue's title in a list row or on a board card |
+| `text-ui` | 14 / 20 px | most text: the sidebar, breadcrumbs, lists, settings (and the page's own size) |
+| `text-prose` | 14 px, 1.625 | descriptions, comments, the Help page (`.prose-sprawniej`) |
+| `text-heading` | 17 / 24 px | dialog titles, settings sections, releases in What's new |
+| `text-title` | 18 / 26 px | "Sprawniej" in the sidebar and on sign-in, Settings' title, a new issue's title |
+| `text-issue-title` | 20 / 28 px | an issue's title on its page |
+| `text-page-title` | 22 / 30 px | a page's title (a view, a project, a settings page) |
+| `text-initials-sm`, `text-initials`, `text-initials-md` | 7, 9, 10 px | initials in an avatar of `size-4`, `size-5`, `size-7` |
+
+- `text-xs` and `text-sm` are Tailwind's own steps, set one step smaller here, so shadcn components follow without
+  changes. A size of our own also goes in `TEXT_SIZES` (`src/lib/utils.ts`), or `cn` takes it for a colour and drops
+  the colour next to it; the test checks the two lists match.
+- Headings in descriptions and comments are sized in `em` from `text-prose` (2, 1.25 and 1.075 times; a
+  code block is `text-label`), so they follow it.
+- Tailwind's `text-base` stays 16 px, for fields on phones: a phone zooms into a field with smaller text, so shadcn's
+  `Input` and `Textarea` are `text-base` on phones and `text-sm` from `md` up. Keep that for new fields.
+- `text-lg` and bigger are only for emoji (in emoji buttons, team rows).
+- In a list the ID is quieter than the title: smaller and in `muted-foreground`.
+
+## Spacing
+
 - Radius 8 px (`rounded-lg`) for buttons, inputs, cards, groups.
 - Controls are 40 px tall (`h-10`) in toolbars and 36 px in the sidebar. Issue rows are 44 px.
 - Page padding 32 px (`px-8`), sidebar 280 px wide.

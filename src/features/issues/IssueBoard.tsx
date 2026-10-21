@@ -53,21 +53,21 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted }: CardProp
       onClickCapture={(e) => selectionClick(e, issue.id)}
       style={style}
       className={cn(
-        'flex flex-col gap-2 rounded-lg border bg-card p-3 text-[15px] shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
+        'flex flex-col gap-2 rounded-lg border bg-card p-3 text-ui shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
         (ghost || carried) && 'opacity-30',
         picked && !lifted && 'bg-accent ring-1 ring-inset ring-ring',
         lifted && 'cursor-grabbing rotate-1 shadow-lg',
       )}
     >
-      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <div className="flex items-center gap-2 text-ref text-muted-foreground">
         <span className="tabular-nums">{issueRef(issue)}</span>
         <span className="ml-auto">
           <PersonAvatar person={assignee} login={issue.assignee} />
         </span>
       </div>
       <div className="flex items-start gap-2">
-        <IssueStatusIcon issue={issue} className="mt-1" />
-        <span className="line-clamp-3">
+        <IssueStatusIcon issue={issue} className="mt-[3px]" />
+        <span className="line-clamp-3 text-row-title">
           <TitleText title={issue.title} />
         </span>
       </div>
@@ -104,7 +104,7 @@ function Column({ group, ids, issueOf, onAdd }: { group: Group; ids: string[]; i
   const { setNodeRef, isOver } = useDroppable({ id: columnDropId(group.key) })
   return (
     <section ref={setNodeRef} className={cn('flex w-[21rem] shrink-0 flex-col rounded-xl bg-accent/30 transition-colors', isOver && 'bg-accent/50')}>
-      <header className="flex h-12 items-center gap-2.5 px-4 text-[15px] font-medium">
+      <header className="flex h-12 items-center gap-2.5 px-4 text-ui font-medium">
         <GroupIcon group={group} />
         {group.title}
         <span className="font-normal text-muted-foreground tabular-nums">{ids.length}</span>
@@ -132,7 +132,7 @@ function HiddenColumn({ group, onAdd }: { group: Group; onAdd?: (group: Group) =
   return (
     <div
       ref={setNodeRef}
-      className={cn('group flex h-12 shrink-0 items-center gap-2.5 rounded-lg border bg-card/60 px-4 text-[15px] transition-colors', isOver && 'border-ring bg-accent')}
+      className={cn('group flex h-12 shrink-0 items-center gap-2.5 rounded-lg border bg-card/60 px-4 text-ui transition-colors', isOver && 'border-ring bg-accent')}
     >
       <GroupIcon group={group} />
       <span className="truncate">{group.title}</span>
@@ -149,7 +149,7 @@ function HiddenColumns({ groups, onAdd }: { groups: Group[]; onAdd?: (group: Gro
   const [open, setOpen] = useState(true)
   return (
     <section className="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2" aria-label="Hidden columns">
-      <button type="button" onClick={() => setOpen((o) => !o)} className="flex h-12 shrink-0 items-center gap-2 px-2 text-[15px] text-muted-foreground hover:text-foreground" aria-expanded={open}>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="flex h-12 shrink-0 items-center gap-2 px-2 text-ui text-muted-foreground hover:text-foreground" aria-expanded={open}>
         <ChevronDown className={cn('size-4 transition-transform', !open && '-rotate-90')} />
         Hidden columns
         {!open && <span className="tabular-nums">{groups.length}</span>}
