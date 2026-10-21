@@ -621,7 +621,8 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
 - `A`: change who it's assigned to.
 - `L`: change the labels.
 - `E`: change the estimate.
-- `J` / `K`, or `↓` / `↑`: move to the next or previous issue in a list or board.
+- `J` / `K`, or `↓` / `↑`: move to the next or previous issue in a list or board. Once you're on something else (a
+  button, a field), the arrows scroll the page instead.
 - `X`: pick the issue (to change or move several at once).
 - `Enter`: open it.
 - `Space`: pick it up to move it with the arrows; `Space` again puts it down. The same works for a favourite in the

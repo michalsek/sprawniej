@@ -44,11 +44,18 @@ up). Without a copy, it reads everything except the archive.
 - The client uses PKCE. Routes live in the address's hash (`#/team/ENG/issues/active`), so a GitHub sign-in leaves
   from, and comes back to, the page itself (`authRedirectUrl` in `src/config.ts`) with `?code`. Before leaving, the
   route you were on goes to sessionStorage (`sprawniej:return-to`); `takeReturnedUrl` puts it back first thing and
-  turns a sign-in that didn't finish into a message.
+  turns a sign-in that didn't finish into a message. Only someone signing in on the sign-in screen clears that
+  message; the sign-in kept in this browser coming back as the page loads leaves it (`newSignIn`), so "This GitHub
+  account already belongs to another Sprawniej account" shows on Ways to sign in.
+- localStorage and sessionStorage are read through `src/lib/storage.ts`: in a browser that blocks them, a read gives
+  nothing and a write does nothing, so Sprawniej still starts and only forgets.
 - After sign-in, `ensure_profile()` finds your profile. For a GitHub sign-in with no profile yet, it first claims a
   profile with the same GitHub id that has no account (one brought from an older workspace), and otherwise makes one
   from the GitHub login when that handle is free. Otherwise you pick a name and an @handle (`PickLogin.tsx`, `create_profile()`). Handles follow
   GitHub's rule (letters, digits and dashes, up to 39, not starting with a dash).
+- **No connection at start.** When Sprawniej can't be reached as the page starts, the profile found last time in
+  this browser (`lastProfile` in `sprawniej-session-v2`, for the same account only) stands in, so the copy of your
+  workspace kept here opens and catches up once Sprawniej can be reached. It is looked up again on the next start.
 - **The login never changes; the @handle can** (Handles, below).
 - **A new account needs a sign-up code or an invite link** (docs/data-format.md, "Who may make an account"). The
   Create account form sends the code (or, in the invite flow, the link's token) with the sign-up, and the database

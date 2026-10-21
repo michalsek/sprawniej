@@ -112,7 +112,9 @@ advisors, docs/data-format.md.
    every other event (issues, issue comments, labels, reviews, review comments and threads, issue dependencies and
    anything else the App is subscribed to) gets 204 at once: its body isn't read, its signature isn't checked and
    nothing about it is logged. Those are ignored for now; reading one later is a change here and a new test. `ping`
-   (after the signature check, so it tells whether the secret is right): 200. A body over 1 MB: 413.
+   (after the signature check, so it tells whether the secret is right): 200. A body over 1 MB: 413, after reading it
+   to its end (Supabase holds an answer back until the request is read). A refused database call is logged with its
+   code and message only, never the rest of the answer (it can hold a pull request's title).
 3. **What it means** (pure, unit-tested):
 
    | `pull_request` action | Moves to | Only from |
