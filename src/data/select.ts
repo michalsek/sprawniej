@@ -62,6 +62,15 @@ function byOrder(a: Issue, b: Issue): number {
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 }
 
+/**
+ * What the display leaves in: finished issues only when it shows them (or they were just dropped there, `keep`),
+ * sub-issues only when it shows them. groupIssues and the side panel's counts both use it, so the counts match the
+ * list. A display option that hides issues belongs here.
+ */
+export function displayKeeps(display: Pick<Display, 'showCompleted' | 'showSubIssues'>, keep?: ReadonlySet<string>): (issue: Issue) => boolean {
+  return (i) => (display.showCompleted || !isClosed(i) || !!keep?.has(i.id)) && (display.showSubIssues || !i.parent)
+}
+
 export interface Group {
   /** what an issue dropped into this group gets: a status id, a login, a priority, a project id, or null */
   key: string
@@ -92,9 +101,7 @@ interface GroupCtx {
  * under "Hidden columns" as places to drop a card; one that gets an issue becomes a column.
  */
 export function groupIssues(issues: Issue[], display: Display, ctx: GroupCtx, tab: IssueTab = 'all', everyGroup = false): Group[] {
-  const sorted = issues
-    .filter((i) => (display.showCompleted || !isClosed(i) || ctx.keep?.has(i.id)) && (display.showSubIssues || !i.parent))
-    .sort(compareIssues(display.ordering))
+  const sorted = issues.filter(displayKeeps(display, ctx.keep)).sort(compareIssues(display.ordering))
   switch (display.grouping) {
     case 'none':
       return [{ key: 'all', value: null, title: 'All issues', issues: sorted }]
