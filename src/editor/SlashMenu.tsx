@@ -7,8 +7,7 @@
 import { Extension, type Editor, type Range } from '@tiptap/core'
 import type { ResolvedPos } from '@tiptap/pm/model'
 import { PluginKey } from '@tiptap/pm/state'
-import { ReactRenderer } from '@tiptap/react'
-import Suggestion, { exitSuggestion, type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
+import Suggestion from '@tiptap/suggestion'
 import {
   BetweenHorizontalEnd,
   BetweenVerticalEnd,
@@ -27,7 +26,7 @@ import {
   Trash2,
   type LucideIcon,
 } from 'lucide-react'
-import { CommandList, type CommandListHandle } from './CommandList'
+import { popup } from './popup'
 import { slashMatches, slashTrigger, type Findable } from './slashMatch'
 
 export interface SlashItem extends Findable {
@@ -100,20 +99,6 @@ function pick(editor: Editor, item: SlashItem, range: Range) {
   item.run(editor)
 }
 
-/** under the cursor, inside the screen (above the line when there's no room below) */
-function place(el: HTMLElement, rect: DOMRect | null | undefined) {
-  if (!rect) return
-  const view = window.visualViewport
-  const width = view?.width ?? window.innerWidth
-  const height = view?.height ?? window.innerHeight
-  el.style.position = 'fixed'
-  el.style.zIndex = '60'
-  const box = { width: el.offsetWidth || 240, height: el.offsetHeight || 288 }
-  el.style.left = `${Math.max(8, Math.min(rect.left, width - box.width - 8))}px`
-  const below = rect.bottom + 4
-  el.style.top = `${below + box.height > height - 8 && rect.top - box.height - 4 > 8 ? rect.top - box.height - 4 : below}px`
-}
-
 const key = new PluginKey('slash-menu')
 
 export const SlashMenu = Extension.create({
@@ -141,52 +126,31 @@ export const SlashMenu = Extension.create({
         },
         items: ({ query, editor }) => found(query, editor.state.selection.$from) ?? [],
         command: ({ editor, range, props }) => pick(editor, props, range),
-        render: () => {
-          let renderer: ReactRenderer<CommandListHandle> | null = null
-          /** the list on screen, and the editor it's for */
-          let shown: SlashItem[] = []
-          let editor: Editor | null = null
-          const close = () => {
-            renderer?.destroy()
-            renderer?.element.remove()
-            renderer = null
-          }
-          return {
-            onStart: (props: SuggestionProps<SlashItem, SlashItem>) => {
-              shown = props.items
-              editor = props.editor
-              renderer = new ReactRenderer(CommandList, { props, editor: props.editor })
-              document.body.appendChild(renderer.element)
-              place(renderer.element, props.clientRect?.())
-            },
-            onUpdate: (props: SuggestionProps<SlashItem, SlashItem>) => {
-              // the list for what was just typed is still being worked out: keep showing the last one
-              if (props.loading) return
-              shown = props.items
-              renderer?.updateProps(props)
-              if (renderer) place(renderer.element, props.clientRect?.())
-            },
-            onKeyDown: (props: SuggestionKeyDownProps) => {
-              if (props.event.key === 'Escape' && renderer) {
-                close()
-                exitSuggestion(props.view, key)
-                return true
-              }
-              if ((props.event.key === 'Enter' || props.event.key === 'Tab') && editor) {
-                // typed faster than the list was drawn: what runs is what the words typed find now, never the old list
-                const st = key.getState(props.view.state) as { active: boolean; query: string | null; range: Range } | undefined
-                if (!st?.active) return false
-                const now = found(st.query ?? '', props.view.state.selection.$from) ?? []
-                if (!now.length) return false
-                const current = renderer?.ref?.current()
-                pick(editor, sameItems(shown, now) && current && now.includes(current) ? current : now[0], st.range)
-                return true
-              }
-              return renderer?.ref?.onKeyDown(props.event) ?? false
-            },
-            onExit: close,
-          }
-        },
+        render: popup<SlashItem>(
+          key,
+          {
+            label: 'Add to the text',
+            width: 'w-60',
+            keyOf: (item) => item.title,
+            row: (item) => (
+              <>
+                <item.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="truncate">{item.title}</span>
+                {item.hint && <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">{item.hint}</span>}
+              </>
+            ),
+          },
+          ({ event, view }, shown) => {
+            if (event.key !== 'Enter' && event.key !== 'Tab') return undefined
+            // typed faster than the list was drawn: what runs is what the words typed find now, never the old list
+            const st = key.getState(view.state) as { active: boolean; query: string | null; range: Range } | undefined
+            if (!st?.active) return false
+            const now = found(st.query ?? '', view.state.selection.$from) ?? []
+            if (!now.length) return false
+            pick(shown.editor, sameItems(shown.items, now) && shown.current && now.includes(shown.current) ? shown.current : now[0], st.range)
+            return true
+          },
+        ),
       }),
     ]
   },

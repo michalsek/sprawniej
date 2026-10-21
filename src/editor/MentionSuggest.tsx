@@ -1,20 +1,14 @@
 /** Type @ to pick a person, by name or @handle. Inserts plain "@handle " text, with the handle they have now (see references.ts). */
 import { Extension } from '@tiptap/core'
 import { PluginKey } from '@tiptap/pm/state'
-import { ReactRenderer } from '@tiptap/react'
-import Suggestion, { type SuggestionKeyDownProps, type SuggestionProps } from '@tiptap/suggestion'
+import Suggestion from '@tiptap/suggestion'
+import { PersonAvatar } from '@/components/Avatar'
 import { useData } from '@/data/store'
 import { plain } from '@/lib/plain'
 import { handleOf, isGuest, type Person } from '@/model/schema'
-import { PeopleList, type ListHandle } from './PeopleList'
+import { popup } from './popup'
 
-function place(el: HTMLElement, rect: DOMRect | null | undefined) {
-  if (!rect) return
-  el.style.position = 'fixed'
-  el.style.left = `${rect.left}px`
-  el.style.top = `${rect.bottom + 4}px`
-  el.style.zIndex = '60'
-}
+const key = new PluginKey('mention-suggest')
 
 export const MentionSuggest = Extension.create({
   name: 'mentionSuggest',
@@ -22,7 +16,7 @@ export const MentionSuggest = Extension.create({
     return [
       Suggestion<Person, Person>({
         editor: this.editor,
-        pluginKey: new PluginKey('mention-suggest'),
+        pluginKey: key,
         char: '@',
         items: ({ query }) => {
           const q = plain(query)
@@ -34,34 +28,18 @@ export const MentionSuggest = Extension.create({
         command: ({ editor, range, props }) => {
           editor.chain().focus().insertContentAt(range, `@${handleOf(props)} `).run()
         },
-        render: () => {
-          let renderer: ReactRenderer<ListHandle> | null = null
-          return {
-            onStart: (props: SuggestionProps<Person, Person>) => {
-              renderer = new ReactRenderer(PeopleList, { props, editor: props.editor })
-              document.body.appendChild(renderer.element)
-              place(renderer.element as HTMLElement, props.clientRect?.())
-            },
-            onUpdate: (props: SuggestionProps<Person, Person>) => {
-              renderer?.updateProps(props)
-              if (renderer) place(renderer.element as HTMLElement, props.clientRect?.())
-            },
-            onKeyDown: (props: SuggestionKeyDownProps) => {
-              if (props.event.key === 'Escape') {
-                renderer?.destroy()
-                renderer?.element.remove()
-                renderer = null
-                return true
-              }
-              return renderer?.ref?.onKeyDown(props.event) ?? false
-            },
-            onExit: () => {
-              renderer?.destroy()
-              renderer?.element.remove()
-              renderer = null
-            },
-          }
-        },
+        render: popup<Person>(key, {
+          label: 'People',
+          width: 'w-64',
+          keyOf: (p) => p.login,
+          row: (p) => (
+            <>
+              <PersonAvatar person={p} />
+              <span className="truncate">{p.name}</span>
+              <span className="ml-auto truncate text-muted-foreground">@{handleOf(p)}</span>
+            </>
+          ),
+        }),
       }),
     ]
   },

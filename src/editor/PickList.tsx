@@ -1,15 +1,29 @@
-/** The list under the cursor when you type / in the editor (SlashMenu.tsx). Arrows move, Enter picks, a tap picks. */
-import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
+/** The list under the cursor when you type @ (MentionSuggest.tsx) or / (SlashMenu.tsx). Arrows move, Enter picks, a tap picks. */
+import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from 'react'
 import { cn } from '@/lib/utils'
-import type { SlashItem } from './SlashMenu'
 
-export interface CommandListHandle {
+export interface PickListHandle<T> {
   onKeyDown: (e: KeyboardEvent) => boolean
   /** the highlighted item */
-  current: () => SlashItem | undefined
+  current: () => T | undefined
 }
 
-export const CommandList = forwardRef<CommandListHandle, { items: SlashItem[]; command: (item: SlashItem) => void }>(function CommandList({ items, command }, ref) {
+/** how one list looks: the rest comes from the suggestion */
+export interface ListLook<T> {
+  label: string
+  /** a width class */
+  width: string
+  keyOf: (item: T) => string
+  row: (item: T) => ReactNode
+}
+
+interface Props<T> extends ListLook<T> {
+  items: T[]
+  command: (item: T) => void
+  ref?: Ref<PickListHandle<T>>
+}
+
+export function PickList<T>({ items, command, label, width, keyOf, row, ref }: Props<T>) {
   const [active, setActive] = useState(0)
   const [prevItems, setPrevItems] = useState(items)
   const list = useRef<HTMLDivElement>(null)
@@ -33,10 +47,10 @@ export const CommandList = forwardRef<CommandListHandle, { items: SlashItem[]; c
   }))
   if (!items.length) return null
   return (
-    <div ref={list} className="max-h-72 w-60 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg" role="listbox" aria-label="Add to the text">
+    <div ref={list} className={cn('max-h-72 overflow-y-auto rounded-lg border bg-popover p-1 shadow-lg', width)} role="listbox" aria-label={label}>
       {items.map((item, i) => (
         <button
-          key={item.title}
+          key={keyOf(item)}
           type="button"
           role="option"
           aria-selected={i === active}
@@ -49,11 +63,9 @@ export const CommandList = forwardRef<CommandListHandle, { items: SlashItem[]; c
           onMouseMove={() => i !== active && setActive(i)}
           className={cn('flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm', i === active && 'bg-accent')}
         >
-          <item.icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-          <span className="truncate">{item.title}</span>
-          {item.hint && <span className="ml-auto shrink-0 font-mono text-xs text-muted-foreground">{item.hint}</span>}
+          {row(item)}
         </button>
       ))}
     </div>
   )
-})
+}
