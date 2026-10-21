@@ -629,7 +629,8 @@ New functions are closed by default: nobody runs one unless a migration grants i
 - `forget` on every table marked in `private.wiring`: writes `deletions`.
 - `live` on every broadcast table: Realtime (below).
 - `a_guard` on workspace members: only an owner makes, unmakes or removes owners; nobody but an owner changes their
-  own role; someone who left comes back only through an invite.
+  own role; someone who left comes back only through an invite. `removed_at` is the database's time: set once when
+  they leave or are removed (whatever the app sends), and kept as it is while they're out.
 - `a_let_in` on profiles (insert): a profile for an account needs the account to be let in (`private.signups`);
   `SP004` otherwise. Guests have no account and aren't checked.
 - `keep_an_owner` on workspace members: refuses a change that leaves the workspace without an owner (changes that

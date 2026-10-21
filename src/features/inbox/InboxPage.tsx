@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
+import { fromNotion, senderName } from './sender'
 
 /** a comment's first words, without Markdown marks */
 function snippet(md: string | undefined): string {
@@ -51,8 +52,7 @@ function Note({ n, unread }: { n: InboxItem; unread: boolean }) {
   // a note can be about an issue archived since
   const issue = useData((s) => s.issues[n.issue] ?? s.archive[n.issue])
   const actor = useData((s) => s.people[n.actor])
-  // a Notion page whose author isn't a member: Notion did it
-  const notion = !n.actor && n.from === 'notion'
+  const notion = fromNotion(n)
   const what = useWhat(n)
   const open = () => {
     markRead([n.id])
@@ -82,7 +82,7 @@ function Note({ n, unread }: { n: InboxItem; unread: boolean }) {
             )}
           </span>
           <span className="block truncate text-sm text-muted-foreground">
-            {actor?.name ?? (notion ? 'Notion' : n.actor)} {what}
+            {senderName(n, actor)} {what}
           </span>
         </span>
         <span className="text-sm text-muted-foreground group-hover:invisible group-focus-within:invisible">{shortDate(n.at)}</span>

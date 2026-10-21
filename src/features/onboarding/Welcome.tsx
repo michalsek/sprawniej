@@ -2,6 +2,7 @@
 import { useEffect, useState, type SubmitEvent } from 'react'
 import { Loader2 } from 'lucide-react'
 import { CODE_KEY, friendlyAuthError, githubAvailable, INVITE_NO_PLACES, INVITE_REFUSED, signInWithGitHub, signInWithPassword, signUpWithPassword, useAuth } from '@/backend/auth'
+import { sessionStore } from '@/lib/storage'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Separator } from '@/ui/separator'
@@ -61,7 +62,7 @@ export function SignInForm({
     setBusy('github')
     setGithubProblem(undefined)
     // a new GitHub account is asked for its code when it comes back; one typed here is filled in then
-    if (needsCode && code.trim()) sessionStorage.setItem(CODE_KEY, code.trim())
+    if (needsCode && code.trim()) sessionStore.setItem(CODE_KEY, code.trim())
     try {
       await signInWithGitHub() // leaves for GitHub
     } catch (e) {

@@ -14,6 +14,7 @@ import type { Ticks } from '@/components/MarkdownView'
 import { createComment, deleteComment, updateComment } from '@/data/actions'
 import { useData } from '@/data/store'
 import { Editor } from '@/editor/LazyEditor'
+import { localStore } from '@/lib/storage'
 import type { ArchivedIssue, Comment, Issue } from '@/model/schema'
 import { Button } from '@/ui/button'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
@@ -93,15 +94,15 @@ function CommentItem({ comment, mine, archived }: { comment: Comment; mine: bool
 }
 
 function NewComment({ issue }: { issue: string }) {
-  const [saved] = useState(() => localStorage.getItem(draftKey(issue)) ?? '')
+  const [saved] = useState(() => localStore.getItem(draftKey(issue)) ?? '')
   const draft = useRef(saved)
   // a new key empties the editor after sending
   const [round, setRound] = useState(0)
 
   function change(md: string) {
     draft.current = md
-    if (md.trim()) localStorage.setItem(draftKey(issue), md)
-    else localStorage.removeItem(draftKey(issue))
+    if (md.trim()) localStore.setItem(draftKey(issue), md)
+    else localStore.removeItem(draftKey(issue))
   }
   function send(md = draft.current) {
     if (!md.trim()) return

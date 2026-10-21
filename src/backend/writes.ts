@@ -65,7 +65,11 @@ export interface Batch {
   cascade?: AnyChange[]
   /** shown at once, never sent: what the database empties by itself (a deleted parent); settled once the database's copy agrees, or after 10 s */
   untilEcho?: AnyChange[]
-  /** shown at once, sent only once every change above is saved, undone if one isn't (a view's filter without a deleted team) */
+  /**
+   * shown at once, sent only once every change above is saved, undone if one isn't (a view's filter without a deleted
+   * team). Worked out from what is shown, so a later one for the same columns already holds this one: once that later
+   * one went, this one isn't sent (it would undo it)
+   */
   after?: AnyChange[]
   /** teammates' inbox notes: sent once every change here is saved, never shown, never read back (E54) */
   notes?: NoteRow[]
@@ -143,6 +147,8 @@ const TOLD_WITHIN = 3_000
 type Failure = { quiet: true } | { quiet: false; message: string }
 
 interface Group {
+  /** in which order the batches came: the later of two `after`s for the same columns is the one that counts */
+  made: number
   /** items still carrying this batch's changes */
   open: Set<Item>
   failure?: Failure
@@ -186,6 +192,9 @@ export class Writer {
   private rows = new Map<string, Item[]>()
   private groups = new Set<Group>()
   private seq = 0
+  private batches = 0
+  /** `${row} ${column}` → the newest batch whose `after` sent that column, while batches are still open */
+  private afterSent = new Map<string, number>()
   private inFlight = 0
   private stopped = false
   private scheduled = false
@@ -278,7 +287,7 @@ export class Writer {
 
   /** a batch onto the queues (its changes are shown by whoever called) */
   private add(batch: Batch, settles: Incoming[]) {
-    const group: Group = { open: new Set(), rows: new Map(), cascade: batch.cascade ?? [], untilEcho: batch.untilEcho ?? [], after: batch.after ?? [], notes: batch.notes, done: batch.done }
+    const group: Group = { made: ++this.batches, open: new Set(), rows: new Map(), cascade: batch.cascade ?? [], untilEcho: batch.untilEcho ?? [], after: batch.after ?? [], notes: batch.notes, done: batch.done }
     this.groups.add(group)
     for (const c of batch.changes) this.enqueue(c, group, settles)
     // what the database deletes along with it: waiting changes to it are pointless now
@@ -488,8 +497,13 @@ export class Writer {
       }
       const failure = g.failure
       if (!failure) {
-        // shown already; sent now, as a batch of their own
-        if (g.after.length) this.add({ changes: g.after }, settles)
+        // shown already; sent now, as a batch of their own, unless a later one for the same columns went already
+        const columns = (c: AnyChange) => (c.op === 'update' ? Object.keys(c.fields ?? {}).map((f) => `${localKey(c.table, c.key)} ${f}`) : [])
+        const outdone = (c: AnyChange) => columns(c).length > 0 && columns(c).every((k) => (this.afterSent.get(k) ?? 0) > g.made)
+        const send = g.after.filter((c) => !outdone(c))
+        for (const change of g.after) if (!send.includes(change)) settles.push({ from: 'settled', change, ok: true })
+        for (const c of send) for (const k of columns(c)) this.afterSent.set(k, g.made)
+        if (send.length) this.add({ changes: send }, settles)
         if (g.notes?.length) this.queueNotes(g.notes)
         dones.push(() => g.done?.({ ok: true, rows: g.rows }))
       } else {
@@ -500,6 +514,7 @@ export class Writer {
         })
       }
     }
+    if (!this.groups.size) this.afterSent.clear()
     this.watchEcho()
     return dones
   }

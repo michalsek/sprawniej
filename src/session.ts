@@ -1,7 +1,8 @@
 /**
  * Who is signed in and which workspace is open, in this browser only. The sign-in itself is kept by the database
  * client (src/backend/auth.ts); this remembers the workspace you had open and the ones you opened before, so a reload
- * comes back to the same place. Your profile is looked up again on every start, never stored here.
+ * comes back to the same place. Your profile is looked up again on every start; the one found last is kept only so
+ * that a start without a connection can still open the copy of your workspace this browser kept.
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
@@ -22,6 +23,8 @@ export interface Session {
   recent: RecentWorkspace[]
   /** whose these are (the signed-in account): someone else signing in here starts with none of them */
   owner: string | null
+  /** your profile as it was found last, for a start when Sprawniej can't be reached (useMyProfile) */
+  lastProfile: { id: string; person: Person } | null
   /** called for whoever is signed in; another account than before forgets the workspaces */
   signedInAs: (userId: string) => void
   setProfile: (profileId: string | null, user: Person | null) => void
@@ -42,15 +45,18 @@ export const useSession = create<Session>()(
       workspaceId: null,
       recent: [],
       owner: null,
+      lastProfile: null,
       signedInAs: (userId) =>
-        set((s) => (s.owner === userId ? s : s.owner === null ? { owner: userId } : { owner: userId, user: null, profileId: null, workspaceId: null, recent: [] })),
-      setProfile: (profileId, user) => set({ profileId, user }),
+        set((s) =>
+          s.owner === userId ? s : s.owner === null ? { owner: userId } : { owner: userId, user: null, profileId: null, workspaceId: null, recent: [], lastProfile: null },
+        ),
+      setProfile: (profileId, user) => set(profileId && user ? { profileId, user, lastProfile: { id: profileId, person: user } } : { profileId, user }),
       open: (ws) => set((s) => ({ workspaceId: ws.id, recent: [ws, ...s.recent.filter((r) => r.id !== ws.id)].slice(0, 10) })),
       close: () => set({ workspaceId: null }),
       forget: (id) => set((s) => ({ workspaceId: s.workspaceId === id ? null : s.workspaceId, recent: s.recent.filter((r) => r.id !== id) })),
-      signOut: () => set({ user: null, profileId: null, workspaceId: null, recent: [] }),
+      signOut: () => set({ user: null, profileId: null, workspaceId: null, recent: [], lastProfile: null }),
       set: (patch) => set(patch),
     }),
-    { name: 'sprawniej-session-v2', partialize: (s) => ({ workspaceId: s.workspaceId, recent: s.recent, owner: s.owner }) },
+    { name: 'sprawniej-session-v2', partialize: (s) => ({ workspaceId: s.workspaceId, recent: s.recent, owner: s.owner, lastProfile: s.lastProfile }) },
   ),
 )

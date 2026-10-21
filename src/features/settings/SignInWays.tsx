@@ -6,6 +6,7 @@ import { ADDING_KEY, addWay, friendlyAuthError, removeWay, useAuth, waysToSignIn
 import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { Problem } from '@/features/onboarding/Step'
 import { GitHubMark } from '@/features/onboarding/Welcome'
+import { sessionStore } from '@/lib/storage'
 import { Button } from '@/ui/button'
 import { PasswordDialog } from './PasswordDialog'
 
@@ -55,8 +56,8 @@ export function SignInWays() {
   useEffect(() => {
     let adding: string | null = null
     try {
-      adding = sessionStorage.getItem(ADDING_KEY)
-      sessionStorage.removeItem(ADDING_KEY)
+      adding = sessionStore.getItem(ADDING_KEY)
+      sessionStore.removeItem(ADDING_KEY)
     } catch {
       // nothing was being added
     }

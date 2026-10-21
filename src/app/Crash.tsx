@@ -5,6 +5,7 @@
  */
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { backend } from '@/backend'
+import { sessionStore } from '@/lib/storage'
 import { Button } from '@/ui/button'
 
 const RELOADED = 'sprawniej:reloaded-for-update'
@@ -21,8 +22,8 @@ export class Crash extends Component<{ children: ReactNode }, { error: unknown }
   componentDidCatch(error: unknown, info: ErrorInfo) {
     console.error('Sprawniej couldn’t show this screen', error, info.componentStack)
     // a newer version is out and this tab still asks for the old one's parts: one quiet reload picks up the new one
-    if (isMissingPart(error) && navigator.onLine && !sessionStorage.getItem(RELOADED)) {
-      sessionStorage.setItem(RELOADED, '1')
+    if (isMissingPart(error) && navigator.onLine && !sessionStore.getItem(RELOADED)) {
+      sessionStore.setItem(RELOADED, '1')
       location.reload()
     }
   }

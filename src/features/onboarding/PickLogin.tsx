@@ -9,6 +9,7 @@ import { createProfile, LOGIN_PATTERN, ProfileProblem, suggestLogin, type MyProf
 import { HandleInput } from '@/components/HandleInput'
 import { useSignOut } from '@/components/SignOut'
 import { HANDLE_WORDS } from '@/data/handles'
+import { sessionStore } from '@/lib/storage'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Problem, Step } from './Step'
@@ -40,7 +41,7 @@ export function PickLogin({
   // whether this account still has to be let in (null: asking); the invite link is tried first, the field shows if it can't
   const [needed, setNeeded] = useState<boolean | null>(null)
   const [inviteRefused, setInviteRefused] = useState(false)
-  const [code, setCode] = useState(() => sessionStorage.getItem(CODE_KEY) ?? '')
+  const [code, setCode] = useState(() => sessionStore.getItem(CODE_KEY) ?? '')
   const askCode = !!needed && (!invite || inviteRefused)
   const bad = !!login && !LOGIN_PATTERN.test(login)
   const ok = !!name.trim() && !!login && !bad && (!askCode || !!code.trim())

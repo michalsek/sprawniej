@@ -141,6 +141,47 @@ for (const order of ['the saved row first', 'the echo first'] as const) {
   })
 }
 
+test('two deletions at once both come out of a saved view, whichever is saved first', async () => {
+  const label = createLabel('Bug')
+  const keepLabel = createLabel('Design')
+  const project = createProject({ name: 'Launch', emoji: '🚀', teams: ['ENG'] })
+  const keepProject = createProject({ name: 'Later', emoji: '🐢', teams: ['ENG'] })
+  const filters = { labels: [label.id, keepLabel.id], projects: [project.id, keepProject.id] }
+  const view = createView({ name: 'Both', emoji: '🧪', team: null, filters, display: DEFAULT_DISPLAY })
+  await w.settle()
+  w.db.hold()
+  deleteLabel(label.id)
+  deleteProject(project.id)
+  await drain()
+  // the project goes first, and the view without both is saved; the label's answer comes last
+  w.db.releaseTable('projects')
+  await drain()
+  w.db.releaseTable('views')
+  await drain()
+  await w.settle()
+  expect(w.db.get('views', { id: view.id })?.filters).toEqual({ labels: [keepLabel.id], projects: [keepProject.id] })
+  expect(state().views[view.id].filters).toEqual({ labels: [keepLabel.id], projects: [keepProject.id] })
+})
+
+test('two deletions at once, the later one refused: the earlier one still comes out of a saved view', async () => {
+  const label = createLabel('Bug')
+  const keepLabel = createLabel('Design')
+  const project = createProject({ name: 'Launch', emoji: '🚀', teams: ['ENG'] })
+  const keepProject = createProject({ name: 'Later', emoji: '🐢', teams: ['ENG'] })
+  const view = createView({ name: 'Both', emoji: '🧪', team: null, filters: { labels: [label.id, keepLabel.id], projects: [project.id, keepProject.id] }, display: DEFAULT_DISPLAY })
+  await w.settle()
+  w.db.hold()
+  deleteLabel(label.id)
+  deleteProject(project.id)
+  await drain()
+  w.db.failNext('42501')
+  w.db.releaseTable('projects')
+  await drain()
+  await w.settle()
+  expect(w.db.get('views', { id: view.id })?.filters).toEqual({ labels: [keepLabel.id], projects: [project.id, keepProject.id] })
+  expect(state().views[view.id].filters).toEqual({ labels: [keepLabel.id], projects: [project.id, keepProject.id] })
+})
+
 test('deleting a label, project or team takes it out of saved views', async () => {
   const label = createLabel('Bug')
   const keep = createLabel('Design')

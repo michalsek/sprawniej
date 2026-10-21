@@ -14,14 +14,28 @@ export function isBusy(e: KeyboardEvent): boolean {
 
 const QUICK: Record<string, QuickField> = { s: 'status', p: 'priority', a: 'assignee', l: 'labels', e: 'estimate' }
 
+/** the issues in the list or board on the page */
+const issueRows = () => [...document.querySelectorAll<HTMLElement>('main [data-issue-id]')]
+
 /** move keyboard focus to the next or previous issue in the list or board */
-function step(by: 1 | -1) {
-  const all = [...document.querySelectorAll<HTMLElement>('main [data-issue-id]')]
+function step(by: 1 | -1, all = issueRows()) {
   if (!all.length) return
   const at = all.findIndex((el) => el === document.activeElement || el.contains(document.activeElement))
   const next = all[at === -1 ? (by === 1 ? 0 : all.length - 1) : Math.min(all.length - 1, Math.max(0, at + by))]
   next.focus()
   next.scrollIntoView({ block: 'nearest' })
+}
+
+/**
+ * The arrows move through the issues only from an issue, or from nowhere on a page that lists issues. Anywhere else
+ * (Settings, a page's text, a button) they scroll the page as usual.
+ */
+function arrowStep(by: 1 | -1, e: KeyboardEvent) {
+  const all = issueRows()
+  const at = document.activeElement
+  if (!all.length || (at && at !== document.body && !all.some((el) => el === at || el.contains(at)))) return
+  e.preventDefault()
+  step(by, all)
 }
 
 export function useShortcuts() {
@@ -61,12 +75,11 @@ export function useShortcuts() {
       } else if (key === 'escape' && useSelection.getState().ids.length) {
         e.preventDefault()
         clearSelection()
-      } else if (key === 'j' || (key === 'arrowdown' && !dragging)) {
+      } else if (key === 'j' || key === 'k') {
         e.preventDefault()
-        step(1)
-      } else if (key === 'k' || (key === 'arrowup' && !dragging)) {
-        e.preventDefault()
-        step(-1)
+        step(key === 'j' ? 1 : -1)
+      } else if ((key === 'arrowdown' || key === 'arrowup') && !dragging) {
+        arrowStep(key === 'arrowdown' ? 1 : -1, e)
       } else if (key === 'escape' && location.startsWith('/issue/')) {
         e.preventDefault()
         if (history.length > 1) history.back()

@@ -1,7 +1,7 @@
 /**
  * Someone in no team, in a workspace that has teams, sees almost nothing: this asks which teams they work with.
- * It waits for the first update from teammates (so the teams are current), and "Skip for now" keeps it away in this
- * browser; + next to Your teams does the same any time.
+ * It waits for the first update from teammates (so the teams are current) and stays away while you're in Settings;
+ * "Skip for now" keeps it away in this browser; + next to Your teams does the same any time.
  */
 import { useEffect, useState } from 'react'
 import { useLocation } from 'wouter'
@@ -9,20 +9,21 @@ import { useShallow } from 'zustand/react/shallow'
 import { joinTeam } from '@/data/actions'
 import { useData } from '@/data/store'
 import { useSaveStatus } from '@/backend/status'
+import { isSettingsPath } from '@/features/settings/nav'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from '@/ui/dialog'
 import { skipJoining, skippedJoining, useJoinTeams } from './joinTeamsState'
 
 export function JoinTeams() {
-  const [, navigate] = useLocation()
+  const [location, navigate] = useLocation()
   const where = useSession((s) => s.workspaceId ?? '')
   const me = useData((s) => s.me?.login)
   const teams = useData(useShallow((s) => Object.values(s.teams).sort((a, b) => a.name.localeCompare(b.name))))
   const synced = useSaveStatus((s) => !!s.synced)
   const inNone = !!me && teams.length > 0 && !teams.some((t) => t.members.includes(me))
   const [skipped, setSkipped] = useState(false)
-  const open = synced && inNone && !!where && !skipped && !skippedJoining(where, me!)
+  const open = synced && inNone && !!where && !skipped && !isSettingsPath(location) && !skippedJoining(where, me!)
   // nothing ticked yet: with one team there's nothing to choose, so it starts ticked
   const [chosen, setPicked] = useState<string[] | null>(null)
   const picked = chosen ?? (teams.length === 1 ? [teams[0].key] : [])

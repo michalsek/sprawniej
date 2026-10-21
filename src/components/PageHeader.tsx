@@ -31,7 +31,7 @@ export function PageHeader({ emoji, onEmoji, name, onName, description, onDescri
       <div className="flex items-center gap-3">
         <EmojiPicker value={emoji} onChange={onEmoji} label={`Change the ${kind}'s emoji`} />
         {/* a light background on hover shows the name can be changed in place */}
-        <InlineText value={name} onSave={onName} label={`${kind[0].toUpperCase()}${kind.slice(1)} name`} required className={`${editable} text-2xl font-semibold`} />
+        <InlineText value={name} onSave={onName} label={`${kind[0].toUpperCase()}${kind.slice(1)} name`} required className={`${editable} min-w-0 truncate text-2xl font-semibold`} />
         {aside}
         {menu && (
           <DropdownMenu>

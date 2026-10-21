@@ -12,6 +12,7 @@ import { usePictures } from '@/backend/pictures'
 import { useSaveStatus } from '@/backend/status'
 import { debugWrites } from '@/backend/writes'
 import * as actions from '@/data/actions'
+import { sessionStore } from '@/lib/storage'
 import { useTheme } from '@/lib/theme'
 import './index.css'
 
@@ -34,7 +35,7 @@ window.sprawniej = {
 }
 
 // a page that loaded fine clears the "reloaded once for a new version" mark, so the next update can do it again
-window.addEventListener('load', () => setTimeout(() => sessionStorage.removeItem('sprawniej:reloaded-for-update'), 10_000))
+window.addEventListener('load', () => setTimeout(() => sessionStore.removeItem('sprawniej:reloaded-for-update'), 10_000))
 
 watchForUpdates()
 forgetOldVersion()
@@ -42,7 +43,7 @@ forgetOldVersion()
 startTheme()
 
 // back from GitHub: the route you were on, and words for a sign-in that didn't finish; then the sign-in starts
-if (isSetUp()) startAuth(takeReturnedUrl(location, sessionStorage, (url) => history.replaceState(history.state, '', url)))
+if (isSetUp()) startAuth(takeReturnedUrl(location, sessionStore, (url) => history.replaceState(history.state, '', url)))
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

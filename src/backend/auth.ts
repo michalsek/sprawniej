@@ -8,6 +8,7 @@
 import type { AuthChangeEvent, Session as AuthSession, User, UserIdentity } from '@supabase/supabase-js'
 import { create } from 'zustand'
 import { authRedirectUrl } from '@/config'
+import { localStore, sessionStore } from '@/lib/storage'
 import { parseTheme, type ThemeChoice } from '@/lib/theme'
 import { useSession } from '@/session'
 import { stopCaching } from './cacheStore'
@@ -159,7 +160,7 @@ function startOver() {
   location.reload()
 }
 
-const deliberate = () => Date.now() - Number(localStorage.getItem(SIGNING_OUT) ?? 0) < 10_000
+const deliberate = () => Date.now() - Number(localStore.getItem(SIGNING_OUT) ?? 0) < 10_000
 
 /** a copy of the same person from before a change that already arrived (the sign-in kept in this browser, say) */
 export const older = (a: AuthUser, b: AuthUser | null): boolean =>
@@ -177,6 +178,13 @@ function setUser(user: AuthUser | null, more: Partial<AuthState> = {}) {
   useAuth.setState({ user, ...more })
 }
 
+/**
+ * A sign-in that ends a problem from the address bar: someone signing in on the sign-in screen. The sign-in kept in
+ * this browser comes back as one too, when the page loads and when the tab is shown again; that one leaves the
+ * problem alone ("This GitHub account already belongs to another Sprawniej account" after adding GitHub).
+ */
+export const newSignIn = (was: Pick<AuthState, 'ready' | 'user'>): boolean => was.ready && !was.user
+
 function onAuthEvent(event: AuthChangeEvent, session: AuthSession | null) {
   const user = toUser(session?.user)
   const was = useAuth.getState()
@@ -185,8 +193,8 @@ function onAuthEvent(event: AuthChangeEvent, session: AuthSession | null) {
       if (!user) break
       // someone else signed in (here, or in another tab): nothing of the last person's may stay on screen
       if (lastUserId && lastUserId !== user.id) return startOver()
-      localStorage.removeItem(SIGNING_OUT)
-      setUser(user, { lost: false, urlProblem: undefined })
+      localStore.removeItem(SIGNING_OUT)
+      setUser(user, newSignIn(was) ? { lost: false, urlProblem: undefined } : { lost: false })
       break
     case 'SIGNED_OUT':
       if (leaving) return
@@ -211,7 +219,7 @@ export function startAuth(urlProblem?: string): void {
   const db = getClient()
   if (!db) return
   if (urlProblem) useAuth.setState({ urlProblem })
-  if (!deliberate()) localStorage.removeItem(SIGNING_OUT)
+  if (!deliberate()) localStore.removeItem(SIGNING_OUT)
   const cameBack = new URL(location.href).searchParams.has('code')
   // the client's own calls must not be awaited inside its callback (they wait for each other), so work comes after it
   db.auth.onAuthStateChange((event, session) => {
@@ -286,7 +294,7 @@ export async function signupCodeNeeded(): Promise<boolean> {
 export async function giveSignupCode(permit: SignUpPermit): Promise<void> {
   const { error } = await requireClient().rpc('use_signup_code', { p_code: permit.code?.trim() || undefined, p_invite: permit.invite || undefined })
   if (!error) {
-    sessionStorage.removeItem(CODE_KEY)
+    sessionStore.removeItem(CODE_KEY)
     return
   }
   throw new AuthProblem(friendlyDbError(error, "We couldn't check your sign-up code. Try again in a moment."))
@@ -322,10 +330,10 @@ export function githubAvailable(): Promise<'on' | 'off' | 'unknown'> {
 export async function signInWithGitHub(): Promise<void> {
   const available = await githubAvailable()
   if (available !== 'on') throw new AuthProblem(available === 'off' ? GITHUB_OFF : UNREACHABLE)
-  sessionStorage.setItem(RETURN_KEY, location.hash || '#/')
+  sessionStore.setItem(RETURN_KEY, location.hash || '#/')
   const { error } = await requireClient().auth.signInWithOAuth({ provider: 'github', options: { redirectTo: authRedirectUrl() } })
   if (error) {
-    sessionStorage.removeItem(RETURN_KEY)
+    sessionStore.removeItem(RETURN_KEY)
     throw new AuthProblem(friendlyAuthError(error))
   }
 }
@@ -414,12 +422,12 @@ export async function addWay(provider: 'github' | 'google'): Promise<void> {
   const p = await providersOn()
   if (p === 'unknown') throw new AuthProblem(UNREACHABLE)
   if (!p[provider]) throw new AuthProblem(provider === 'github' ? GITHUB_OFF : OFF.google)
-  sessionStorage.setItem(RETURN_KEY, location.hash || '#/settings/account/sign-in')
-  sessionStorage.setItem(ADDING_KEY, provider)
+  sessionStore.setItem(RETURN_KEY, location.hash || '#/settings/account/sign-in')
+  sessionStore.setItem(ADDING_KEY, provider)
   const { error } = await requireClient().auth.linkIdentity({ provider, options: { redirectTo: authRedirectUrl() } })
   if (error) {
-    sessionStorage.removeItem(RETURN_KEY)
-    sessionStorage.removeItem(ADDING_KEY)
+    sessionStore.removeItem(RETURN_KEY)
+    sessionStore.removeItem(ADDING_KEY)
     throw new AuthProblem(friendlyAuthError(error))
   }
 }
@@ -442,7 +450,7 @@ export async function signOutLocally(): Promise<void> {
   leaving = true
   // nothing of the last person may be kept again while the page goes
   stopCaching()
-  localStorage.setItem(SIGNING_OUT, String(Date.now()))
+  localStore.setItem(SIGNING_OUT, String(Date.now()))
   const db = getClient()
   // the sign-in is forgotten here even when Sprawniej can't be reached (it only fails to end it there too)
   if (db) await db.auth.signOut({ scope: 'local' }).catch(() => {})

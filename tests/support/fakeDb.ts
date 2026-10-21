@@ -199,7 +199,7 @@ export class FakeDb {
   private real: Transport
   private pendingMessages: Message[] = []
   private holding: 'requests' | 'answers' | null = null
-  private held: (() => void)[] = []
+  private held: { table: string; go: () => void }[] = []
   private failures: Failure[] = []
   private offset = 0
   private stamp = 0
@@ -246,8 +246,14 @@ export class FakeDb {
   /** lets `n` waiting requests (all by default) through, and stops holding when all are */
   release(n = Infinity) {
     const go = this.held.splice(0, n)
-    for (const g of go) g()
+    for (const g of go) g.go()
     if (n === Infinity) this.holding = null
+  }
+  /** lets the waiting requests to one table through, and goes on holding the others */
+  releaseTable(table: string) {
+    const go = this.held.filter((h) => h.table === table)
+    this.held = this.held.filter((h) => h.table !== table)
+    for (const g of go) g.go()
   }
   /** requests still waiting or on their way */
   busy(): number {
@@ -280,16 +286,16 @@ export class FakeDb {
     this.log.push(req)
     this.inFlight++
     try {
-      if (this.holding === 'requests') await new Promise<void>((r) => this.held.push(r))
-      const fail = this.failures.shift()
       const what = whatOf(req)
+      if (this.holding === 'requests') await new Promise<void>((go) => this.held.push({ table: what.table, go }))
+      const fail = this.failures.shift()
       if (fail === 'network') return { problem: { kind: 'network', message: '' } }
       if (fail === 'auth') return { problem: { kind: 'auth', message: '' } }
       if (fail === 'bug') return { problem: { kind: 'bug', message: MESSAGES.bug } }
       if (fail === '42501') return { problem: classify({ code: '42501', message: `new row violates row-level security policy for table "${what.table}"` }, 403, what) }
       if (fail === '23505:labels_name') return { problem: classify({ code: '23505', message: 'duplicate key value violates unique constraint "labels_name"' }, 409, what) }
       const answer = await this.real.run(req, o)
-      if (this.holding === 'answers') await new Promise<void>((r) => this.held.push(r))
+      if (this.holding === 'answers') await new Promise<void>((go) => this.held.push({ table: what.table, go }))
       if (fail === 'lostResponse') return { problem: { kind: 'network', message: '' } }
       return answer
     } finally {

@@ -3,6 +3,7 @@ import { ADDING_KEY, signOutLocally } from '@/backend/auth'
 import { wipeCaches } from '@/backend/cacheStore'
 import { JOINING_KEY } from '@/features/onboarding/invite'
 import { useData, EMPTY } from '@/data/store'
+import { localStore, sessionStore } from '@/lib/storage'
 import { useSession } from '@/session'
 
 /** what the earlier version kept in this browser: its session (with a GitHub key) and its copies of workspaces */
@@ -28,10 +29,10 @@ async function deleteOldCopies(): Promise<void> {
 
 /** once per browser, at start: the earlier version's key and copies go */
 export function forgetOldVersion() {
-  if (localStorage.getItem(OLD_GONE)) return
-  localStorage.removeItem(OLD_SESSION)
+  if (localStore.getItem(OLD_GONE)) return
+  localStore.removeItem(OLD_SESSION)
   deleteOldCopies().then(
-    () => localStorage.setItem(OLD_GONE, '1'),
+    () => localStore.setItem(OLD_GONE, '1'),
     // tried again next start
     (e: unknown) => console.warn('Sprawniej couldn’t remove old copies of workspaces', e),
   )
@@ -39,9 +40,9 @@ export function forgetOldVersion() {
 
 /** what this browser remembers for you: the tour, skipped teams, comment drafts, display choices */
 function forgetMine() {
-  for (const k of Object.keys(localStorage)) {
+  for (const k of localStore.keys()) {
     // the sign-out mark stays: other tabs read it to start over too
-    if ((k.startsWith('sprawniej:') && k !== 'sprawniej:signing-out' && k !== OLD_GONE) || k === 'sprawniej-displays') localStorage.removeItem(k)
+    if ((k.startsWith('sprawniej:') && k !== 'sprawniej:signing-out' && k !== OLD_GONE) || k === 'sprawniej-displays') localStore.removeItem(k)
   }
 }
 
@@ -60,7 +61,7 @@ export async function signOutOfThisBrowser(then = '#/') {
   useData.setState({ ...EMPTY })
   forgetMine()
   // a Join pressed or a way to sign in being added belong to whoever was signed in
-  for (const k of [ADDING_KEY, JOINING_KEY]) sessionStorage.removeItem(k)
+  for (const k of [ADDING_KEY, JOINING_KEY]) sessionStore.removeItem(k)
   location.hash = then
   location.reload()
 }

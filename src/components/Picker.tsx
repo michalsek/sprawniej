@@ -7,9 +7,8 @@ import { useState, type ReactNode } from 'react'
 import { Check, Plus } from 'lucide-react'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
-import { plainFilter } from '@/lib/fuzzy'
-import { plain } from '@/lib/plain'
 import { cn } from '@/lib/utils'
+import { searchItems } from './pickerSearch'
 
 export interface PickerItem<V> {
   value: V
@@ -36,17 +35,8 @@ interface Common<V> {
 
 type Props<V> = Common<V> & ({ multiple?: false; value: V; onSelect: (v: V) => void } | { multiple: true; value: V[]; onSelect: (v: V[]) => void })
 
+/** an item's key: it keeps items apart in the menu, and is never searched (a hidden login) */
 const keyOf = (v: unknown) => JSON.stringify(v)
-
-/** an item's label, then (after SEP) its key, which keeps items apart but is never searched (a hidden login) */
-const SEP = '\u0000'
-
-/** cmdk's usual matching, except that typing an item's exact keyword ("ENG-1") puts it first, ahead of ENG-12 */
-const exactFirst = (value: string, search: string, keywords?: string[]) => {
-  const q = plain(search.trim())
-  if (q && keywords?.some((k) => plain(k) === q)) return 1
-  return plainFilter(value.split(SEP)[0], search, keywords) * 0.99
-}
 
 export function Picker<V>(props: Props<V>) {
   const { items, placeholder, children, onCreate, createLabel, align = 'start', asChild = true } = props
@@ -75,13 +65,13 @@ export function Picker<V>(props: Props<V>) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild={asChild}>{children}</PopoverTrigger>
       <PopoverContent align={align} className="w-64 p-0" onClick={(e) => e.stopPropagation()}>
-        <Command filter={exactFirst}>
+        <Command shouldFilter={false}>
           <CommandInput placeholder={placeholder} value={query} onValueChange={setQuery} />
           <CommandList>
             <CommandEmpty>{onCreate ? 'Nothing yet. Type a name to create it.' : 'Nothing found.'}</CommandEmpty>
             <CommandGroup>
-              {items.map((i) => (
-                <CommandItem key={keyOf(i.value)} value={`${i.label}${SEP}${keyOf(i.value)}`} keywords={i.keywords} onSelect={() => pick(i.value)}>
+              {searchItems(items, query).map((i) => (
+                <CommandItem key={keyOf(i.value)} value={keyOf(i.value)} onSelect={() => pick(i.value)}>
                   {i.icon}
                   <span className="truncate">{i.label}</span>
                   {i.hint && <span className="ml-auto truncate text-xs text-muted-foreground">{i.hint}</span>}

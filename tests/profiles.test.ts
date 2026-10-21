@@ -1,8 +1,10 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { LOGIN_PATTERN, suggestLogin } from '@/backend/profiles'
+import { knownProfile, type ProfileLoad } from '@/app/useMyProfile'
+import { LOGIN_PATTERN, suggestLogin, type MyProfile } from '@/backend/profiles'
 import { friendlyDbError, UNREACHABLE } from '@/backend/problem'
+import { useSession } from '@/session'
 
 describe('a handle to start from', () => {
   test('from the email', () => {
@@ -47,5 +49,44 @@ describe('database problems in plain words', () => {
   test('no connection', () => {
     expect(friendlyDbError(new TypeError('Failed to fetch'), 'x')).toBe(UNREACHABLE)
     expect(friendlyDbError({ message: 'TypeError: Failed to fetch' }, 'x')).toBe(UNREACHABLE)
+  })
+})
+
+describe('starting without a connection', () => {
+  const ana = { login: 'ana', name: 'Ana', githubId: 0, avatarUrl: '' } as MyProfile['person']
+  const last = { id: 'p-ana', person: ana }
+  const none = { profileId: null, user: null, owner: 'u-ana', lastProfile: last }
+  const unreachable: ProfileLoad = { uid: 'u-ana', state: 'failed', problem: UNREACHABLE, unreachable: true }
+
+  test('Sprawniej can’t be reached: you as you were last time in this browser, so the kept copy opens', () => {
+    expect(knownProfile('u-ana', unreachable, none)).toEqual(last)
+  })
+
+  test('only then, and only for the same account', () => {
+    expect(knownProfile('u-ana', undefined, none)).toBeNull()
+    expect(knownProfile('u-ana', { ...unreachable, unreachable: false }, none)).toBeNull()
+    expect(knownProfile('u-bob', { ...unreachable, uid: 'u-bob' }, none)).toBeNull()
+  })
+
+  test('found this time: that one', () => {
+    const found = { ...none, profileId: 'p-ana', user: { ...ana, name: 'Ana K' } }
+    expect(knownProfile('u-ana', unreachable, found)).toEqual({ id: 'p-ana', person: { ...ana, name: 'Ana K' } })
+  })
+
+  test('the last one is kept as it is found, and forgotten on sign-out or by another account', () => {
+    // there is no localStorage here: the store says so and carries on
+    const warn = spyOn(console, 'warn').mockImplementation(() => {})
+    const s = useSession.getState()
+    s.signedInAs('u-ana')
+    s.setProfile('p-ana', ana)
+    expect(useSession.getState().lastProfile).toEqual(last)
+    s.setProfile(null, null)
+    expect(useSession.getState().lastProfile).toEqual(last)
+    s.signedInAs('u-bob')
+    expect(useSession.getState().lastProfile).toBeNull()
+    s.setProfile('p-bob', { ...ana, login: 'bob' })
+    s.signOut()
+    expect(useSession.getState().lastProfile).toBeNull()
+    warn.mockRestore()
   })
 })

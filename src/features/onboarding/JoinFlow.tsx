@@ -13,6 +13,7 @@ import { inviteInfo, inviteProblem, type InviteInfo, type JoinProblem } from '@/
 import { PersonAvatar } from '@/components/Avatar'
 import { useSignOut } from '@/components/SignOut'
 import { joinWorkspace } from '@/data/actions'
+import { sessionStore } from '@/lib/storage'
 import { handleOf } from '@/model/schema'
 import { useSession } from '@/session'
 import { Button } from '@/ui/button'
@@ -24,7 +25,7 @@ import { SignInForm, type Mode } from './Welcome'
 
 const pressedFor = (token: string) => {
   try {
-    return sessionStorage.getItem(JOINING_KEY) === token
+    return sessionStore.getItem(JOINING_KEY) === token
   } catch {
     return false
   }
@@ -32,7 +33,7 @@ const pressedFor = (token: string) => {
 
 function forget() {
   try {
-    sessionStorage.removeItem(JOINING_KEY)
+    sessionStore.removeItem(JOINING_KEY)
   } catch {
     // nothing kept, nothing to forget
   }
@@ -254,7 +255,7 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
                 size="lg"
                 onClick={() => {
                   try {
-                    sessionStorage.setItem(JOINING_KEY, token)
+                    sessionStore.setItem(JOINING_KEY, token)
                   } catch {
                     // this tab only, then
                   }

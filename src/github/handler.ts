@@ -21,6 +21,39 @@ export const MAX_BODY = 1_000_000
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
+/** a refused database call, logged with its code and message only: the details can hold a pull request's title */
+class DbError extends Error {
+  constructor(fn: string, status: number, code: string, message: string) {
+    super(`${fn}: ${status} ${code} ${message}`.trim())
+  }
+}
+
+/**
+ * The body, or null when it is longer than `max`. A longer one is still read to its end, and dropped as it comes:
+ * Supabase holds an answer back until the request has been read, so answering early would wait out the time limit.
+ * (The same as in src/notion/handler.ts; the two functions are deployed apart.)
+ */
+async function readUpTo(req: Request, max: number): Promise<Uint8Array<ArrayBuffer> | null> {
+  if (!req.body) return new Uint8Array()
+  const reader = req.body.getReader()
+  const parts: Uint8Array[] = []
+  let size = 0
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    size += value.length
+    if (size <= max) parts.push(value)
+  }
+  if (size > max) return null
+  const body = new Uint8Array(size)
+  let at = 0
+  for (const p of parts) {
+    body.set(p, at)
+    at += p.length
+  }
+  return body
+}
+
 interface Payload {
   action?: string
   pull_request?: {
@@ -49,9 +82,8 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   const event = req.headers.get('x-github-event')
   if (!event || !HANDLED.includes(event)) return new Response(null, { status: 204 })
   if (!env.secret || !env.url || !env.key) return json(500, { error: 'The webhook secret or the project settings are missing.' })
-  if (Number(req.headers.get('content-length') ?? 0) > MAX_BODY) return json(413, { error: 'Too big.' })
-  const body = new Uint8Array(await req.arrayBuffer())
-  if (body.length > MAX_BODY) return json(413, { error: 'Too big.' })
+  const body = await readUpTo(req, MAX_BODY)
+  if (!body) return json(413, { error: 'Too big.' })
   if (!(await signatureOk(env.secret, body, req.headers.get('x-hub-signature-256')))) return json(401, { error: 'Wrong signature.' })
 
   if (event === 'ping') return json(200, { ok: true })
@@ -78,7 +110,10 @@ export async function handle(req: Request, env: Env): Promise<Response> {
     // the older service role key is a JWT; the newer secret key goes as the apikey alone
     if (env.key?.startsWith('eyJ')) headers.Authorization = `Bearer ${env.key}`
     const res = await (env.fetch ?? fetch)(`${env.url}/rest/v1/rpc/${fn}`, { method: 'POST', headers, body: JSON.stringify(args) })
-    if (!res.ok) throw new Error(`${fn}: ${res.status} ${await res.text()}`)
+    if (!res.ok) {
+      const e = (await res.json().catch(() => ({}))) as { code?: string; message?: string }
+      throw new DbError(fn, res.status, e.code ?? '', e.message ?? '')
+    }
     return (await res.json()) as T
   }
 

@@ -300,7 +300,8 @@ async function changeMember(ws: string, profileId: string, patch: { role?: Role;
 /** admins and owners; refusals come back in the rules' own words */
 export const setMemberRole = (ws: string, profileId: string, role: Role): Promise<void> => changeMember(ws, profileId, { role })
 
-export const removeMember = (ws: string, profileId: string): Promise<void> => changeMember(ws, profileId, { removed_at: new Date().toISOString() })
+/** when is the database's time (guard_members): 'now' is read by the database, not this browser's clock */
+export const removeMember = (ws: string, profileId: string): Promise<void> => changeMember(ws, profileId, { removed_at: 'now' })
 
 /** throws an Error whose message can be shown as it is (the last owner can't leave) */
 export async function leaveWorkspace(ws: string): Promise<void> {

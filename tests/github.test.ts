@@ -226,9 +226,32 @@ describe('the handler', () => {
     }
   })
 
-  test('a too big delivery is refused', async () => {
+  test('a too big delivery is read to its end, then refused', async () => {
     const r = await deliver(pr({ pull_request: { ...pr().pull_request, body: 'x'.repeat(MAX_BODY) } }))
     expect(r.status).toBe(413)
+    expect(r.calls).toEqual([])
+    // Supabase holds the answer back until the request is read: every part is taken, none kept past the limit
+    let sent = 0
+    const parts = 30
+    const stream = new ReadableStream<Uint8Array>({
+      pull(c) {
+        if (sent++ === parts) return c.close()
+        c.enqueue(new Uint8Array(100_000))
+      },
+    })
+    const req = new Request('https://x.supabase.co/functions/v1/github-webhook', { method: 'POST', body: stream, headers: { 'x-github-event': 'pull_request', 'content-length': String(parts * 100_000) } })
+    const res = await handle(req, { secret: SECRET, url: 'https://x.supabase.co', key: 'k', fetch: (() => Promise.reject(new Error('no'))) as unknown as typeof fetch })
+    expect({ status: res.status, sent }).toEqual({ status: 413, sent: parts + 1 })
+  })
+
+  test('a refused database call is logged with its code and message, not the rest of its answer', async () => {
+    const env: Partial<Env> = {
+      fetch: (async () =>
+        Response.json({ code: 'P0001', message: 'Something broke', details: 'Fix login, the secret title', hint: null }, { status: 400 })) as unknown as typeof fetch,
+    }
+    const e = await deliver(pr(), { env }).catch((x: unknown) => x)
+    expect(String(e)).toContain('github_lookup: 400 P0001 Something broke')
+    expect(String(e)).not.toContain('secret title')
   })
 
   test('an event that moves nothing reads nothing', async () => {

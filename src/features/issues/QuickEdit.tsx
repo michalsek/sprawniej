@@ -3,14 +3,15 @@
  * the mouse, the focused one, or the open one. Pick with the keyboard or the mouse; labels stay open so you can
  * tick several. With several issues, a label is ticked when all of them have it.
  */
+import { useState } from 'react'
 import { Check } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { usePalette, type QuickField } from '@/app/palette'
 import type { PickerItem } from '@/components/Picker'
+import { searchItems } from '@/components/pickerSearch'
 import { updateIssue } from '@/data/actions'
 import { statusOfIssue } from '@/data/statuses'
 import { issueRef, useData } from '@/data/store'
-import { plainFilter } from '@/lib/fuzzy'
 import { cn } from '@/lib/utils'
 import type { Issue } from '@/model/schema'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ui/command'
@@ -24,6 +25,7 @@ function Menu({ issues, field }: { issues: Issue[]; field: QuickField }) {
   const statusItems = useStatusItems({ current: issues.map((i) => statusOfIssue(i, statuses).id) })
   const people = usePeopleItems()
   const labels = useLabelItems()
+  const [search, setSearch] = useState('')
   const close = () => usePalette.setState({ quick: null })
   const items = (
     field === 'status' ? statusItems : field === 'priority' ? priorityItems : field === 'assignee' ? people : field === 'estimate' ? estimateItems(issues.length === 1 ? issues[0].estimate : null) : labels
@@ -49,13 +51,13 @@ function Menu({ issues, field }: { issues: Issue[]; field: QuickField }) {
   }
 
   return (
-    <Command filter={plainFilter}>
-      <CommandInput placeholder={`${TITLES[field]}…`} />
+    <Command shouldFilter={false}>
+      <CommandInput placeholder={`${TITLES[field]}…`} value={search} onValueChange={setSearch} />
       <CommandList>
         <CommandEmpty>Nothing found.</CommandEmpty>
         <CommandGroup>
-          {items.map((i, n) => (
-            <CommandItem key={n} value={`${i.label} ${(i.keywords ?? []).join(' ')}`} onSelect={() => pick(i.value)}>
+          {searchItems(items, search).map((i) => (
+            <CommandItem key={JSON.stringify(i.value)} value={JSON.stringify(i.value)} onSelect={() => pick(i.value)}>
               {i.icon}
               <span className="truncate">{i.label}</span>
               <Check className={cn('ml-auto size-4', !chosen(i.value) && 'invisible')} />

@@ -98,6 +98,15 @@ describe.skipIf(!enabled)('invites, members and roles', () => {
     expect(await ok(w.bob.db.from('workspaces').select().eq('id', ws))).toEqual([])
     expect((await ok(member(w.bob)))[0].removed_at).not.toBeNull()
 
+    // when someone left is the database's time: it stays as it is
+    const left = (await ok(member(w.bob)))[0].removed_at
+    expect(await ok(change(w.ana, w.bob, { removed_at: '2000-01-01T00:00:00Z' }))).toHaveLength(1)
+    expect((await ok(member(w.bob)))[0].removed_at).toBe(left)
+    // removing someone sends no time of its own (removeMember): the database's 'now'
+    const before = Date.now()
+    expect(await ok(change(w.ana, w.dee, { removed_at: 'now' }))).toHaveLength(1)
+    expect(Math.abs(Date.parse((await ok(member(w.dee)))[0].removed_at ?? '') - before)).toBeLessThan(60_000)
+
     // someone who left comes back only with a new invite, not because an admin says so
     await expectDenied(change(w.ana, w.bob, { removed_at: null }))
     expect((await ok(member(w.bob)))[0].removed_at).not.toBeNull()
