@@ -3,15 +3,16 @@
  * keyboard shortcuts, so a property looks and works the same everywhere.
  */
 import { useMemo } from 'react'
-import { Box, CircleSlash } from 'lucide-react'
+import { Box, CircleSlash, CircleUserRound } from 'lucide-react'
 import { useShallow } from 'zustand/react/shallow'
 import { PersonAvatar } from '@/components/Avatar'
 import { LabelDot } from '@/components/LabelChip'
 import type { PickerItem } from '@/components/Picker'
-import { issueStatuses } from '@/data/statuses'
+import { issueStatuses, projectStatuses } from '@/data/statuses'
 import { issueRef, useData } from '@/data/store'
-import { handleOf, isGuest, type Issue } from '@/model/schema'
+import { handleOf, isGuest, ME, type Issue } from '@/model/schema'
 import { categoryOf, ESTIMATES, PRIORITY_ORDER, PRIORITY_NAMES, type IssueCategory, type Priority } from '@/model/status'
+import { StatusDot } from '@/features/projects/StatusDot'
 import { EstimateIcon } from './DueDate'
 import { estimateName } from './format'
 import { IssueStatusIcon, PriorityIcon, StatusIcon } from './icons'
@@ -47,12 +48,22 @@ export const priorityItems: PickerItem<Priority>[] = [0, ...PRIORITY_ORDER.filte
   icon: <PriorityIcon priority={p as Priority} />,
 }))
 
-export function usePeopleItems(): PickerItem<string | null>[] {
+/** the project statuses, for the Project status filter: every one, hidden ones marked "hidden" */
+export function useProjectStatusItems(): PickerItem<string>[] {
+  const statuses = useData((s) => s.statuses)
+  return useMemo(
+    () => projectStatuses(statuses).map((s) => ({ value: s.id, label: s.name, icon: <StatusDot status={s} />, ...(s.hidden && { hint: 'hidden' }) })),
+    [statuses],
+  )
+}
+
+/** `avatar`: a class for the pictures, where they sit in something smaller than a menu row */
+export function usePeopleItems(avatar?: string): PickerItem<string | null>[] {
   const people = useData(useShallow((s) => Object.values(s.people)))
   const me = useData((s) => s.me?.login)
   return useMemo(
     () => [
-      { value: null, label: 'No one', icon: <PersonAvatar login={null} /> },
+      { value: null, label: 'No one', icon: <PersonAvatar login={null} className={avatar} /> },
       ...[...people]
         // you first, then everyone by name, then people who haven't joined yet
         .sort((a, b) => (a.login === me ? -1 : b.login === me ? 1 : Number(isGuest(a.login)) - Number(isGuest(b.login)) || a.name.localeCompare(b.name)))
@@ -60,11 +71,17 @@ export function usePeopleItems(): PickerItem<string | null>[] {
           value: p.login as string | null,
           label: p.login === me ? `${p.name} (you)` : isGuest(p.login) ? `${p.name} (hasn’t joined)` : p.name,
           keywords: [handleOf(p)],
-          icon: <PersonAvatar person={p} />,
+          icon: <PersonAvatar person={p} className={avatar} />,
         })),
     ],
-    [people, me],
+    [people, me, avatar],
   )
+}
+
+/** people in a filter: Me first (whoever is looking at the list, so one view shows each person their own), then everyone */
+export function useFilterPeopleItems(): PickerItem<string | null>[] {
+  const people = usePeopleItems('size-4 text-[7px]')
+  return useMemo(() => [{ value: ME, label: 'Me', hint: 'whoever is looking', icon: <CircleUserRound className="size-4 text-muted-foreground" /> }, ...people], [people])
 }
 
 export function useLabelItems(): PickerItem<string>[] {

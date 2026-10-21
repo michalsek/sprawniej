@@ -1,131 +1,132 @@
 /**
- * Filters for a list of issues: "Filter" adds one (status, assignee, subscribers, priority, labels, project, team), and each
- * active filter shows as a chip you can change or remove. Inside one filter, any chosen value matches
- * (Todo or In Progress); different filters must all match (Todo and assigned to Ana). The Status filter keeps whole
- * categories where every status of one is picked, so a status added later shows too (src/data/statuses.ts).
+ * Filters for a list of issues: the Filter button, and the summary chip that reads the whole filter as a sentence
+ * ("Status is In Progress or In Review and (Assignee is Me or Labels include Bug)"). Both open the builder
+ * (FilterBuilder.tsx), where conditions are added, changed and grouped. src/data/filterTree.ts does the matching.
  */
-import { useMemo, type ReactNode } from 'react'
-import { Bell, Box, CircleDot, ListFilter, SignalHigh, Tag, UserRound, Users, X } from 'lucide-react'
-import { useShallow } from 'zustand/react/shallow'
-import { Picker, type PickerItem } from '@/components/Picker'
-import { pickedStatusIds, statusFilter } from '@/data/statuses'
-import { useData } from '@/data/store'
-import type { Filters } from '@/model/schema'
+import { Fragment, type ReactNode, type Ref } from 'react'
+import { ListFilter, X } from 'lucide-react'
+import { NEWER_FILTER, describeTree, isCondition, isGroup } from '@/data/filterTree'
+import type { FilterField, FilterGroup, FilterValue } from '@/model/schema'
 import { Button } from '@/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/ui/dropdown-menu'
-import type { FilterKey } from './filters'
-import { priorityItems, useLabelItems, usePeopleItems, useProjectItems, useStatusItems } from './pickers'
+import { itemFor, kindOf, sayCondition, upperFirst, useFilterItems, type FilterItems } from './filterKinds'
 
-const KINDS: { key: FilterKey; name: string; icon: ReactNode }[] = [
-  { key: 'statuses', name: 'Status', icon: <CircleDot /> },
-  { key: 'assignees', name: 'Assignee', icon: <UserRound /> },
-  { key: 'subscribers', name: 'Subscribers', icon: <Bell /> },
-  { key: 'priorities', name: 'Priority', icon: <SignalHigh /> },
-  { key: 'labels', name: 'Labels', icon: <Tag /> },
-  { key: 'projects', name: 'Project', icon: <Box /> },
-  { key: 'teams', name: 'Team', icon: <Users /> },
-]
-
-function useItems(): Record<FilterKey, PickerItem<unknown>[]> {
-  const statuses = useStatusItems({ all: true })
-  const people = usePeopleItems()
-  const labels = useLabelItems()
-  const projects = useProjectItems()
-  const teams = useData(useShallow((s) => Object.values(s.teams)))
-  return useMemo(
-    () => ({
-      statuses,
-      assignees: people,
-      // anyone following the issue: who made it, is assigned, commented, was mentioned or subscribed
-      subscribers: people.filter((p) => p.value !== null),
-      priorities: priorityItems,
-      labels,
-      projects,
-      teams: teams.map((t) => ({ value: t.key, label: t.name, icon: <span className="w-4 text-center leading-none">{t.emoji}</span> })),
-    }),
-    [statuses, people, labels, projects, teams],
+/** a condition's values, short: one shows its icon and name, several show their icons and "4 statuses" */
+export function ValuesLabel({ field, values, items }: { field: FilterField; values: FilterValue[]; items: FilterItems }) {
+  const kind = kindOf(field)
+  if (!values.length) return <span className="text-muted-foreground">any…</span>
+  const known = values.map((v) => itemFor(items[field], v)).filter((i) => !!i)
+  if (values.length === 1) {
+    if (!known.length) return <span className="text-muted-foreground">1 deleted {kind.one}</span>
+    return (
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        {known[0].icon}
+        <span className="truncate">{known[0].label}</span>
+      </span>
+    )
+  }
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5">
+      {known.length > 0 && (
+        <span className="flex shrink-0 items-center -space-x-1" aria-hidden>
+          {known.slice(0, 3).map((i, n) => (
+            <Fragment key={n}>{i.icon}</Fragment>
+          ))}
+        </span>
+      )}
+      <span className="truncate">
+        {values.length} {kind.many}
+      </span>
+    </span>
   )
 }
 
-interface Props {
-  filters: Filters
-  onChange: (f: Filters) => void
-  /** filters this page already decides (a team page decides the team) */
-  hide?: FilterKey[]
-  /** shown at the end of the chip row, e.g. "Save as view" */
+export function FilterButton({ count, open, onClick, ref }: { count: number; open: boolean; onClick: () => void; ref?: Ref<HTMLButtonElement> }) {
+  return (
+    <Button
+      ref={ref}
+      variant="outline"
+      className="h-10 gap-2 text-[15px]"
+      aria-label={count ? `Filter, ${count} set` : 'Filter'}
+      aria-haspopup="dialog"
+      aria-expanded={open}
+      data-state={open ? 'open' : 'closed'}
+      onClick={onClick}
+    >
+      <ListFilter /> <span className="hidden sm:inline">Filter</span>
+      {count > 0 && <span className="-mr-1 rounded-md bg-accent px-1.5 text-xs leading-5 tabular-nums">{count}</span>}
+    </Button>
+  )
+}
+
+/** the filter as words and values, for the summary chip; `first`: it starts the sentence */
+function Sentence({ tree, items, first }: { tree: FilterGroup; items: FilterItems; first?: boolean }) {
+  return tree.items.map((n, k) => (
+    <Fragment key={k}>
+      {k > 0 && <span className="text-muted-foreground"> {tree.join} </span>}
+      {isGroup(n) ? (
+        <>
+          <span className="text-muted-foreground">(</span>
+          <Sentence tree={n} items={items} />
+          <span className="text-muted-foreground">)</span>
+        </>
+      ) : isCondition(n) ? (
+        <>
+          <span className="text-muted-foreground">
+            {kindOf(n.field).name} {n.op === 'not' ? kindOf(n.field).not : kindOf(n.field).is}{' '}
+          </span>
+          <span className="inline-flex max-w-56 items-center align-bottom [&_svg]:size-3.5">
+            <ValuesLabel field={n.field} values={n.values} items={items} />
+          </span>
+        </>
+      ) : (
+        <span className="text-muted-foreground">{first && k === 0 ? upperFirst(NEWER_FILTER) : NEWER_FILTER}</span>
+      )}
+    </Fragment>
+  ))
+}
+
+interface SummaryProps {
+  tree: FilterGroup
+  onOpen: () => void
+  onClear: () => void
+  open: boolean
+  ref?: Ref<HTMLButtonElement>
+  /** at the right end of the band, e.g. "Save as view" */
   extra?: ReactNode
 }
 
-export function FilterButton({ hide = [], onPick }: { hide?: FilterKey[]; onPick: (key: FilterKey) => void }) {
+/** the whole filter as one chip: click it to change the filter, × to clear it */
+export function FilterSummary({ tree, onOpen, onClear, open, ref, extra }: SummaryProps) {
+  const items = useFilterItems()
+  const words = upperFirst(describeTree(tree, (c) => sayCondition(c, items)))
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="outline" className="h-10 gap-2 text-[15px]" aria-label="Filter">
-          <ListFilter /> <span className="hidden sm:inline">Filter</span>
-        </Button>
-      </DropdownMenuTrigger>
-      {/* focus goes to the filter's own menu next, not back to this button */}
-      <DropdownMenuContent align="end" className="w-48" onCloseAutoFocus={(e) => e.preventDefault()}>
-        {KINDS.filter((k) => !hide.includes(k.key)).map((k) => (
-          <DropdownMenuItem key={k.key} onSelect={() => setTimeout(() => onPick(k.key))} className="[&_svg]:text-muted-foreground">
-            {k.icon} {k.name}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
-}
-
-/** the chips; `open` = the filter whose menu is open (one just picked from the Filter button shows even when empty) */
-export function FilterChips({ filters, onChange, hide = [], extra, open, setOpen }: Props & { open: FilterKey | null; setOpen: (k: FilterKey | null) => void }) {
-  const items = useItems()
-  const statuses = useData((s) => s.statuses)
-  const shown = KINDS.filter((k) => !hide.includes(k.key) && ((filters[k.key]?.length ?? 0) > 0 || open === k.key))
-  if (!shown.length && !extra) return null
-  // statuses are picked one by one, and kept as categories plus, where only some of one are picked, those statuses
-  const valuesOf = (key: FilterKey): unknown[] => (key === 'statuses' ? pickedStatusIds(filters, statuses) : ((filters[key] ?? []) as unknown[]))
-  const set = (key: FilterKey, values: unknown[]) =>
-    onChange(key === 'statuses' ? { ...filters, ...statusFilter(values as string[], statuses) } : { ...filters, [key]: values.length ? values : undefined })
-  const kept = hide.flatMap((k) => (k === 'statuses' ? (['statuses', 'statusIds'] as const) : [k]))
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {shown.map((k) => {
-        const values = valuesOf(k.key)
-        const names = values.map((v) => items[k.key].find((i) => JSON.stringify(i.value) === JSON.stringify(v))?.label ?? (v === null ? String(v) : 'one that was deleted'))
-        return (
-          <span key={k.key} className="inline-flex h-8 items-center rounded-lg border text-sm">
-            <Picker
-              multiple
-              placeholder={`${k.name}…`}
-              items={items[k.key]}
-              value={values}
-              onSelect={(v) => set(k.key, v)}
-              open={open === k.key}
-              onOpenChange={(o) => setOpen(o ? k.key : null)}
-            >
-              <button type="button" className="flex h-full items-center gap-1.5 rounded-l-lg px-2.5 hover:bg-accent/60 [&_svg]:size-3.5 [&_svg]:text-muted-foreground">
-                {k.icon}
-                <span className="text-muted-foreground">{k.name}</span>
-                <span className="max-w-64 truncate">{names.length ? names.join(', ') : 'any'}</span>
-              </button>
-            </Picker>
-            <button
-              type="button"
-              onClick={() => set(k.key, [])}
-              className="flex h-full items-center rounded-r-lg border-l px-1.5 text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-              aria-label={`Remove the ${k.name.toLowerCase()} filter`}
-            >
-              <X className="size-3.5" />
-            </button>
+    <div className="flex items-start gap-2">
+      <div className="flex min-w-0 items-stretch rounded-lg border text-sm">
+        <button
+          ref={ref}
+          type="button"
+          onClick={onOpen}
+          title={words}
+          aria-label={`Filters: ${words}. Change`}
+          aria-haspopup="dialog"
+          aria-expanded={open}
+          data-state={open ? 'open' : 'closed'}
+          className="min-w-0 rounded-l-lg px-2.5 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60"
+        >
+          <span className="line-clamp-2 break-words md:line-clamp-1">
+            <Sentence tree={tree} items={items} first />
           </span>
-        )
-      })}
-      {shown.length > 1 && (
-        <button type="button" onClick={() => onChange(Object.fromEntries(kept.map((k) => [k, filters[k]])))} className="px-1 text-sm text-muted-foreground hover:text-foreground">
-          Clear all
         </button>
-      )}
-      {extra && <span className="ml-auto">{extra}</span>}
+        <button
+          type="button"
+          onClick={onClear}
+          className="flex shrink-0 items-center rounded-r-lg border-l px-2 text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          aria-label="Clear filters"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
+      {extra && <span className="ml-auto shrink-0">{extra}</span>}
     </div>
   )
 }

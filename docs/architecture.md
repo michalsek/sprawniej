@@ -483,8 +483,19 @@ than the focus in the issue list.
 
 How a built-in page looks (grouping, ordering, what's hidden) is personal: it's kept in this browser per page
 (`src/data/displays.ts`), never in the workspace. Filters set on a built-in page are personal too and last until you
-leave the page. A saved view is different: its filters and display are columns of its row, so changing them on the
-view's page changes the view for everyone.
+leave the page: they live in the page's state only, never in the address, the browser or the workspace. A saved view
+is different: its filters and display are columns of its row, so changing them on the view's page changes the view
+for everyone.
+
+Filters are a tree of conditions joined by "and" or "or" (`src/data/filterTree.ts`, pure and tested). `matcher` turns
+the tree into one test per list, `storedFilters` picks what a view keeps (the old flat keys when they say it exactly,
+otherwise the tree and a rougher flat copy for older versions; docs/data-format.md, views), and `normalise` tidies a
+tree before it's saved. The builder (`src/features/issues/FilterBuilder.tsx`) edits a draft, so an empty condition
+can stay on screen while you fill it in, and saves the tidy form on every change; closing it brings back what's saved.
+A teammate's change is laid over the draft (`alignDraft`): it shows at once and the draft keeps its shape, its
+unfinished conditions and its open pickers, also when saving lifted or merged one of its groups. A line the teammate
+removed goes, with its picker. When the draft's shape can't say what's saved (lines moved between groups), the saved
+shape wins and only unfinished conditions at the top stay.
 
 ## Nightly jobs
 

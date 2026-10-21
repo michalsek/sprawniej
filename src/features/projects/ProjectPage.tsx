@@ -38,7 +38,7 @@ export function ProjectPage() {
         key={project.id}
         page={`project:${project.id}`}
         filters={{ projects: [project.id] }}
-        hideFilters={['projects']}
+        hideFilters={['projects', 'projectStatuses']}
         viewScope={null}
         empty={
           <EmptyState

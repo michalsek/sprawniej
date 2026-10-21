@@ -96,6 +96,12 @@ with: Backlog, Paused and Canceled grey, Planned light grey, In progress yellow,
 - **Issue row**: priority, ID, status, title (with `code` in backticks), sub-issue counter, labels, assignee, date.
 - **Board card**: ID and assignee, then status and title, then priority, counter and labels. A project card: emoji,
   name and lead, then the target date and the progress bar. An empty column says "Drop a project here".
+- **Filters**: each condition is a pill of joined segments (field, is / is not, values, ×), 32 px tall, like the
+  chips. Several values show their icons and a count ("4 statuses"). Rows after the first start with a quiet "and" /
+  "or" that switches its group (on a phone, on a short line of its own above the row, so pills keep the width); a
+  nested group is a bordered block with a slightly raised background. With filters set, one chip under the toolbar
+  reads them as a sentence (names in quiet grey, values in normal text). The builder is a popover on wide screens and a
+  sheet from the bottom on phones.
 - **Empty states**: an icon, a short title, one sentence in plain words about what goes here, and one button
   (`src/components/EmptyState.tsx`).
 

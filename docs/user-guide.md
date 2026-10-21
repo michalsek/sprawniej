@@ -400,14 +400,33 @@ Point at a team in the sidebar and press **⋯** to:
 
 ## Filters
 
-**Filter** (above every list) narrows it down: by status, assignee, subscribers, priority, labels, project or team.
-A page leaves out the filter it already is: there's no Team filter on a team's own page (or a team's view), no
-Assignee filter on My issues and no Project filter on a project's page.
-**Subscribers** finds the issues someone follows: ones they made, are assigned to, commented on, were mentioned in or
-subscribed to. Each filter shows as a chip. Click a chip to change it, or its **×** to remove it. Inside one filter,
-any of the chosen values counts ("Todo or In Progress"); several filters must all match ("Todo, and assigned to Ana").
-In the Status filter, ticking every status of a group keeps the whole group, so a status added to it later is in too;
-ticking only some keeps just those.
+**Filter** (above every list) narrows it down. Pick what to look at (status, assignee, subscribers, priority, labels,
+project, project status or team), then pick the values. The list changes straight away, and there's nothing to save.
+A page leaves out what it already is: there's no Team filter on a team's own page (or a team's view), no Assignee
+filter on My issues and no Project or Project status filter on a project's page.
+
+Each filter is a line like **Status | is | 2 statuses | ×**:
+
+- Click the first part to look at something else, and the values part to change the values. Any of the chosen
+  values counts: "Status is Todo or In Progress". In the Status filter, ticking every status of a group keeps the
+  whole group, so a status added to it later is in too; ticking only some keeps just those.
+- Click **is** to switch it to **is not** (for labels and subscribers: **include** and **don’t include**).
+  "Assignee is not Ana" also shows issues nobody is assigned to, and "Labels don’t include Bug" also shows issues with
+  no labels.
+- **×** removes the filter.
+
+**Me** (at the top of the people) means whoever is looking. A view with "Assignee is Me" shows each teammate their own
+issues. **Subscribers** finds the issues someone follows: ones they made, are assigned to, commented on, were
+mentioned in or subscribed to. **Project status** finds issues whose project is, say, In progress; issues with no
+project never count as being in one.
+
+The word in front of each line says how the lines go together. **and** means every line must match; **or** means one
+is enough. Click it to switch the whole group. **+ Filter › Group of filters** adds a group in brackets, with its own
+"and" or "or": for example *Status is In Progress, and (Assignee is Me or Labels include Urgent)*. Groups can go three
+levels deep. To remove a group with everything in it, press its **×**.
+
+With filters set, the line under the toolbar reads them as a sentence. Click it to change them, or its **×** to clear
+them all. On a phone, the filters open from the bottom of the screen and say how many issues they show.
 
 Filters you set on a team's page or on My issues are just for you, and go away when you leave the page. To keep
 them, press **Save as view**.
@@ -418,9 +437,12 @@ A **view** is a saved set of filters with its own emoji, like "🐞 Open bugs" o
 sidebar to see them, and **New view** to make one. A view shows issues from the whole workspace or from one team.
 
 A view belongs to everyone. Changing its name, emoji, description, filters, grouping or List / Board saves straight
-away, for everyone. In the list of views, click a view's emoji to change it, or use **⋯** to rename or delete it. On
-the view's own page, click its name or description to change them. Deleting a view leaves its issues as they are.
-Press the star (☆) on a view to keep it in your sidebar (see Favourites).
+away, for everyone. Clearing a view's filters asks no questions, but shows **Undo** for a moment, in case it was a
+slip. A view keeps its groups and "is not" filters. Someone still on an older version of Sprawniej sees a simpler
+version of them (sometimes a few more issues) until they update. In the list of views, click a view's emoji to change
+it, or use **⋯** to rename or delete it. On the view's own page, click its name or description to change them.
+Deleting a view leaves its issues as they are. Press the star (☆) on a view to keep it in your sidebar (see
+Favourites).
 
 ## Projects
 
