@@ -627,6 +627,7 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
 - `Space`: pick it up to move it with the arrows; `Space` again puts it down. The same works for a favourite in the
   sidebar.
 - `Esc`: let go of picked issues, or go back from an issue.
+- `←` / `→` on a switch like **List** / **Board** or **Appearance**: choose the option next to it.
 
 While writing a description or a comment:
 

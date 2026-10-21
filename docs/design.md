@@ -35,11 +35,18 @@ one background colour, and the way to give Dark its own (`color_scheme_dark`) is
 shipped; the browser bar follows the look through index.html's `theme-color` metas.
 
 The focus ring is solid `ring`, 2 px (`focus-visible:ring-2 focus-visible:ring-ring`), never see-through: at half
-strength it falls under 3:1 on the page. Rows in a list (issues, archived issues, workspaces) keep the `accent`
-background when focused and add the ring inside their edge (`ring-inset`), 2 px; a picked row has a 1 px one. Pictures in descriptions and comments sit on `picture-backdrop`, near white
-in both looks, so a see-through logo or diagram drawn in black still shows in Dark; a photo covers it. People without a
-picture get their initials in white on `oklch(54% 0.09 hue)` (`personColor` in `src/lib/person.ts`): one lightness for
-every hue, so every colour reads at 4.5:1 (`tests/person.test.ts`).
+strength it falls under 3:1 on the page. A field marked wrong shows it red
+(`aria-invalid:ring-destructive`), and a red button keeps the grey one. Rows in a list (issues, archived
+issues, workspaces) and board cards keep their look when focused and add the ring inside their edge (`ring-inset`),
+2 px; a picked row has a 1 px one.
+`tests/focusRing.test.ts` stops a see-through ring from coming back.
+
+Pictures in descriptions and comments sit on `picture-backdrop`, near white in both looks, so a see-through logo or
+diagram drawn in black still shows in Dark; a photo covers it. The price: a see-through picture drawn in white (a logo
+made for dark pages) shows less in Dark. Black-on-clear diagrams are far more common in issues.
+
+People without a picture get their initials in white on `oklch(54% 0.09 hue)` (`personColor` in `src/lib/person.ts`):
+one lightness for every hue, so every colour reads at 4.5:1 (`tests/person.test.ts`).
 
 Colour only means something. Status colours (`status-*`), the orange of Urgent, and label colours are the only
 bright colours on screen. Everything else is grey. In Light, In Progress is a deeper gold and Urgent a deeper orange,
@@ -105,7 +112,8 @@ with: Backlog, Paused and Canceled grey, Planned light grey, In progress yellow,
   near-black in Light), for the main action (like `+ Track time`). Icon buttons are square.
 - **Switches between options** (List / Board): joined buttons where the chosen one has a light border and a
   raised background (`src/components/Segmented.tsx`), like Punchcard's Day / Week / Month. It is one Tab stop (the
-  chosen button); the arrow keys, Home and End move along and choose, as in any group of radio buttons.
+  chosen button); ← →, Home and End move along and choose, as in a group of radio buttons. ↑ ↓ stay the issue
+  list's.
 - **Tabs that are pages** (Active / Backlog / All issues): separate outlined buttons (`src/components/Tabs.tsx`).
 - **Issue row**: priority, ID, status, title (with `code` in backticks), sub-issue counter, labels, assignee, date.
 - **Board card**: ID and assignee, then status and title, then priority, counter and labels. A project card: emoji,

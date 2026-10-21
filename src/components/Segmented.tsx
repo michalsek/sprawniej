@@ -12,7 +12,8 @@ export interface SegmentedOption<T extends string> {
 
 /**
  * `fill`: as wide as its box, with equal buttons (a choice in a form, which has to fit a phone). One Tab stop, the
- * chosen button; the arrow keys move to the next one and choose it, as in any group of radio buttons.
+ * chosen button; ← and → move to the next one and choose it, as in a group of radio buttons. ↑ and ↓ stay the issue
+ * list's.
  */
 export function Segmented<T extends string>({
   value,
@@ -32,11 +33,15 @@ export function Segmented<T extends string>({
   const chosen = Math.max(0, options.findIndex((o) => o.value === value))
 
   function onKeyDown(e: KeyboardEvent<HTMLButtonElement>, at: number) {
+    // with a modifier the key is the browser's (Alt+← is Back)
+    if (e.altKey || e.metaKey || e.ctrlKey || e.shiftKey) return
     const to = arrowMove(e.key, at, options.length)
     if (to === null) return
-    // the arrows are ours here, not the issue list's (src/app/shortcuts.ts)
+    // ← → Home End are ours here, not the app's shortcuts (src/app/shortcuts.ts)
     e.preventDefault()
     e.stopPropagation()
+    // held down, it would choose again and again
+    if (e.repeat) return
     e.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>('[role="radio"]')[to]?.focus()
     if (options[to].value !== value) onChange(options[to].value)
   }

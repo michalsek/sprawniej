@@ -53,7 +53,7 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted }: CardProp
       onClickCapture={(e) => selectionClick(e, issue.id)}
       style={style}
       className={cn(
-        'flex flex-col gap-2 rounded-lg border bg-card p-3 text-[15px] shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none touch-manipulation select-none [-webkit-touch-callout:none]',
+        'flex flex-col gap-2 rounded-lg border bg-card p-3 text-[15px] shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
         (ghost || carried) && 'opacity-30',
         picked && !lifted && 'bg-accent ring-1 ring-inset ring-ring',
         lifted && 'cursor-grabbing rotate-1 shadow-lg',

@@ -41,7 +41,7 @@ function ProjectCard({ project: p, issues, dragRef, dragProps, style, ghost, lif
       href={`/project/${p.id}`}
       style={style}
       className={cn(
-        'flex flex-col gap-2.5 rounded-lg border bg-card p-3 text-[15px] shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none touch-manipulation select-none [-webkit-touch-callout:none]',
+        'flex flex-col gap-2.5 rounded-lg border bg-card p-3 text-[15px] shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
         ghost && 'opacity-30',
         lifted && 'cursor-grabbing rotate-1 shadow-lg',
       )}

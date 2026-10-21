@@ -141,8 +141,8 @@ export function Comments({ issue, archived }: { issue: Issue; archived?: Archive
     const el = id && document.getElementById(`comment-${id}`)
     if (!el) return
     el.scrollIntoView({ block: 'center' })
-    el.classList.add('ring-2', 'ring-ring/60')
-    setTimeout(() => el.classList.remove('ring-2', 'ring-ring/60'), 1600)
+    el.classList.add('ring-2', 'ring-ring')
+    setTimeout(() => el.classList.remove('ring-2', 'ring-ring'), 1600)
   }, [issue.id])
   const items = [
     ...(comments ?? []).map((c) => ({ at: c.createdAt, key: c.id, node: <CommentItem key={c.id} comment={c} mine={!archived && c.author === me} archived={!!archived} /> })),
