@@ -31,6 +31,15 @@ interface Common<V> {
   onOpenChange?: (open: boolean) => void
   /** the trigger is not a button of its own (it's wrapped) */
   asChild?: boolean
+  /** a click outside only closes the menu (it doesn't also reach what's under it) */
+  modal?: boolean
+  /**
+   * presses, touches and keys inside the menu stay in it: the menu is drawn elsewhere on the page but its events
+   * still pass through the trigger's parents (a row that can be dragged would start a drag)
+   */
+  isolate?: boolean
+  onOpenAutoFocus?: (e: Event) => void
+  onCloseAutoFocus?: (e: Event) => void
 }
 
 type Props<V> = Common<V> & ({ multiple?: false; value: V; onSelect: (v: V) => void } | { multiple: true; value: V[]; onSelect: (v: V[]) => void })
@@ -38,8 +47,10 @@ type Props<V> = Common<V> & ({ multiple?: false; value: V; onSelect: (v: V) => v
 /** an item's key: it keeps items apart in the menu, and is never searched (a hidden login) */
 const keyOf = (v: unknown) => JSON.stringify(v)
 
+const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
+
 export function Picker<V>(props: Props<V>) {
-  const { items, placeholder, children, onCreate, createLabel, align = 'start', asChild = true } = props
+  const { items, placeholder, children, onCreate, createLabel, align = 'start', asChild = true, modal, isolate, onOpenAutoFocus, onCloseAutoFocus } = props
   const [ownOpen, setOwnOpen] = useState(false)
   const [query, setQuery] = useState('')
   const open = props.open ?? ownOpen
@@ -62,9 +73,16 @@ export function Picker<V>(props: Props<V>) {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={modal}>
       <PopoverTrigger asChild={asChild}>{children}</PopoverTrigger>
-      <PopoverContent align={align} className="w-64 p-0" onClick={(e) => e.stopPropagation()}>
+      <PopoverContent
+        align={align}
+        className="w-64 p-0"
+        onClick={(e) => e.stopPropagation()}
+        {...(isolate && { onPointerDown: stop, onMouseDown: stop, onTouchStart: stop, onKeyDown: stop })}
+        onOpenAutoFocus={onOpenAutoFocus}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
         <Command shouldFilter={false}>
           <CommandInput placeholder={placeholder} value={query} onValueChange={setQuery} />
           <CommandList>

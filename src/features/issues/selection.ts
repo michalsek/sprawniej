@@ -46,3 +46,11 @@ export function selectionClick(e: MouseEvent, id: string): boolean {
   e.preventDefault()
   return true
 }
+
+/**
+ * Which issues a change made from one row or card is for: all the picked ones when this one is among several picked,
+ * otherwise just this one (picking others doesn't pull in a row you didn't pick).
+ */
+export function targetsFor(id: string, picked: readonly string[]): string[] {
+  return picked.length > 1 && picked.includes(id) ? [...picked] : [id]
+}

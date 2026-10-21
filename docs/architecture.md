@@ -249,7 +249,7 @@ people's changes rarely touch the same thing. Checked in the browser in phase 5 
 | Add or remove labels on one issue | Both apply (one row each) |
 | Edit a description at the same moment | Merged in the editor while you type, line by line, also on neighbouring lines (`src/editor/mergeText.ts`); if both saves cross, the later whole text wins |
 | Tick checklist items of one description | Both ticks stay, also on neighbouring items and after being offline: a tick sends only its box through `set_checklist_item()`, which changes that one character (`src/data/checklist.ts`); an item reworded meanwhile refuses the tick, which is undone with a message. A tick made while your own typing waits to be saved goes with the text instead |
-| Edit one view | Field by field; the later save wins for the whole filters |
+| Edit one view | Field by field; the later save wins for the whole filters, and for the whole display (grouping, ordering and what issues show are one field) |
 | Edit one project, team, label or the workspace name | Field by field; the same field: later save wins |
 | Join or leave the same team | Both kept (one row each) |
 | Create issues in one team | Different numbers; each person's page follows their own issue |

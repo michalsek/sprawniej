@@ -4,9 +4,39 @@
  */
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { Display } from '@/model/schema'
+import { DISPLAY_PROPERTIES, type Display, type DisplayProperty } from '@/model/schema'
 
 export const DEFAULT_DISPLAY: Display = { layout: 'list', grouping: 'status', ordering: 'manual', showCompleted: true, showSubIssues: true }
+
+export type Shown = Record<DisplayProperty, boolean>
+
+const ALL_ON = Object.fromEntries(DISPLAY_PROPERTIES.map((k) => [k, true])) as Shown
+
+/** what rows and cards show until someone switches something: how they looked before there were switches */
+export const PROPERTY_DEFAULTS: Record<Display['layout'], Shown> = {
+  list: { ...ALL_ON, project: false },
+  board: { ...ALL_ON, project: false, created: false },
+}
+
+/**
+ * What this display shows on each issue: the layout's defaults, then what a person turned on or off (one set of
+ * choices covers List and Board). Anything that isn't a yes or no, or that this version doesn't know, is left out.
+ */
+export function propertiesOf(display: Pick<Display, 'layout' | 'properties'>): Shown {
+  const shown = { ...PROPERTY_DEFAULTS[display.layout === 'board' ? 'board' : 'list'] }
+  const own = ownProperties(display)
+  for (const k of DISPLAY_PROPERTIES) if (typeof own[k] === 'boolean') shown[k] = own[k]
+  return shown
+}
+
+/** the stored choices; rows aren't checked when read, so anything but an object counts as none */
+const ownProperties = (display: Pick<Display, 'properties'>): Record<string, unknown> =>
+  display.properties && typeof display.properties === 'object' && !Array.isArray(display.properties) ? display.properties : {}
+
+/** the change that turns one property on or off: always the whole set, so other choices (and a newer version's) stay */
+export function withProperty(display: Pick<Display, 'properties'>, key: DisplayProperty, on: boolean): Pick<Display, 'properties'> {
+  return { properties: { ...(ownProperties(display) as Record<string, boolean>), [key]: on } }
+}
 
 interface Displays {
   byPage: Record<string, Partial<Display>>

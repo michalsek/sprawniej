@@ -160,11 +160,24 @@ Two groups follow their box, not the text, so they stay when the text gets small
   chosen button); ← →, Home and End move along and choose, as in a group of radio buttons. ↑ ↓ stay the issue
   list's.
 - **Tabs that are pages** (Active / Backlog / All issues): separate outlined buttons (`src/components/Tabs.tsx`).
-- **Issue row**: priority, ID, status, title (with `code` in backticks), sub-issue counter, labels, assignee, date.
-- **Board card**: ID and assignee, then status and title, then priority, counter and labels. A project card: emoji,
-  name, progress ring and lead; the start of its description in quiet grey (two lines at most, cut with an ellipsis,
-  none when it has none); then the target date and how many issues count ("12 issues", "1 issue", "No issues"). An
-  empty column says "Drop a project here".
+- **Issue row** (44 px): priority, ID, status, title (with `code` in backticks), progress (sub-issue and checklist
+  counters), then on the right the project and labels, estimate, due date, assignee and the day it was made. Display ›
+  Show on issues switches each of them (`propertiesOf` in `src/data/displays.ts`); status and title always show. The
+  title keeps at least 8rem (12rem from `sm`); the project and label chips give way first: chips that don't fit drop
+  out whole from the end, and a lone long one ends in "…". On phones a row is priority, status, title, progress, due
+  date and assignee. The project is a square-cornered chip like the due date (its emoji and name), never a pill.
+- **Board card**: ID · created day and assignee (the line is left out when all three are off), then status and title,
+  then priority, due date, estimate, progress, project and labels (left out when empty).
+- **Project card**: emoji, name, progress ring and lead; the start of its description in quiet grey (two lines at
+  most, cut with an ellipsis, none when it has none); then the target date and how many issues count ("12 issues", "1
+  issue", "No issues"). An empty column says "Drop a project here".
+- **Controls inside a row or card** (the priority button): a small button with a soft `accent` hover and the focus
+  ring, no colour but the priority's own. It opens the same menu as on the issue page, anchored to it; a click on it
+  never opens the issue, a click outside only closes the menu, and the row stays one Tab stop (the button has
+  `tabIndex -1`; `P` on the row is the keyboard way). On touch screens its tap area is 32 px, inside the row's 44.
+  Build new ones on `RowPicker` (`src/features/issues/PriorityButton.tsx`): it keeps the menu's presses and keys
+  from starting a drag and puts the focus back on the row afterwards. The drag copy and archived issues show the
+  plain icon.
 - **Progress ring** (`src/components/ProgressRing.tsx`, a project's in `src/features/projects/ProjectRing.tsx`): how
   much of a project is done, 16 px, just left of the lead's picture on cards and list rows (at the end of the row when
   there is no lead), and after the property chips on the project's page, next to "8 of 12 done". A `progress-track`

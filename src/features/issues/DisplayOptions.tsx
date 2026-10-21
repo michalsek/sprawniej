@@ -2,18 +2,32 @@
  * "Display": how a page groups and orders its issues, and what it leaves out. Choices are remembered per page in
  * this browser (src/data/displays.ts) and apply at once.
  */
-import { useState, type ReactNode } from 'react'
+import { useId, useState, type ReactNode } from 'react'
 import { SlidersHorizontal } from 'lucide-react'
-import type { Display, Grouping, Ordering } from '@/model/schema'
+import { propertiesOf, withProperty } from '@/data/displays'
+import { DISPLAY_PROPERTIES, type Display, type DisplayProperty, type Grouping, type Ordering } from '@/model/schema'
 import type { IssueTab } from '@/model/status'
 import { Button } from '@/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { Switch } from '@/ui/switch'
+import { ToggleGroup, ToggleGroupItem } from '@/ui/toggle-group'
 import { useSelection } from './selection'
 
 const GROUPING_NAMES: Record<Grouping, string> = { status: 'Status', assignee: 'Assignee', priority: 'Priority', project: 'Project', none: 'No grouping' }
 const ORDERING_NAMES: Record<Ordering, string> = { manual: 'Manual', priority: 'Priority', due: 'Due date', updated: 'Last updated', created: 'Newest first' }
+const PROPERTY_NAMES: Record<DisplayProperty, string> = {
+  id: 'ID',
+  priority: 'Priority',
+  assignee: 'Assignee',
+  labels: 'Labels',
+  project: 'Project',
+  dueDate: 'Due date',
+  estimate: 'Estimate',
+  created: 'Created',
+  progress: 'Progress',
+}
+const PROPERTY_HINTS: Partial<Record<DisplayProperty, string>> = { progress: 'Sub-issues done and boxes ticked' }
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
   return (
@@ -32,9 +46,14 @@ interface Props {
   onChange: (patch: Partial<Display>) => void
   onReset?: () => void
   tab: IssueTab
+  /** what the page always shows the same (a project's page: its project), so there's no switch for it */
+  locked?: readonly DisplayProperty[]
 }
 
-export function DisplayOptions({ display, onChange, onReset, tab }: Props) {
+export function DisplayOptions({ display, onChange, onReset, tab, locked = [] }: Props) {
+  const shown = propertiesOf(display)
+  const offered = DISPLAY_PROPERTIES.filter((k) => !locked.includes(k))
+  const propertiesLabel = useId()
   // the Active and Backlog tabs never show finished issues, so the switch would do nothing there
   const canShowCompleted = tab === 'all'
   const [open, setOpen] = useState(false)
@@ -47,7 +66,7 @@ export function DisplayOptions({ display, onChange, onReset, tab }: Props) {
           <SlidersHorizontal /> <span className="hidden sm:inline">Display</span>
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="flex w-80 flex-col gap-4">
+      <PopoverContent align="end" className="flex max-h-[var(--radix-popover-content-available-height)] w-80 flex-col gap-4 overflow-y-auto">
         <Row label="Grouping">
           <Select value={display.grouping} onValueChange={(v) => onChange({ grouping: v as Grouping })}>
             <SelectTrigger className="w-36" aria-label="Grouping">
@@ -76,6 +95,32 @@ export function DisplayOptions({ display, onChange, onReset, tab }: Props) {
             </SelectContent>
           </Select>
         </Row>
+        <div className="flex flex-col gap-2">
+          <div className="text-label text-muted-foreground" id={propertiesLabel}>
+            Show on issues
+          </div>
+          <ToggleGroup
+            type="multiple"
+            variant="outline"
+            size="sm"
+            spacing={2}
+            aria-labelledby={propertiesLabel}
+            className="w-full flex-wrap"
+            value={offered.filter((k) => shown[k])}
+            onValueChange={(on) => {
+              // one switch changes at a time; find which
+              const key = offered.find((k) => on.includes(k) !== shown[k])
+              if (key) onChange(withProperty(display, key, on.includes(key)))
+            }}
+          >
+            {offered.map((k) => (
+              <ToggleGroupItem key={k} value={k} title={PROPERTY_HINTS[k]} className="font-normal">
+                {PROPERTY_NAMES[k]}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <div className="text-xs text-muted-foreground md:hidden">Labels, project and estimate show on wider screens and on the board.</div>
+        </div>
         <div className="border-t" />
         {canShowCompleted && (
           <Row label="Show finished issues" hint="Done, canceled and duplicate">

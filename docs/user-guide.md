@@ -294,6 +294,10 @@ Next to each project status: how many projects have it.
 
 **Urgent** (orange), **High**, **Medium**, **Low** (fewer bars = lower), or no priority (three dashes).
 
+To change it without opening the issue, click the priority icon on a row or card (or tap it on a phone) and pick
+one. If you've picked several issues and click the icon on one of them, all of them change. From the keyboard,
+move to an issue and press `P`.
+
 ### Due dates and estimates
 
 - **Due date:** the day it should be done. Pick **Due date** on the right: **Today**, **Tomorrow**, **Next week**,
@@ -360,6 +364,11 @@ or deletes them); `S`, `P`, `A`, `L` and `E` do the same. `Esc` lets go of them.
   that group's assignee, priority or project.
 - **Ordering:** **Manual** is the order you and your teammates arrange by dragging. You can also sort by priority,
   by due date, by last update, or newest first. Dragging to reorder only works in Manual order.
+- **Show on issues:** what each row and card shows besides its status and title: **ID**, **Priority**,
+  **Assignee**, **Labels**, **Project**, **Due date**, **Estimate**, **Created** and **Progress** (sub-issues done
+  and boxes ticked). Click one to switch it on or off; the list follows at once. **Project** starts off, and boards
+  start without **Created**. A project's own page doesn't offer **Project**. On a phone, rows leave out labels,
+  project and estimate to keep the title readable; the board shows them.
 - **Show sub-issues** hides or shows them. **Show finished issues** does the same for finished ones, on pages that
   can have them (not on the Active or Backlog tab, which never show finished issues).
 - **Back to default** undoes your changes. It shows up once you've changed something (a saved view has none: its
