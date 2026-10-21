@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.14.1'
+export const APP_VERSION = '2.14.2'
 
 export interface Release {
   version: string
@@ -18,6 +18,22 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.14.2',
+    date: '2026-10-21',
+    title: 'Small fixes',
+    notes: [
+      'Opening Sprawniej without internet shows the copy of your workspace kept in this browser, instead of "We couldn\'t sign you in"',
+      'Ways to sign in says so when the GitHub account you added already belongs to another Sprawniej account',
+      'The arrow keys scroll Settings and other pages again. They still move through issues once you\'re on one',
+      'In menus you search (labels, people, status), Enter picks the best match, also after you change what you typed',
+      '"Join your teams" waits until you leave Settings',
+      'Inbox says "Someone" for a note from a person who is no longer in Sprawniej',
+      'Long project and view names end with "…" at the top of their page',
+      'Sprawniej opens in browsers that block saving site data',
+      'Deleting a label and a project at the same moment takes both out of saved views',
+    ],
+  },
   {
     version: '2.14.1',
     date: '2026-10-21',
