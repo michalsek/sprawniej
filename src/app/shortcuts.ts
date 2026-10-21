@@ -88,9 +88,9 @@ export function useShortcuts() {
       } else if (key === '/') {
         e.preventDefault()
         openPalette()
-      } else if (key === ']' && useChrome.getState().panelHere) {
+      } else if (key === ']' && useChrome.getState().panelPages > 0) {
         e.preventDefault()
-        togglePanel()
+        togglePanel({ focus: true })
       }
     }
     window.addEventListener('keydown', onKey)

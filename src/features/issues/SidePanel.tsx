@@ -5,9 +5,9 @@
  * Beside the list it is a plain <aside>: a dialog, menu or listbox role would turn off the app's keys while it's
  * open (src/app/shortcuts.ts, isBusy).
  */
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 import { X } from 'lucide-react'
-import { useChrome, usePanelBeside } from '@/app/chrome'
+import { hidePanel, useChrome, usePanelBeside } from '@/app/chrome'
 import { Sheet, SheetContent, SheetDescription, SheetTitle } from '@/ui/sheet'
 
 const quiet = 'flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
@@ -16,13 +16,17 @@ export function SidePanel({ children, shown }: { children: ReactNode; shown: num
   const beside = usePanelBeside()
   const open = useChrome((s) => s.panelOpen)
   const sheetOpen = useChrome((s) => s.panelSheetOpen)
+  // once there's room beside the list, the sheet is over: narrowing the window again doesn't bring it back
+  useEffect(() => {
+    if (beside) useChrome.setState({ panelSheetOpen: false })
+  }, [beside])
   if (beside) {
     if (!open) return null
     return (
       <aside aria-label="Side panel" className="flex w-80 shrink-0 flex-col overflow-y-auto border-l bg-background" data-side-panel>
         <div className="flex h-12 shrink-0 items-center justify-between pr-2 pl-4">
           <span className="text-label font-medium text-muted-foreground">Side panel</span>
-          <button type="button" className={quiet} aria-label="Hide the side panel" onClick={() => useChrome.setState({ panelOpen: false })}>
+          <button type="button" className={quiet} aria-label="Hide the side panel" onClick={hidePanel}>
             <X className="size-4" />
           </button>
         </div>
@@ -50,7 +54,7 @@ export function SidePanel({ children, shown }: { children: ReactNode; shown: num
           </button>
         </div>
         <SheetDescription className="sr-only" aria-live="polite">
-          Shows {shown} {shown === 1 ? 'issue' : 'issues'}
+          Shows {shown.toLocaleString('en')} {shown === 1 ? 'issue' : 'issues'}
         </SheetDescription>
         <div className="flex flex-col gap-6 px-4 pb-8">{children}</div>
       </SheetContent>

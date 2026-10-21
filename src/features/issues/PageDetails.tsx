@@ -90,8 +90,8 @@ export function ProjectDetails({ project, done, total }: { project: Project; don
         {teams.length ? teams.map((t) => <TeamLink key={t.key} team={t} />) : <span className="text-muted-foreground">Every team</span>}
       </Line>
       <Line name="Progress">
-        <span className="flex items-center gap-2" aria-label={`${pct}% done, ${done} of ${total}`}>
-          <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+        <span className="flex items-center gap-2">
+          <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted" aria-hidden>
             <span className="block h-full rounded-full bg-status-done" style={{ width: `${pct}%` }} />
           </span>
           <span className="text-muted-foreground">

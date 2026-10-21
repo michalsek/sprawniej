@@ -59,7 +59,7 @@ function Palette() {
   const [, kind, here] = PAGE.exec(location) ?? []
   const page = useData((s) => (kind === 'project' ? s.projects[here] : kind === 'view' ? s.views[here] : undefined))
   const starred = useData((s) => !!here && isFavourite(s, here))
-  const panelHere = useChrome((s) => s.panelHere)
+  const panelHere = useChrome((s) => s.panelPages > 0)
 
   const pages: Entry[] = useMemo(
     () => [
@@ -95,7 +95,7 @@ function Palette() {
       ? [{ id: 'favourite', label: starred ? 'Remove from favourites' : 'Add to favourites', words: `${page.name} star`, icon: <Star />, run: () => toggleFavourite(kind, here) }]
       : []),
     { id: 'sidebar', label: 'Show or hide the sidebar', icon: <PanelLeft />, run: () => useChrome.getState().toggleSidebar() },
-    ...(panelHere ? [{ id: 'panel', label: 'Show or hide the side panel', words: 'quick filters details', icon: <PanelRight />, run: togglePanel, shortcut: ']' }] : []),
+    ...(panelHere ? [{ id: 'panel', label: 'Show or hide the side panel', words: 'quick filters details', icon: <PanelRight />, run: () => togglePanel(), shortcut: ']' }] : []),
   ]
   // only when searched for ("dark", "light", "appearance"), so the list you open with stays short
   const looks: Entry[] = [

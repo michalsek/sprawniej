@@ -17,7 +17,7 @@ export function TopBar() {
   const crumbs = useChrome((s) => s.crumbs)
   const toggle = useChrome((s) => s.toggleSidebar)
   const narrow = useNarrow()
-  const panelHere = useChrome((s) => s.panelHere)
+  const panelHere = useChrome((s) => s.panelPages > 0)
   const beside = usePanelBeside()
   const panelShown = useChrome((s) => (beside ? s.panelOpen : s.panelSheetOpen))
   return (
@@ -62,7 +62,8 @@ export function TopBar() {
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={togglePanel}
+                onClick={() => togglePanel()}
+                data-panel-toggle
                 className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-expanded:text-foreground"
                 aria-label="Show or hide the side panel"
                 aria-expanded={panelShown}

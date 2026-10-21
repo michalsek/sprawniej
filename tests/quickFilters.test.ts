@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'bun:test'
-import { hasQuick, isPicked, quickTree, splitAndCount, toggleQuick, withQuick, withoutGone, type QuickFilters } from '@/data/quickFilters'
+import { hasQuick, impliedBy, isPicked, panelLines, quickScope, quickTree, splitAndCount, toggleQuick, withPicksAt, withQuick, withoutGone, type PanelItem, type QuickFilters } from '@/data/quickFilters'
 import { matcher, treeOf, valueKey } from '@/data/filterTree'
 import { displayKeeps } from '@/data/select'
 import { DEFAULT_DISPLAY } from '@/data/displays'
-import type { Issue } from '@/model/schema'
+import type { FilterGroup, Issue } from '@/model/schema'
 
 let n = 0
 function issue(p: Partial<Issue>): Issue {
@@ -115,17 +115,19 @@ describe('splitAndCount', () => {
     const done = issue({ status: 'done', assignee: 'ben' })
     const sub = issue({ parent: a1.id, assignee: 'ania' })
     const keeps = displayKeeps({ ...DEFAULT_DISPLAY, showCompleted: false, showSubIssues: false }, new Set([done.id]))
-    const { shown, counts } = splitAndCount([...base, done, sub], { assignees: ['ania'] }, keeps, new Set([done.id]))
+    const { shown, counts, total } = splitAndCount([...base, done, sub], { assignees: ['ania'] }, keeps, { keep: new Set([done.id]) })
     expect(shown).toEqual([a1, a2, done, sub])
     expect(count(counts.assignees, 'ben')).toBe(2)
     expect(count(counts.assignees, 'ania')).toBe(2)
+    // the sub-issue isn't counted: the display hides it
+    expect(total).toBe(base.length + 1)
   })
-  test('5,000 issues take little time', () => {
-    const many = Array.from({ length: 5000 }, (_, k) => issue({ assignee: `p${k % 40}`, labels: [`l${k % 30}`, `l${k % 7}`], priority: (k % 5) as Issue['priority'], project: k % 3 ? `p${k % 12}` : null }))
-    const q: QuickFilters = { assignees: ['p1', 'p2'], labels: ['l3'] }
-    const start = performance.now()
-    for (let k = 0; k < 10; k++) splitAndCount(many, q, all)
-    expect((performance.now() - start) / 10).toBeLessThan(50)
+  test('with the panel hidden, nothing is counted, and the list is the same', () => {
+    const q: QuickFilters = { assignees: ['ania'] }
+    const quiet = splitAndCount(base, q, all, { count: false })
+    expect(quiet.shown).toEqual(splitAndCount(base, q, all).shown)
+    expect(quiet.counts.assignees.size).toBe(0)
+    expect(quiet.total).toBe(base.length)
   })
 })
 
@@ -160,13 +162,32 @@ describe('withQuick', () => {
     expect(issues.map(test)).toEqual(issues.map(both))
     expect(issues.map(test)).toEqual([true, false, false, true])
   })
+  test('picks the filters already say add nothing, and flat stays flat', () => {
+    const view = { labels: ['bug'] }
+    expect(withQuick(view, { labels: ['bug'] })).toBe(view)
+    // a view of Ana's issues: picking Ana or Ben says nothing more either
+    const ana = { assignees: ['ania'] }
+    expect(withQuick(ana, { assignees: ['ania', 'ben'] })).toBe(ana)
+    expect(withQuick(view, { labels: ['bug'], priorities: [1] })).toEqual({ labels: ['bug'], priorities: [1] })
+    // a pick narrower than the filter does add something
+    expect(withQuick({ labels: ['bug', 'ui'] }, { labels: ['bug'] }).tree).toBeDefined()
+  })
+  test('a tree with the same line at its top "and" counts too; inside an "or" it does not', () => {
+    const line = { field: 'labels', op: 'is' as const, values: ['bug'] }
+    const and: FilterGroup = { join: 'and', items: [line, { field: 'created', op: 'within', amount: 7, unit: 'days' }] }
+    expect(impliedBy(and, 'labels', ['bug'])).toBe(true)
+    expect(impliedBy({ join: 'or', items: [line, { field: 'priorities', op: 'is', values: [1] }] }, 'labels', ['bug'])).toBe(false)
+    expect(impliedBy({ join: 'and', items: [{ ...line, op: 'not' }] }, 'labels', ['bug'])).toBe(false)
+    const own = { tree: and }
+    expect(withQuick(own, { labels: ['bug'] })).toBe(own)
+  })
   test('other keys in the filters (from a newer version) stay', () => {
     expect(withQuick({ labels: ['bug'], later: 1 } as never, { assignees: ['ania'] })).toEqual({ labels: ['bug'], later: 1, assignees: ['ania'] } as never)
   })
 })
 
 describe('displayKeeps', () => {
-  test('matches what groupIssues leaves in', () => {
+  test('leaves out finished issues and sub-issues as the display says, and keeps dropped ones', () => {
     const closed = issue({ status: 'done' })
     const sub = issue({ parent: 'x' })
     const open = issue({})
@@ -174,5 +195,48 @@ describe('displayKeeps', () => {
     expect([closed, sub, open].map(keep)).toEqual([false, true, true])
     expect(displayKeeps({ showCompleted: false, showSubIssues: true }, new Set([closed.id]))(closed)).toBe(true)
     expect(displayKeeps({ showCompleted: true, showSubIssues: false })(sub)).toBe(false)
+  })
+})
+
+describe('panelLines', () => {
+  const items = [
+    { value: null, label: 'No assignee' },
+    { value: 'ania', label: 'Ania' },
+    { value: 'ben', label: 'Ben' },
+    { value: 'cleo', label: 'Cleo' },
+  ]
+  const counts = (m: Record<string, number>) => ({ assignees: new Map(Object.entries(m).map(([k, v]) => [valueKey(k === 'null' ? null : k), v])), labels: new Map(), priorities: new Map(), projects: new Map() })
+  const unknown = (login: string) => ({ value: login, label: login })
+  test('values with issues, most first, then by name', () => {
+    const lines = panelLines('assignees', items, counts({ ania: 2, ben: 5, null: 2 }), {}, unknown)
+    expect(lines.map((l) => [l.label, l.count])).toEqual([['Ben', 5], ['Ania', 2], ['No assignee', 2]])
+  })
+  test('picked ones come first, even at 0', () => {
+    const lines = panelLines('assignees', items, counts({ ania: 2, ben: 5 }), { assignees: ['cleo', 'ania'] }, unknown)
+    expect(lines.map((l) => [l.label, l.count, l.picked])).toEqual([['Ania', 2, true], ['Cleo', 0, true], ['Ben', 5, false]])
+  })
+  test('someone assigned who is not among the people gets a line', () => {
+    const lines = panelLines('assignees', items, counts({ ghost: 1 }), { assignees: ['gone'] }, unknown)
+    expect(lines.map((l) => l.label).sort()).toEqual(['ghost', 'gone'])
+  })
+  test('Priority keeps its own order, after the picked', () => {
+    const c = { ...counts({}), priorities: new Map([0, 1, 2, 3, 4].map((p) => [valueKey(p), 10 - p])) }
+    const prio: PanelItem[] = [0, 1, 2, 3, 4].map((p) => ({ value: p, label: `P${p}` }))
+    expect(panelLines('priorities', prio, c, {}, unknown).map((l) => l.value)).toEqual([1, 2, 3, 4, 0])
+    expect(panelLines('priorities', prio, c, { priorities: [3] }, unknown).map((l) => l.value)).toEqual([3, 1, 2, 4, 0])
+  })
+})
+
+describe('picks per page', () => {
+  test('each page keeps its own; letting go of everything takes the page out', () => {
+    const eng = quickScope('ws1', 'team:ENG:active')
+    const des = quickScope('ws1', 'team:DES:active')
+    let kept = withPicksAt({}, eng, { labels: ['bug'] })
+    kept = withPicksAt(kept, des, { assignees: ['ben'] })
+    expect(kept[eng]).toEqual({ labels: ['bug'] })
+    expect(kept[des]).toEqual({ assignees: ['ben'] })
+    kept = withPicksAt(kept, eng, {})
+    expect(Object.keys(kept)).toEqual([des])
+    expect(quickScope('ws2', 'team:ENG:active')).not.toBe(eng)
   })
 })

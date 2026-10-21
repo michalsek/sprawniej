@@ -2,6 +2,7 @@ import { backend } from '@/backend'
 import { ADDING_KEY, signOutLocally } from '@/backend/auth'
 import { wipeCaches } from '@/backend/cacheStore'
 import { JOINING_KEY } from '@/features/onboarding/invite'
+import { QUICK_KEY } from '@/data/quickFilters'
 import { useData, EMPTY } from '@/data/store'
 import { localStore, sessionStore } from '@/lib/storage'
 import { useSession } from '@/session'
@@ -60,8 +61,8 @@ export async function signOutOfThisBrowser(then = '#/') {
   useSession.getState().signOut()
   useData.setState({ ...EMPTY })
   forgetMine()
-  // a Join pressed or a way to sign in being added belong to whoever was signed in
-  for (const k of [ADDING_KEY, JOINING_KEY]) sessionStore.removeItem(k)
+  // a Join pressed, a way to sign in being added and quick filters belong to whoever was signed in
+  for (const k of [ADDING_KEY, JOINING_KEY, QUICK_KEY]) sessionStore.removeItem(k)
   location.hash = then
   location.reload()
 }
