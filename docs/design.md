@@ -151,7 +151,8 @@ Two groups follow their box, not the text, so they stay when the text gets small
   on, filled with the text colour. Never yellow: the star is not a meaning colour. On list rows it shows on hover or
   focus (always on touch screens), and always when on.
 - **Top bar**: sidebar toggle, a thin divider, breadcrumbs (`Sprawniej / 🛠️ Engineering / Issues`), the save chip,
-  and the search box with `⌘K`.
+  and the search box with `⌘K`; on lists and boards also the side panel's toggle at the right end (a square icon
+  button, tooltip "Side panel ]").
 - **Buttons**: outlined by default (like Punchcard's `Today`). One filled button per screen at most (white in Dark,
   near-black in Light), for the main action (like `+ Track time`). Icon buttons are square.
 - **Switches between options** (List / Board): joined buttons where the chosen one has a light border and a
@@ -171,6 +172,16 @@ Two groups follow their box, not the text, so they stay when the text gets small
   last", "before", "is overdue"), then a narrow number box and a unit menu ("7" "days"), or a day that opens a
   calendar, then ×. A number saves once typing pauses (or the box is left); one that can't be saved (empty, 0, 1.5)
   gets the red ring, keeps the line as it was, and goes back to the saved number when the box is left.
+- **Side panel** (`src/features/issues/SidePanel.tsx`): on team issues, views, projects and My issues, 20rem wide on
+  the right of the list, with a border on its left and the page background. It sits beside the list from 1280 px
+  with the sidebar open and from 1024 px without it; below that it is a sheet from the right (`w-80`, at most 85% of
+  the screen) that opens only when asked for. A small grey "Side panel" and × at the top, then the page's details
+  (`PageDetails.tsx`: name and emoji, then grey names and plain values in two columns, read only, team names as
+  links), then quick filters (`QuickFilters.tsx`): a grey label, one quiet line ("Just for you…, Shows N issues"),
+  the tabs as a compact Segmented, and rows 36 px tall: icon, name (cut with an ellipsis, the full name on hover) and
+  the count on the right in quiet grey. A picked row has the `accent` background and a check; a picked row at 0 is
+  quiet grey. Rows are one Tab stop: ↑ ↓ Home End move, Space or Enter picks. Beside the list the panel never uses a
+  dialog, menu or listbox role (they would turn off the app's keys).
 - **Empty states**: an icon, a short title, one sentence in plain words about what goes here, and one button
   (`src/components/EmptyState.tsx`).
 

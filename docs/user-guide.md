@@ -372,6 +372,27 @@ On your team's page, the tabs show:
 - **All issues**: everything, including finished work.
 - **Archived**: issues put away (see below), with a search box.
 
+### The side panel
+
+Your team's issues, views, projects and My issues have a **side panel** on the right. Show or hide it with the
+button at the top right, or press `]`. It stays the way you left it, and so does its tab.
+
+At the top it says what the page is: a team's key and members, a view's team and who made it, a project's status,
+lead, target date, teams and progress. To change those, use the page's own title and buttons.
+
+Below that are **quick filters**, in four tabs: **Assignees**, **Labels**, **Priority** and **Projects** (a page
+leaves out what it already is, like Assignees on My issues). Each row shows a person, label, priority or project and
+how many issues it would show. Click a row to show only those issues, and click it again to let go. Pick several rows
+in one tab to see any of them ("Ana or Ben"); picks in different tabs must all match ("Ana, and Bug"). The numbers
+follow what you pick in the other tabs. A tab with many rows has a box to find one.
+
+Quick filters are just for you and go away when you leave the page, even on a view: your teammates' view stays as it
+is. While some are picked, a line under the toolbar says "Quick filter: …"; click it to see them in the panel, or its
+**×** to clear them. On a view, **Add to view** puts them into the view for everyone (with **Undo** for a moment). On
+other pages, **Save as view** keeps them in the new view together with your filters.
+
+On a smaller screen the side panel opens over the page from the right instead, when you ask for it.
+
 ## Archive
 
 Finished issues leave the lists by themselves some time after they're done (six months unless your team picks
@@ -442,7 +463,8 @@ With filters set, the line under the toolbar reads them as a sentence. Click it 
 them all. On a phone, the filters open from the bottom of the screen and say how many issues they show.
 
 Filters you set on a team's page or on My issues are just for you, and go away when you leave the page. To keep
-them, press **Save as view**.
+them, press **Save as view**. Quick filters in the side panel (see Lists and boards) come on top of these filters:
+an issue has to match both.
 
 ## Views
 
@@ -643,6 +665,7 @@ Searching anywhere (menus, @mentions, ⌘K, the archive) doesn't need Polish let
 - `Space`: pick it up to move it with the arrows; `Space` again puts it down. The same works for a favourite in the
   sidebar.
 - `Esc`: let go of picked issues, or go back from an issue.
+- `]`: show or hide the side panel on a list or board.
 - `←` / `→` on a switch like **List** / **Board** or **Appearance**: choose the option next to it.
 
 While writing a description or a comment:
@@ -658,7 +681,9 @@ While writing a description or a comment:
 
 Sprawniej works in your phone's browser too. The menu button at the top left opens the sidebar; in Settings, the
 same button opens the settings menu. Press and hold an issue to drag it, or a favourite in the sidebar to change their
-order. In the lists of projects and views, the star always shows on a phone. Tap a checklist box to tick it (the
+order. In the lists of projects and views, the star always shows on a phone. The side panel
+button at the top right opens the side panel from the right; tap rows to pick quick filters, and it says how many
+issues they show. It closes when you go to another page. Tap a checklist box to tick it (the
 keyboard stays away). A wide table scrolls sideways.
 
 ## Pictures
