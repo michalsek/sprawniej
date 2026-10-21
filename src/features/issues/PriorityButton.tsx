@@ -79,7 +79,7 @@ export function RowPicker<V>({ issue, items, valueOf, patch, placeholder, name, 
         aria-keyshortcuts={shortcut}
         className={cn(
           // a bigger place to tap on touch screens, without making the row any taller
-          'relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring after:absolute after:-inset-1 after:hidden pointer-coarse:after:block',
+          'relative inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring after:absolute after:-inset-1.25 after:hidden pointer-coarse:after:block',
           className,
         )}
       >

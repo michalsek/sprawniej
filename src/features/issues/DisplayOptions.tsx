@@ -114,7 +114,7 @@ export function DisplayOptions({ display, onChange, onReset, tab, locked = [] }:
             }}
           >
             {offered.map((k) => (
-              <ToggleGroupItem key={k} value={k} title={PROPERTY_HINTS[k]} className="font-normal">
+              <ToggleGroupItem key={k} value={k} title={PROPERTY_HINTS[k]} className="font-normal data-[state=off]:text-muted-foreground">
                 {PROPERTY_NAMES[k]}
               </ToggleGroupItem>
             ))}

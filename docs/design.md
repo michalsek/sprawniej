@@ -162,10 +162,13 @@ Two groups follow their box, not the text, so they stay when the text gets small
 - **Tabs that are pages** (Active / Backlog / All issues): separate outlined buttons (`src/components/Tabs.tsx`).
 - **Issue row** (44 px): priority, ID, status, title (with `code` in backticks), progress (sub-issue and checklist
   counters), then on the right the project and labels, estimate, due date, assignee and the day it was made. Display ›
-  Show on issues switches each of them (`propertiesOf` in `src/data/displays.ts`); status and title always show. The
-  title keeps at least 8rem (12rem from `sm`); the project and label chips give way first: chips that don't fit drop
-  out whole from the end, and a lone long one ends in "…". On phones a row is priority, status, title, progress, due
-  date and assignee. The project is a square-cornered chip like the due date (its emoji and name), never a pill.
+  Show on issues switches each of them (`propertiesOf` in `src/data/displays.ts`); status and title always show. What
+  fits goes by the row's own width (a container query on the row, so an open sidebar or a narrow window count alike),
+  never the window's: the project and label chips only get the room the title leaves (those that don't fit drop out
+  whole from the end, a lone long one ends in "…"), then the day it was made (from 31rem), the ID (36rem) and the
+  estimate and chips (40rem) give way, so the title keeps 8rem from a 26rem row and 12rem from 44rem. A phone's row is
+  priority, status, title, progress, due date and assignee. The project is a square-cornered chip like the due date
+  (its emoji and name), never a pill.
 - **Board card**: ID · created day and assignee (the line is left out when all three are off), then status and title,
   then priority, due date, estimate, progress, project and labels (left out when empty).
 - **Project card**: emoji, name, progress ring and lead; the start of its description in quiet grey (two lines at

@@ -49,6 +49,8 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
   const picked = useSelection((s) => s.ids.includes(issue.id))
   const carried = useSelection((s) => s.draggingMany) && picked && !lifted
   const closed = issue.status === 'done' || issue.status === 'canceled' || issue.status === 'duplicate'
+  // what fits is decided by the row's own width (with the sidebar open, or on a phone, it's narrow): first the chips
+  // give way, then the day it was made, the ID and the estimate, so the title keeps 8rem (12rem on wide rows)
   const shownLabels = show.labels ? issue.labels.filter((id) => labels[id]) : []
   const chips = (show.project && issue.project) || shownLabels.length > 0
   return (
@@ -64,7 +66,7 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
       // a click on the priority button (or another control in the row) only works that control
       onClick={(e) => (e.target as HTMLElement).closest(ROW_CONTROL) && e.preventDefault()}
       className={cn(
-        'group flex h-11 items-center gap-2 rounded-md px-2 text-ui sm:gap-3 sm:px-4 hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
+        'group @container flex h-11 items-center gap-2 rounded-md px-2 text-ui sm:gap-3 sm:px-4 hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
         (ghost || carried) && 'opacity-30',
         picked && !lifted && 'bg-accent ring-1 ring-inset ring-ring',
         lifted && 'cursor-grabbing border bg-popover shadow-lg',
@@ -72,10 +74,10 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
       style={{ paddingLeft: `${1 + depth * 2}rem`, ...style }}
     >
       {show.priority && (lifted ? <PriorityIcon priority={issue.priority} /> : <PriorityButton issue={issue} look="row" />)}
-      {show.id && <span className="hidden min-w-[5.75em] shrink-0 whitespace-nowrap text-ref text-muted-foreground tabular-nums sm:inline">{issueRef(issue)}</span>}
+      {show.id && <span className="hidden min-w-[5.75em] shrink-0 whitespace-nowrap text-ref text-muted-foreground tabular-nums @min-[36rem]:inline">{issueRef(issue)}</span>}
       <IssueStatusIcon issue={issue} />
-      {/* the title keeps a width of its own; the chips after it give way first */}
-      <span className={cn('min-w-32 shrink truncate text-row-title sm:min-w-48', closed && 'text-muted-foreground')}>
+      {/* the title keeps a width of its own; the chips after it only get the room that's left */}
+      <span className={cn('min-w-0 truncate text-row-title @min-[26rem]:min-w-32 @min-[44rem]:min-w-48', closed && 'text-muted-foreground')}>
         <TitleText title={issue.title} />
       </span>
       {show.progress && (
@@ -84,25 +86,25 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
           <ChecklistCount description={issue.description} className="shrink-0" />
         </>
       )}
-      <span className="flex-1" />
       {chips && (
-        // chips that don't fit drop out whole from the end (they wrap onto a line that isn't shown); one alone ends in "…"
+        // the room after the title: chips that don't fit drop out whole from the end (they wrap onto a line that isn't
+        // shown), one alone ends in "…", and with almost no room there are none
         <span
-          className="hidden h-6 min-w-0 flex-[0_999_auto] flex-wrap justify-end gap-2 overflow-hidden md:flex"
+          className="@container hidden h-6 min-w-0 flex-1 basis-0 flex-wrap justify-end gap-2 overflow-hidden @min-[40rem]:flex"
           title={shownLabels.length ? shownLabels.map((id) => labels[id].name).join(', ') : undefined}
         >
-          {show.project && <ProjectChip id={issue.project} className="max-w-40 shrink" />}
+          {show.project && <ProjectChip id={issue.project} className="max-w-40 shrink @max-[3rem]:hidden" />}
           {shownLabels.map((id) => (
-            <LabelChip key={id} label={labels[id]} className="min-w-0 max-w-32 shrink" />
+            <LabelChip key={id} label={labels[id]} className="min-w-0 max-w-32 shrink @max-[3rem]:hidden" />
           ))}
         </span>
       )}
-      <span className="flex shrink-0 items-center gap-2">
-        {show.estimate && issue.estimate != null && <EstimateChip points={issue.estimate} className="hidden md:inline-flex" />}
+      <span className="ml-auto flex shrink-0 items-center gap-2">
+        {show.estimate && issue.estimate != null && <EstimateChip points={issue.estimate} className="hidden @min-[40rem]:inline-flex" />}
         {show.dueDate && issue.dueDate && <DueChip day={issue.dueDate} closed={closed} />}
         {show.assignee && <PersonAvatar person={assignee} login={issue.assignee} />}
         {show.created && (
-          <span className="hidden w-14 text-right text-sm text-muted-foreground sm:inline" title={`Created ${shortDate(issue.createdAt)}`}>
+          <span className="hidden w-14 text-right text-sm text-muted-foreground @min-[31rem]:inline" title={`Created ${shortDate(issue.createdAt)}`}>
             {shortDate(issue.createdAt)}
           </span>
         )}
