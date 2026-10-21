@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.14.2'
+export const APP_VERSION = '2.15.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,16 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.15.0',
+    date: '2026-10-21',
+    title: 'Filter by dates',
+    notes: [
+      'Filter issues by when they were created, updated or completed, or by their due date: "in the last 7 days", "more than 2 weeks ago", "in the next 3 days", "is overdue", before or after a day',
+      'Lists with a date filter keep up on their own as the minutes and days go by',
+      'Views from Linear now come over with their "is not", "or" groups, "me" and date filters: run Import from Linear again to bring over views that stayed behind',
+    ],
+  },
   {
     version: '2.14.2',
     date: '2026-10-21',

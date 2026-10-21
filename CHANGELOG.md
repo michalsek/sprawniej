@@ -4,6 +4,13 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.15.0: Filter by dates
+*2026-10-21*
+
+- Filter issues by when they were created, updated or completed, or by their due date: "in the last 7 days", "more than 2 weeks ago", "in the next 3 days", "is overdue", before or after a day
+- Lists with a date filter keep up on their own as the minutes and days go by
+- Views from Linear now come over with their "is not", "or" groups, "me" and date filters: run Import from Linear again to bring over views that stayed behind
+
 ## 2.14.2: Small fixes
 *2026-10-21*
 
