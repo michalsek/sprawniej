@@ -17,8 +17,8 @@
  *           { labels: { and: [{ or: [{ name: { eq: 'AI' } }, { parent: { name: { eq: 'AI' } } }] }] } },
  *           { state: { type: { nin: ['completed', 'canceled'] } } }, { completedAt: { gt: '-P1D' } }] }
  */
-import { dateReady, dayPlus, isDateCondition } from '@/data/dateFilters'
-import { toDay } from '@/lib/days'
+import { dateReady, isDateCondition, mostOf } from '@/data/dateFilters'
+import { dayPlus, isDay, toDay } from '@/lib/days'
 import { MAX_DEPTH, isCondition, isGroup, normalise, storedFilters, valueKey } from '@/data/filterTree'
 import { ME, type DateCondition, type DateField, type DateUnit, type FilterCondition, type FilterField, type FilterGroup, type FilterNode, type FilterValue, type Filters } from '@/model/schema'
 import { CATEGORIES, type IssueCategory, type StatusGroup } from '@/model/status'
@@ -150,18 +150,16 @@ export function duration(v: unknown): Rel | null {
 }
 
 /**
- * A day Linear names. A plain day ("2026-10-01") is that day. A time is the day it falls on here (in the time zone of
- * whoever imports): an import in Warsaw reads 2026-09-30T22:00:00Z as the start of Oct 1. `start`: it's the very
- * start of that day, so "before" and "after" say it exactly. A due date is a day wherever it is: its day is the one
- * written, and a time on it other than midnight makes it near enough, not exact.
+ * A day Linear names. A plain day ("2026-10-01") is that day, as written. A time is the day it falls on here (in the
+ * time zone of whoever imports), for due dates too: an import in Warsaw reads 2026-09-30T22:00:00Z as the start of
+ * Oct 1. `start`: it's the very start of that day, so "before" and "after" say it exactly.
  */
-export function dayIn(v: unknown, due: boolean): { day: string; start: boolean } | null {
+function dayIn(v: unknown): { day: string; start: boolean } | null {
   if (typeof v !== 'string') return null
   const text = v.trim()
   const m = /^(\d{4}-\d{2}-\d{2})(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(text)
-  if (!m) return null
+  if (!m || !isDay(m[1])) return null
   if (!m[2]) return { day: m[1], start: true }
-  if (due) return { day: m[1], start: /^T00:00(:00(\.0+)?)?/.test(m[2]) }
   const t = new Date(text)
   if (Number.isNaN(t.getTime())) return null
   return { day: toDay(t), start: t.getHours() === 0 && t.getMinutes() === 0 && t.getSeconds() === 0 && t.getMilliseconds() === 0 }
@@ -366,10 +364,23 @@ export function mapViewFilter(filterData: unknown, ctx: FilterContext, options: 
         // a due date is a day: hours only as whole days
         const days = rel.unit === 'hours' ? (rel.amount % 24 ? null : rel.amount / 24) : rel.unit === 'days' ? rel.amount : rel.unit === 'weeks' ? rel.amount * 7 : null
         if (later) {
-          // later than a week ago also takes in what's due from today on, which a line here can't say
-          if (rel.sign >= 0) return 'lost'
-          lose()
-          return c('within', rel.unit === 'hours' && days ? { amount: days, unit: 'days' } : span)
+          // later than a week ago: due in the last week, or from today on (the next ten years, as far as a line goes)
+          const ahead = c('next', { amount: mostOf('days'), unit: 'days' })
+          // later than in a week: no line starts a week from now
+          if (rel.sign > 0) return 'lost'
+          // from today on; later than today starts tomorrow, which "in the next" (today too) only comes near
+          if (rel.sign === 0) {
+            if (k === 'gt') lose()
+            return ahead
+          }
+          if (days === null) {
+            // months: "in the last month" takes in its first day, as "from a month ago" does, but "later than" doesn't
+            if (k === 'gt') lose()
+            return anyOf(c('within', span), ahead)
+          }
+          // later than 3 days ago is from 2 days ago on
+          const back = k === 'gt' ? days - 1 : days
+          return back < 1 ? ahead : anyOf(c('within', { amount: back, unit: 'days' }), ahead)
         }
         // "earlier than" is "up to the day before"; "up to" (lte) is that day too
         const upTo = k === 'lte'
@@ -400,7 +411,7 @@ export function mapViewFilter(filterData: unknown, ctx: FilterContext, options: 
         }
         return days - 1 < 1 ? c('overdue') : c('ago', { amount: days - 1, unit: 'days' })
       }
-      const at = dayIn(v, due)
+      const at = dayIn(v)
       if (!at) return 'lost'
       if (!at.start) lose()
       const day = at.day

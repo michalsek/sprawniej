@@ -8,8 +8,17 @@ export function toDay(d: Date): string {
 /** the start of a plain day, here */
 export const fromDay = (day: string) => new Date(`${day}T00:00`)
 
-/** a plain day, "2026-10-31" */
+/** the shape of a plain day, "2026-10-31" (`isDay` also checks the calendar has it) */
 export const DAY = /^\d{4}-\d{2}-\d{2}$/
+
+/** a real plain day: "2026-02-28", not "2026-02-30" or "2026-13-45" */
+export const isDay = (v: unknown): v is string => typeof v === 'string' && DAY.test(v) && toDay(fromDay(v)) === v
+
+/** a day `n` days later (earlier when `n` is below 0), by the calendar: dayPlus('2026-10-31', 1) is '2026-11-01' */
+export function dayPlus(day: string, n: number): string {
+  const d = fromDay(day)
+  return toDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n))
+}
 
 /**
  * `d` moved by whole months, keeping its time; a day the month doesn't have becomes its last one (Mar 31 one month

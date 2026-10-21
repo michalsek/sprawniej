@@ -948,8 +948,30 @@ describe('view filters as a tree', () => {
     // a time is never in the future: earlier than tomorrow is any time (finished: finished at all)
     expect(map({ createdAt: { lt: 'P1D' } })).toMatchObject({ tree: and(), exact: true, nothing: false })
     expect(map({ completedAt: { lt: 'P1D' } }).tree).toEqual(and(date('completed', 'set')))
-    // due later than a day ago takes in the future too: kept, not exact
-    expect(map({ dueDate: { gt: '-P1D' } })).toMatchObject({ tree: and(date('due', 'within', { amount: 1, unit: 'days' })), exact: false })
+  })
+
+  test('due later than some days ago keeps the future too', () => {
+    const ahead = date('due', 'next', { amount: 3650, unit: 'days' })
+    const back = (amount: number, unit: DateCondition['unit'] = 'days') => or(date('due', 'within', { amount, unit }), ahead)
+    // from 3 days ago on; later than 3 days ago is from 2 days ago on
+    expect(map({ dueDate: { gte: '-P3D' } })).toMatchObject({ tree: back(3), exact: true })
+    expect(map({ dueDate: { gt: '-P3D' } })).toMatchObject({ tree: back(2), exact: true })
+    // later than yesterday is from today on
+    expect(map({ dueDate: { gt: '-P1D' } })).toMatchObject({ tree: and(ahead), exact: true })
+    expect(map({ dueDate: { gte: '-P1W' } })).toMatchObject({ tree: back(7), exact: true })
+    expect(map({ dueDate: { gte: '-PT48H' } })).toMatchObject({ tree: back(2), exact: true })
+    expect(map({ dueDate: { gte: '-P1M' } })).toMatchObject({ tree: back(1, 'months'), exact: true })
+    expect(map({ dueDate: { gt: '-P1M' } })).toMatchObject({ tree: back(1, 'months'), exact: false })
+    // from today on; later than today starts tomorrow, which comes over near enough
+    expect(map({ dueDate: { gte: 'P0D' } })).toMatchObject({ tree: and(ahead), exact: true })
+    expect(map({ dueDate: { gt: 'P0D' } })).toMatchObject({ tree: and(ahead), exact: false })
+    // later than a week from now: no line says it
+    expect(map({ dueDate: { gt: 'P1W' } })).toMatchObject({ exact: false, nothing: true })
+    // with an end too: between 3 days ago and a week on
+    expect(map({ dueDate: { gte: '-P3D', lte: 'P1W' } })).toMatchObject({
+      tree: and(back(3), or(date('due', 'overdue'), date('due', 'next', { amount: 1, unit: 'weeks' }))),
+      exact: true,
+    })
   })
 
   test('due dates from now: “earlier than” and “up to” are a day apart', () => {
@@ -976,7 +998,12 @@ describe('view filters as a tree', () => {
     expect(map({ dueDate: { lt: '-PT12H' } })).toMatchObject({ exact: false, nothing: true })
   })
 
-  test('days: a due date is the day written; a time is the day it falls on here', () => {
+  test('days: a plain day is the day written; a time is the day it falls on here, for due dates too', () => {
+    // a due date sent as a time: the day it falls on here
+    expect(map({ dueDate: { lt: new Date(2026, 9, 1).toISOString() } })).toMatchObject({ tree: and(date('due', 'before', { date: '2026-10-01' })), exact: true })
+    expect(map({ dueDate: { gt: new Date(2026, 9, 1, 15).toISOString() } })).toMatchObject({ tree: and(date('due', 'after', { date: '2026-10-01' })), exact: false })
+    // not a real day
+    expect(map({ dueDate: { lt: '2026-02-30' } })).toMatchObject({ exact: false, nothing: true })
     // a due date is a day: later than Oct 1 starts on Oct 2
     expect(map({ dueDate: { gt: '2026-10-01' } }).tree).toEqual(and(date('due', 'after', { date: '2026-10-01' })))
     expect(map({ dueDate: { gte: '2026-10-01' } }).tree).toEqual(and(date('due', 'after', { date: '2026-09-30' })))

@@ -1,5 +1,5 @@
 import type { Ticks } from '@/components/MarkdownView'
-import { fromDay, toDay } from '@/lib/days'
+import { DAY, dayPlus, fromDay, toDay } from '@/lib/days'
 
 const MONTH = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric' })
 const MONTH_YEAR = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -7,12 +7,12 @@ const MONTH_YEAR = new Intl.DateTimeFormat('en', { month: 'short', day: 'numeric
 /** "Oct 2", or "Oct 2, 2025" when it's not this year */
 export function shortDate(iso: string, now = new Date()): string {
   // a plain date (a project's target) is a day here, not midnight in London
-  const d = new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T00:00` : iso)
+  const d = DAY.test(iso) ? fromDay(iso) : new Date(iso)
   return d.getFullYear() === now.getFullYear() ? MONTH.format(d) : MONTH_YEAR.format(d)
 }
 
 /** the plain day `n` days after `from` (today) */
-export const addDays = (n: number, from = new Date()) => toDay(new Date(from.getFullYear(), from.getMonth(), from.getDate() + n))
+export const addDays = (n: number, from = new Date()) => dayPlus(toDay(from), n)
 
 /** "Today", "Tomorrow", "Yesterday", else "Oct 31" */
 export function dayName(day: string, today = toDay(new Date())): string {

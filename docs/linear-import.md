@@ -114,14 +114,15 @@ names a day. Only lines the builder can show come over (see docs/data-format.md,
   earlier than now is "overdue", up to `P7D` "overdue, or in the next 7 days", earlier than `P7D` "overdue, or in the
   next 6 days"; earlier than `-P3D` is "more than 3 days ago", up to `-P3D` "more than 2 days ago". Where no line says
   it to the day (up to today: "overdue, or in the next 1 day" takes in tomorrow; earlier than `P1M`), it comes over
-  near enough and not exact. Hours count only as whole days.
-- A day becomes "before" or "after". A due date is the day written ("later than Oct 1" starts on Oct 2). A time is
-  the day it falls on in your time zone when you import: 2026-09-30T22:00:00Z imported in Warsaw is the start of
+  near enough and not exact. Hours count only as whole days. Later than `-P3D` (due from 2 days ago on, the future
+  too) is "in the last 2 days, or in the next 3650 days"; later than now is "in the next 3650 days" (ten years: as
+  far as a line goes).
+- A day becomes "before" or "after". A plain day is the day written (for a due date, "later than Oct 1" starts on
+  Oct 2). A time, for a due date too, is the day it falls on in your time zone when you import: 2026-09-30T22:00:00Z imported in Warsaw is the start of
   Oct 1, so "from then on" is "after Sep 30", exactly. A time in the middle of a day takes in that whole day, and one
   moment ("on" a time) becomes that whole day; both are near enough, not exact.
 - A duration mixing months and days, minutes, more than ten years, a time in the future for created, updated or
-  completed, and a due date later than a day in the past (which takes in the future too, kept as "in the last" but
-  not exact) don't fit.
+  completed, and a due date later than a day in the future don't fit.
 
 **What can't come over** is left out: cycles, estimates, text search, who made it, `canceledAt` and other dates,
 "has a label that isn't Bug", groups deeper than three levels, and a person set to "No one" ("assigned to Bob" can't

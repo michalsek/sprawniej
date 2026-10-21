@@ -12,8 +12,8 @@
  * where a day should be) was written by a newer version: it's left out of matching and kept as it is. A line that
  * only misses its amount, unit or day is one being filled in.
  */
-import { DAY, fromDay, plusMonths, toDay } from '@/lib/days'
-import { DATE_UNITS, isDateField, type DateCondition, type DateField, type DateOp, type DateUnit, type Issue } from '@/model/schema'
+import { dayPlus, fromDay, isDay, plusMonths, toDay } from '@/lib/days'
+import { DATE_OPS, DATE_UNITS, isDateField, type DateCondition, type DateField, type DateOp, type DateUnit, type Issue } from '@/model/schema'
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
@@ -21,8 +21,12 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 const RELATIVE: readonly DateOp[] = ['within', 'ago', 'next']
 export const isRelative = (op: DateOp) => RELATIVE.includes(op)
 
+const isDateOp = (v: unknown): v is DateOp => (DATE_OPS as readonly unknown[]).includes(v)
+const isDateUnit = (v: unknown): v is DateUnit => (DATE_UNITS as readonly unknown[]).includes(v)
+
 /** the most of each unit an amount can be: ten years */
 const MOST: Record<DateUnit, number> = { hours: 8760, days: 3650, weeks: 520, months: 120 }
+export const mostOf = (unit: DateUnit) => MOST[unit]
 
 /** what each field offers, in the order the menu shows them (created and updated are always set) */
 export function opsFor(field: DateField): DateOp[] {
@@ -42,17 +46,15 @@ const KEYS = ['field', 'op', 'amount', 'unit', 'date']
 /** a date condition this version can show (see above); a line still being filled in counts */
 export function isDateCondition(n: unknown): n is DateCondition {
   if (!isObject(n) || !isDateField(n.field)) return false
-  const field = n.field
-  const op = n.op as DateOp
-  if (!opsFor(field).includes(op) || Object.keys(n).some((k) => !KEYS.includes(k) && n[k] !== undefined)) return false
-  const { amount, unit, date } = n
+  const { field, op, amount, unit, date } = n
+  if (!isDateOp(op) || !opsFor(field).includes(op) || Object.keys(n).some((k) => !KEYS.includes(k) && n[k] !== undefined)) return false
   if (isRelative(op)) {
     if (date !== undefined) return false
-    if (unit !== undefined && !unitsFor(field).includes(unit as DateUnit)) return false
-    return amount === undefined || isAmount(amount, unit as DateUnit | undefined)
+    if (unit === undefined) return amount === undefined || isAmount(amount)
+    return isDateUnit(unit) && unitsFor(field).includes(unit) && (amount === undefined || isAmount(amount, unit))
   }
   if (amount !== undefined || unit !== undefined) return false
-  if (op === 'before' || op === 'after') return date === undefined || (typeof date === 'string' && DAY.test(date))
+  if (op === 'before' || op === 'after') return date === undefined || isDay(date)
   return date === undefined
 }
 
@@ -101,9 +103,6 @@ function shift(now: Date, amount: number, unit: DateUnit, sign: 1 | -1): Date {
 function shiftDay(day: string, amount: number, unit: DateUnit, sign: 1 | -1): string {
   return unit === 'hours' ? toDay(shift(fromDay(day), Math.ceil(amount / 24), 'days', sign)) : toDay(shift(fromDay(day), amount, unit, sign))
 }
-
-/** a day `n` days later (earlier when `n` is below 0): dayPlus('2026-10-31', 1) is '2026-11-01' */
-export const dayPlus = (day: string, n: number) => toDay(shift(fromDay(day), Math.abs(n), 'days', n < 0 ? -1 : 1))
 
 type Test = (issue: Issue) => boolean
 

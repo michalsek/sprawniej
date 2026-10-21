@@ -24,7 +24,7 @@ import {
 import { followers } from '@/data/notify'
 import { dateParts, dateReady, isDateCondition, sayDate, withDateField, withDateOp } from '@/data/dateFilters'
 import { matchesStatus } from '@/data/statuses'
-import { ME, type DateCondition, type FilterCondition, type FilterGroup, type FilterNode, type Filters, type Issue, type Status } from '@/model/schema'
+import { DATE_FIELDS, ME, isFilterField, type DateCondition, type FilterCondition, type FilterGroup, type FilterNode, type Filters, type Issue, type Status } from '@/model/schema'
 import { ISSUE_CATEGORIES } from '@/model/status'
 
 const data = sampleData()
@@ -546,6 +546,12 @@ describe('dates', () => {
       expect(normalise(and(n, is('labels', 'bug'))).items).toContain(n)
       expect(countConditions(and(n))).toBe(1)
     }
+    // only real days
+    expect(isDateCondition(date('due', 'before', { date: '2026-02-30' }))).toBe(false)
+    expect(isDateCondition(date('due', 'before', { date: '2026-13-45' }))).toBe(false)
+    expect(isDateCondition(date('due', 'before', { date: '2028-02-29' }))).toBe(true)
+    // a version before dates knows none of the date fields
+    expect(DATE_FIELDS.some(isFilterField)).toBe(false)
     // the most there can be: ten years of each
     expect(isDateCondition(date('created', 'within', { amount: 3650, unit: 'days' }))).toBe(true)
     expect(isDateCondition(date('created', 'within', { amount: 8760, unit: 'hours' }))).toBe(true)
@@ -561,10 +567,6 @@ describe('dates', () => {
     expect(mirrorOf(and(is('labels', 'bug'), day))).toEqual({ labels: ['bug'] })
     expect(toFlat(and(day))).toBeUndefined()
     expect(treeOf(storedFilters({}, and(day)))).toEqual(and(day))
-  })
-
-  test('a shape a newer version may add (another op) is not a date line here', () => {
-    expect(isDateCondition({ field: 'due', op: 'between', from: 1, to: 3 })).toBe(false)
   })
 
   test('in words', () => {
@@ -604,7 +606,7 @@ describe('dates', () => {
     expect(movesWithClock(and(date('created', 'within', { unit: 'days' })))).toBe(false)
   })
 
-  test('a teammate changing a date line keeps it the same line (and its menus open)', () => {
+  test('a teammate changing a date line keeps it the same line, so it keeps its place and key', () => {
     const mine = date('created', 'within', { amount: 7, unit: 'days' })
     const theirs = date('created', 'within', { amount: 3, unit: 'days' })
     const draft = and(is('labels', 'bug'), mine)

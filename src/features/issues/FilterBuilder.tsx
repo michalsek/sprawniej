@@ -7,11 +7,11 @@
  * what's saved is the tidy form (`normalise`). Closing it brings back what's saved. A teammate's change is laid over
  * the draft (`alignDraft`): it shows at once, while your unfinished lines and open menus stay.
  */
-import { createContext, useContext, useRef, useState, type ReactNode, type RefObject } from 'react'
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Brackets, Check, ChevronDown, Plus, X } from 'lucide-react'
 import { Picker } from '@/components/Picker'
 import { MAX_DEPTH, NEWER_FILTER, alignDraft, isCondition, isGroup, normalise, storedFilters, treeOf, withField } from '@/data/filterTree'
-import { OP_CHOICES, OP_WORDS, isAmount, isDateCondition, isRelative, newDateCondition, opsFor, unitWord, unitsFor, withDateField, withDateOp } from '@/data/dateFilters'
+import { OP_CHOICES, OP_WORDS, isAmount, isDateCondition, isRelative, mostOf, newDateCondition, opsFor, unitWord, unitsFor, withDateField, withDateOp } from '@/data/dateFilters'
 import { useData } from '@/data/store'
 import { equal } from '@/lib/equal'
 import { useNarrow } from '@/lib/useNarrow'
@@ -457,7 +457,8 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
   const [dayOpen, setDayOpen] = useState(false)
   const next = useRef<(() => void) | null>(null)
   const unit = c.unit ?? 'days'
-  // what's typed in the amount: a half-typed one ("", "0") isn't saved, so it lives here until it's a number
+  // what's typed in the amount: a half-typed one ("", "0") is never saved (the line keeps its last amount), so it
+  // lives here until it's a number, and goes back to the saved one when the box loses the focus
   const [typed, setTyped] = useState(c.amount === undefined ? '' : String(c.amount))
   const [seen, setSeen] = useState(c.amount)
   if (seen !== c.amount) {
@@ -465,6 +466,29 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
     if (c.amount !== undefined) setTyped(String(c.amount))
   }
   const typedOk = isAmount(Number(typed), unit) && typed.trim() !== ''
+  // a number being typed saves once typing stops for a moment (so "14" is one change, not "1" and then "14"), and at
+  // once when the box loses the focus or the builder closes
+  const waiting = useRef<{ amount: number; timer: ReturnType<typeof setTimeout> } | null>(null)
+  const saveAmount = useRef<(amount: number) => void>(() => {})
+  useLayoutEffect(() => {
+    saveAmount.current = (amount) => set({ ...c, amount })
+  })
+  const flush = (w = waiting.current) => {
+    if (!w) return
+    clearTimeout(w.timer)
+    waiting.current = null
+    saveAmount.current(w.amount)
+  }
+  useEffect(
+    () => () => {
+      const w = waiting.current
+      if (!w) return
+      clearTimeout(w.timer)
+      waiting.current = null
+      saveAmount.current(w.amount)
+    },
+    [],
+  )
   const pickOp = (op: DateOp) => {
     if (op === c.op) return
     set(withDateOp(c, op))
@@ -514,13 +538,24 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
             type="number"
             inputMode="numeric"
             min={1}
+            max={mostOf(unit)}
             step={1}
             value={typed}
             onChange={(e) => {
               const text = e.target.value
               setTyped(text)
+              if (waiting.current) clearTimeout(waiting.current.timer)
+              waiting.current = null
               const n = Number(text)
-              set({ ...c, amount: text.trim() !== '' && isAmount(n, unit) ? n : undefined })
+              if (text.trim() === '' || !isAmount(n, unit) || n === c.amount) return
+              const w = { amount: n, timer: setTimeout(() => flush(w), 500) }
+              waiting.current = w
+            }}
+            onBlur={() => {
+              const w = waiting.current
+              flush()
+              const amount = w?.amount ?? c.amount
+              setTyped(amount === undefined ? '' : String(amount))
             }}
             aria-label={`How many ${unit}`}
             aria-invalid={!typedOk || undefined}
@@ -537,7 +572,7 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" loop className="w-40">
               {unitsFor(c.field).map((u) => (
-                <DropdownMenuItem key={u} role="menuitemradio" aria-checked={u === unit} onSelect={() => set({ ...c, unit: u, amount: isAmount(Number(typed), u) ? Number(typed) : undefined })}>
+                <DropdownMenuItem key={u} role="menuitemradio" aria-checked={u === unit} onSelect={() => set({ ...c, unit: u, amount: c.amount === undefined ? undefined : Math.min(c.amount, mostOf(u)) })}>
                   {unitWord(u, c.amount, c.op === 'ago')}
                   <Check className={cn('ml-auto', u !== unit && 'invisible')} />
                 </DropdownMenuItem>

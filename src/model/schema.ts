@@ -7,6 +7,7 @@
  */
 import { z } from 'zod'
 import { ISSUE_CATEGORIES, PRIORITY_IDS, PROJECT_CATEGORIES, STATUS_KINDS } from './status'
+import { DAY } from '@/lib/days'
 
 const iso = z.string() // ISO 8601 date-time
 const login = z.string() // a person's hidden key (Person.login)
@@ -282,7 +283,7 @@ export const dateConditionSchema = z
     amount: z.number().int().positive().optional(),
     unit: z.enum(DATE_UNITS).optional(),
     /** before, after: a day, "2026-10-31" */
-    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    date: z.string().regex(DAY).optional(),
   })
   .loose()
 export type DateCondition = z.infer<typeof dateConditionSchema>
