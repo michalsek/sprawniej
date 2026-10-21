@@ -24,6 +24,15 @@ export interface RingTip {
   focusProps: { onFocus: (e: FocusEvent<HTMLElement>) => void; onBlur: (e: FocusEvent<HTMLElement>) => void }
 }
 
+/**
+ * What a click on the ring does: `link` lets it go on to the link around the ring (a mouse click, a click without a
+ * press on the ring, or one that ended a drag, which the board has already stopped); `toggle` opens or closes the
+ * tooltip instead (a tap, or a pen).
+ */
+export function ringClick(pressedWith: string | undefined, defaultPrevented: boolean): 'link' | 'toggle' {
+  return !pressedWith || pressedWith === 'mouse' || defaultPrevented ? 'link' : 'toggle'
+}
+
 /** focus that came from the keyboard (or that the browser would ring anyway) */
 function focusVisible(el: Element): boolean {
   try {

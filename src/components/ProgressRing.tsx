@@ -1,14 +1,15 @@
 /**
  * How much is done, as a small ring: a grey track and an indigo arc that closes into a full circle when everything is
- * done (no fill, no check: those are the Done status's look). Its tooltip gives the numbers, a line each. It opens on
- * hover, on a tap (a tap on the ring doesn't open the link it sits in; a second tap or one elsewhere closes it), and on
- * keyboard focus of the link around it (`tip`, from useRingTip) or of the ring itself (`focusable`). Esc closes it.
- * Pressing and holding the ring still picks its card up, as anywhere on the card.
+ * done (no fill, no check: those are the Done status's look). With nothing to count the track is fainter, so "no
+ * issues" doesn't look like "none done yet". Its tooltip gives the numbers, a line each. It opens on hover, on a tap
+ * (a tap on the ring doesn't open the link it sits in; a second tap or one elsewhere closes it), and on keyboard focus
+ * of the link around it (`tip`, from useRingTip) or of the ring itself (`focusable`). Esc closes it. Pressing and
+ * holding the ring still picks its card up, as anywhere on the card.
  */
 import { useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
-import { arcShare, useRingTip, type RingTip } from './ringTip'
+import { arcShare, ringClick, useRingTip, type RingTip } from './ringTip'
 
 const R = 6.5
 const C = 2 * Math.PI * R
@@ -16,7 +17,7 @@ const C = 2 * Math.PI * R
 interface Props {
   done: number
   total: number
-  /** the tooltip, a line each; the first says it all (a screen reader hears it, see `focusable`) */
+  /** the tooltip, a line each; the first says it all, and is what a screen reader hears */
   lines: string[]
   /** the tooltip's state, when the link around the ring opens it on focus (useRingTip) */
   tip?: RingTip
@@ -35,7 +36,7 @@ export function ProgressRing({ done, total, lines, tip, still, focusable, classN
   const share = arcShare(done, total)
   const ring = (
     <svg viewBox="0 0 16 16" className="size-4" aria-hidden>
-      <circle cx="8" cy="8" r={R} fill="none" strokeWidth="2" className="stroke-progress-track" />
+      <circle cx="8" cy="8" r={R} fill="none" strokeWidth="2" className={cn('stroke-progress-track', total <= 0 && 'opacity-50')} />
       {share > 0 && (
         <circle
           cx="8"
@@ -51,8 +52,18 @@ export function ProgressRing({ done, total, lines, tip, still, focusable, classN
       )}
     </svg>
   )
-  const box = cn('-m-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full p-1', className)
-  if (still) return <span className={box}>{ring}</span>
+  // `relative` keeps the hidden sentence inside the ring, not against the page (an off-screen column widened it)
+  const box = cn('relative -m-1 inline-flex size-6 shrink-0 items-center justify-center rounded-full p-1', className)
+  // inside a link the sentence is part of what the link says; a ring of its own says it as its label
+  const said = !focusable && <span className="sr-only">{lines[0]}</span>
+  if (still) {
+    return (
+      <span className={box}>
+        {ring}
+        {said}
+      </span>
+    )
+  }
   return (
     <Tooltip open={open} onOpenChange={setOpen}>
       <TooltipTrigger
@@ -61,11 +72,10 @@ export function ProgressRing({ done, total, lines, tip, still, focusable, classN
         onClick={(e) => {
           const p = press.current
           press.current = null
-          // a mouse click goes on to the link; a tap opens or closes the tooltip instead (unless it ended a drag)
-          if (!p || p.type === 'mouse' || e.defaultPrevented) return
+          if (ringClick(p?.type, e.defaultPrevented) === 'link') return
           e.preventDefault()
           e.stopPropagation()
-          setOpen(!p.wasOpen)
+          setOpen(!p?.wasOpen)
         }}
       >
         <span
@@ -73,6 +83,7 @@ export function ProgressRing({ done, total, lines, tip, still, focusable, classN
           {...(focusable && { tabIndex: 0, role: 'img', 'aria-label': lines[0], ...focusProps })}
         >
           {ring}
+          {said}
         </span>
       </TooltipTrigger>
       <TooltipContent className="max-w-64 text-left">

@@ -56,8 +56,8 @@
   --dot-edge: rgb(0 0 0 / 0.12);
   /* behind pictures in descriptions and comments, so a see-through logo or diagram drawn in black still shows */
   --picture-backdrop: #ffffff;
-  /* the grey track of a progress ring, faint enough that the indigo done arc on it reads at 3:1 */
-  --progress-track: #e4e4e7;
+  /* the grey track of a progress ring: 1.5:1 on cards and rows (hovered too), so a ring with nothing done shows */
+  --progress-track: #c0c0c5;
 
   /* code in descriptions and comments */
   --code-comment: #6b6b73;
@@ -108,7 +108,7 @@
   --urgent-mark: #18181b;
   --dot-edge: transparent;
   --picture-backdrop: #e4e4e7;
-  --progress-track: #2a2a2e;
+  --progress-track: #48484f;
 
   --code-comment: #8b8b93;
   --code-keyword: #c4b5fd;

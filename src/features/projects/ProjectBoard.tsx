@@ -3,7 +3,7 @@
  * A hidden status that still has projects gets a column at the end, marked Hidden: cards can leave it, not join it.
  * Dragging a card to another column changes its status; dragging within a column changes its place.
  */
-import { useEffect, useId, useMemo, type CSSProperties, type HTMLAttributes, type Ref } from 'react'
+import { useId, useMemo, useState, type CSSProperties, type HTMLAttributes, type Ref } from 'react'
 import { Link } from 'wouter'
 import { CalendarDays, Plus } from 'lucide-react'
 import { DndContext, DragOverlay, useDroppable } from '@dnd-kit/core'
@@ -19,7 +19,7 @@ import { cn } from '@/lib/utils'
 import { shortText } from '@/lib/text'
 import { AUTO_SCROLL, columnDropId } from '@/features/board/columnsDrag'
 import { projectDragAnnouncements } from './dragText'
-import { issueCountText, progressWords } from './progressText'
+import { issueCountText } from './progressText'
 import { ProjectRing } from './ProjectRing'
 import { StatusDot } from './StatusDot'
 import { useProjectCounts } from './useProjectCounts'
@@ -36,20 +36,22 @@ interface CardProps {
 
 /**
  * A project on the board: emoji, name, progress ring and lead; the start of its description; its target date and how
- * many issues count. A screen reader hears the name, the date and the ring's first line, then the description as the
- * card's description (after how to drag it).
+ * many issues count. A screen reader hears the emoji and name, the ring's first line ("66% done: 8 of 12 issues"),
+ * the lead and the target date (the count is in the ring's line), then how to drag it and the description, as the
+ * card's description.
  */
 function ProjectCard({ project: p, dragRef, dragProps, style, ghost, lifted }: CardProps) {
   const lead = useData((s) => (p.lead ? s.people[p.lead] : undefined))
   const counts = useProjectCounts(p.id)
   const { total } = progressOf(counts)
   const tip = useRingTip()
-  const { setOpen } = tip
   // a card picked up (or its copy under the pointer) shows no tooltip, and doesn't bring it back when dropped
-  const still = ghost || lifted
-  useEffect(() => {
-    if (still) setOpen(false)
-  }, [still, setOpen])
+  const still = !!(ghost || lifted)
+  const [wasStill, setWasStill] = useState(still)
+  if (still !== wasStill) {
+    setWasStill(still)
+    if (still) tip.setOpen(false)
+  }
   const description = useMemo(() => shortText(p.description), [p.description])
   const descriptionId = useId()
   const describedBy = [dragProps?.['aria-describedby'], description && descriptionId].filter(Boolean).join(' ') || undefined
@@ -62,7 +64,7 @@ function ProjectCard({ project: p, dragRef, dragProps, style, ghost, lifted }: C
       href={`/project/${p.id}`}
       style={style}
       className={cn(
-        'flex flex-col gap-2 rounded-lg border bg-card p-3 text-ui shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
+        'relative flex flex-col gap-2 rounded-lg border bg-card p-3 text-ui shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
         ghost && 'opacity-30',
         lifted && 'cursor-grabbing rotate-1 shadow-lg',
       )}
@@ -74,7 +76,6 @@ function ProjectCard({ project: p, dragRef, dragProps, style, ghost, lifted }: C
           <ProjectRing counts={counts} tip={tip} still={still} />
           {p.lead && <PersonAvatar person={lead} login={p.lead} />}
         </span>
-        <span className="sr-only">{progressWords(counts)[0]}</span>
       </div>
       {description && (
         <p id={descriptionId} aria-hidden className="line-clamp-2 text-sm break-words text-muted-foreground [overflow-wrap:anywhere]">

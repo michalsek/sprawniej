@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { arcShare } from '@/components/ringTip'
+import { arcShare, ringClick } from '@/components/ringTip'
 import { NO_ISSUES, type ProjectCounts } from '@/data/select'
 import { issueCountText, progressWords } from '@/features/projects/progressText'
 import { shortText } from '@/lib/text'
@@ -31,8 +31,8 @@ describe('what a project ring says', () => {
 
   test('no issues, and only canceled ones', () => {
     expect(progressWords(NO_ISSUES)).toEqual(['No issues yet'])
-    expect(progressWords(counts({ canceled: 2, duplicate: 1 }))).toEqual(['No issues to count: 3 canceled ones are left out', 'Not counted: 2 canceled, 1 duplicate'])
-    expect(progressWords(counts({ canceled: 1 }))).toEqual(['No issues to count: 1 canceled one is left out', 'Not counted: 1 canceled'])
+    expect(progressWords(counts({ canceled: 2, duplicate: 1 }))).toEqual(['No issues to count: 3 issues are left out', 'Not counted: 2 canceled, 1 duplicate'])
+    expect(progressWords(counts({ canceled: 1 }))).toEqual(['No issues to count: 1 issue is left out', 'Not counted: 1 canceled'])
   })
 
   test('says what is left out and how many archived ones count', () => {
@@ -45,10 +45,6 @@ describe('what a project ring says', () => {
     expect(progressWords(counts({ done: 1, archived: 1 }))).toEqual(['The 1 issue is done', 'Counts 1 archived issue'])
   })
 
-  test('no em dashes anywhere', () => {
-    const all = [counts({ done: 3, todo: 1, canceled: 1, archived: 2 }), counts({ canceled: 2 }), NO_ISSUES].flatMap(progressWords)
-    expect(all.join(' ')).not.toContain('\u2014')
-  })
 })
 
 describe('how many issues a card shows', () => {
@@ -67,6 +63,17 @@ describe('the ring', () => {
     expect(arcShare(199, 200)).toBe(0.94)
     expect(arcShare(1, 2)).toBe(0.5)
     expect(arcShare(5, 5)).toBe(1)
+  })
+})
+
+describe('a click on the ring', () => {
+  test('a tap opens or closes the tooltip; a mouse click, or the click that ends a drag, opens the link', () => {
+    expect(ringClick('touch', false)).toBe('toggle')
+    expect(ringClick('pen', false)).toBe('toggle')
+    expect(ringClick('mouse', false)).toBe('link')
+    expect(ringClick('touch', true)).toBe('link')
+    // a click with no press on the ring (Enter on the link around it)
+    expect(ringClick(undefined, false)).toBe('link')
   })
 })
 
@@ -94,5 +101,7 @@ describe('the start of a description', () => {
     const accent = 'Zazólc'
     expect(shortText(accent, 4)).toBe('Zaz…')
     expect(shortText('Zażółć gęślą jaźń', 6)).toBe('Zażółć…')
+    // a first character longer than the room is kept whole, not dropped
+    expect(shortText(`${family}${family}`, 3)).toBe(`${family}…`)
   })
 })

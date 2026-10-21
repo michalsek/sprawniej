@@ -24,7 +24,7 @@ scrollbars, the date picker) are light in Light and dark in Dark.
 | Main button | `primary` | near-black with white text | white with dark text |
 | Focus ring | `ring` | `#71717a` | `#8b8b93` |
 | Behind pictures | `picture-backdrop` | `#ffffff` | `#e4e4e7` |
-| A progress ring's track | `progress-track` | `#e4e4e7` | `#2a2a2e` |
+| A progress ring's track | `progress-track` | `#c0c0c5` | `#48484f` |
 
 The light page colour is also in `src/lib/theme.ts` (`THEME_COLORS`) and index.html's `theme-color`; change all three
 together (`tests/themeScript.test.ts` checks). `tests/contrast.test.ts` checks every text pair is 4.5:1 (Dark's red in
@@ -168,9 +168,12 @@ Two groups follow their box, not the text, so they stay when the text gets small
 - **Progress ring** (`src/components/ProgressRing.tsx`, a project's in `src/features/projects/ProjectRing.tsx`): how
   much of a project is done, 16 px, just left of the lead's picture on cards and list rows (at the end of the row when
   there is no lead), and after the property chips on the project's page, next to "8 of 12 done". A `progress-track`
-  ring with a `status-done` arc that starts at the top; all done is a closed circle, nothing to count is the track
-  alone. No fill and no check (those are the Done status), never a dashed ring (that is Backlog). A little done still
-  shows a small arc, nearly done still leaves a gap. Its tooltip says it in words, a line each (text only, as status
+  ring with a `status-done` arc that starts at the top; all done is a closed circle, none done yet is the track
+  alone, and nothing to count (no issues, or only canceled ones) is the track at half strength. No fill and no check
+  (those are the Done status), never a dashed ring (that is Backlog). A little done still shows a small arc, nearly
+  done still leaves a gap. The arc is a meaning colour, so it reads at 3:1 on the card, the page and a hovered row;
+  the track only has to be seen, at 1.5:1 on the same, so a ring with nothing done doesn't vanish. The arc on the
+  track is lower than 3:1: they differ in colour too, and the tooltip has the numbers (`tests/contrast.test.ts`). Its tooltip says it in words, a line each (text only, as status
   icons don't read on the tooltip's dark surface): "66% done: 8 of 12 issues" (rounded down, never 0% once something
   is done, never 100% until all is), what is still open by group, what is left out (canceled and duplicate issues)
   and how many archived issues count. It opens on hover, when the card or row is reached with the keyboard (the ring

@@ -28,7 +28,6 @@ import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { NewProjectDialog } from './NewProjectDialog'
 import { ProjectBoard } from './ProjectBoard'
-import { progressWords } from './progressText'
 import { ProjectRing } from './ProjectRing'
 import { StatusDot } from './StatusDot'
 import { useArchiveForProgress, useProjectCounts } from './useProjectCounts'
@@ -54,14 +53,13 @@ function ProjectRow({ project: p, lead }: { project: Project; lead?: Person }) {
           <InlineText value={p.name} onSave={(name) => updateProject(p.id, { name })} label="Project name" required autoFocus onDone={() => setRenaming(false)} className="text-field font-medium" />
         </span>
       ) : (
-        <Link href={`/project/${p.id}`} {...tip.focusProps} className="flex min-w-0 flex-1 items-center gap-3 py-1.5 sm:gap-4">
+        <Link href={`/project/${p.id}`} {...tip.focusProps} className="relative flex min-w-0 flex-1 items-center gap-3 py-1.5 sm:gap-4">
           <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
           <span className={cn(STATUS, 'flex items-center gap-2 text-muted-foreground')}>
             <StatusDot status={status} /> <span className="truncate max-sm:sr-only">{status.name}</span>
           </span>
           <span className={cn(LEAD, 'flex items-center gap-2')}>
             <ProjectRing counts={counts} tip={tip} />
-            <span className="sr-only">{progressWords(counts)[0]}</span>
             {p.lead ? (
               <>
                 <PersonAvatar person={lead} login={p.lead} />
@@ -72,7 +70,9 @@ function ProjectRow({ project: p, lead }: { project: Project; lead?: Person }) {
             )}
           </span>
           <span className="hidden w-28 text-muted-foreground md:block">{p.targetDate ? shortDate(p.targetDate) : '–'}</span>
-          <span className="hidden w-20 text-right text-muted-foreground tabular-nums md:block">{total || '–'}</span>
+          <span className="hidden w-20 text-right text-muted-foreground tabular-nums md:block" aria-hidden>
+            {total || '–'}
+          </span>
         </Link>
       )}
       <span className="flex items-center">

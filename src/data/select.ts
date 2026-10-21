@@ -257,14 +257,6 @@ export function progressPercent(done: number, total: number): number {
   return Math.min(99, Math.max(1, Math.floor((done * 100) / total)))
 }
 
-/** share of a project's issues that are done (canceled ones don't count either way): progressOf for a list of issues */
-export function projectProgress(projectId: string, issues: Issue[]): { done: number; total: number } {
-  const index = new Map<string, ProjectCounts>()
-  for (const i of issues) if (i.project === projectId) countInto(index, i, false)
-  const { done, total } = progressOf(index.get(projectId) ?? NO_ISSUES)
-  return { done, total }
-}
-
 /**
  * The order of projects in a board column: by `sortOrder` (byte by byte, as fractional-indexing writes it), then the
  * ones without one (made by an older version), by name.

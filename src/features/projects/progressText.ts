@@ -14,13 +14,13 @@ export const issueCountText = (total: number): string => (total > 0 ? issues(tot
 const OPEN = CATEGORIES.filter((c) => c.group !== 'completed' && c.group !== 'canceled')
 
 /**
- * The ring's tooltip, a line each: how much is done ("67% done: 8 of 12 issues"), then what is still open, then what
+ * The ring's tooltip, a line each: how much is done ("66% done: 8 of 12 issues"), then what is still open, then what
  * is left out, then how many archived ones count. The first line alone is what a screen reader hears on a card.
  */
 export function progressWords(c: Readonly<ProjectCounts>): string[] {
   const { done, total, canceled } = progressOf(c)
   const lines: string[] = []
-  if (total === 0) lines.push(canceled ? `No issues to count: ${canceled} canceled ${canceled === 1 ? 'one is' : 'ones are'} left out` : 'No issues yet')
+  if (total === 0) lines.push(canceled ? `No issues to count: ${canceled === 1 ? '1 issue is' : `${canceled} issues are`} left out` : 'No issues yet')
   else if (done === total) lines.push(total === 1 ? 'The 1 issue is done' : `All ${total} issues done`)
   else lines.push(`${progressPercent(done, total)}% done: ${done} of ${issues(total)}`)
   const open = OPEN.filter((cat) => c[cat.id] > 0).map((cat) => `${c[cat.id]} ${cat.name}`)
