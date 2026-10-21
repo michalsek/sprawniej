@@ -542,7 +542,7 @@ switch it on and how a restore would go. Pictures aren't in the dump, and a rest
 | `src/config.ts` | The app's public address (invite links) and where sign-in comes back to |
 | `src/version.ts` | The version and the What's new notes (`CHANGELOG`) |
 | `src/session.ts` | Which workspace is open and the ones you opened before (localStorage) |
-| `supabase/` | `config.toml` (sign-in and function settings), `migrations/` (the database), `functions/github-webhook` and `functions/notion-webhook` (where the bundles go), `dev/cleanup-tests.sql` |
+| `supabase/` | `config.toml` (sign-in and function settings), `migrations/` (the database), `functions/github-webhook` and `functions/notion-webhook` (where the bundles go), `dev/cleanup-test-run.sql` and `dev/cleanup-all-tests.sql` (what the database tests leave behind) |
 | `tests` | `bun test` for the pure logic, with a pretend backend and database (`tests/support`) and test data (`tests/fixtures`: a sample workspace, pretend Linear answers, a page as Notion sends it) |
 | `tests/db` | Database tests against a real project (`bun run test:db`) |
 

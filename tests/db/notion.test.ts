@@ -33,20 +33,18 @@ type Applied = { issue?: string; new?: boolean; archived?: boolean; problem?: st
 
 const textArray = (xs: string[]) => `{${xs.map((x) => `"${x.replace(/["\\]/g, '\\$&')}"`).join(',')}}`
 
-const lookup = async (connection: string, hash: string, emails: string[] = [], team: string | null = null) =>
-  (
-    await asService<{ r: Lookup }>(
-      `select public.notion_lookup(${lit(connection)}::uuid, ${lit(hash)}, ${lit(textArray(emails))}::text[], ${team === null ? 'null' : lit(team)}) as r`,
-    )
-  )[0].r
+const lookupSql = (connection: string, hash: string, emails: string[] = [], team: string | null = null) =>
+  `public.notion_lookup(${lit(connection)}::uuid, ${lit(hash)}, ${lit(textArray(emails))}::text[], ${team === null ? 'null' : lit(team)})`
 
-const apply = async (o: { connection: string; hash: string; page: unknown; actor?: string | null; issue: Record<string, unknown>; notes?: unknown[] }) =>
-  (
-    await asService<{ r: Applied }>(
-      `select public.notion_apply(${lit(o.connection)}::uuid, ${lit(o.hash)}, ${lit(o.page)}::jsonb, ` +
-        `${o.actor ? `${lit(o.actor)}::uuid` : 'null'}, ${lit({ id: ulid(), sort_order: 'a0', ...o.issue })}::jsonb, ${lit(o.notes ?? [])}::jsonb) as r`,
-    )
-  )[0].r
+const lookup = async (...args: Parameters<typeof lookupSql>) => (await asService<{ r: Lookup }>(`select ${lookupSql(...args)} as r`))[0].r
+
+type ApplyArgs = { connection: string; hash: string; page: unknown; actor?: string | null; issue: Record<string, unknown>; notes?: unknown[] }
+
+const applySql = (o: ApplyArgs) =>
+  `public.notion_apply(${lit(o.connection)}::uuid, ${lit(o.hash)}, ${lit(o.page)}::jsonb, ` +
+  `${o.actor ? `${lit(o.actor)}::uuid` : 'null'}, ${lit({ id: ulid(), sort_order: 'a0', ...o.issue })}::jsonb, ${lit(o.notes ?? [])}::jsonb)`
+
+const apply = async (o: ApplyArgs) => (await asService<{ r: Applied }>(`select ${applySql(o)} as r`))[0].r
 
 /** the lookup's answer with the right key */
 async function found(...args: Parameters<typeof lookup>) {
@@ -275,10 +273,16 @@ describe.skipIf(!enabled)('Notion', () => {
     await ok(ana.db.from('notion_connections').update({ team_id: des }).eq('id', conn))
     await ok(ana.db.from('teams').delete().eq('id', des))
     expect((await ok(ana.db.from('notion_connections').select('team_id').eq('id', conn).single())).team_id).toBeNull()
-    expect((await found(conn, hash)).team).toBeNull()
-    expect(await apply({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: null, title: 'Lost' } })).toEqual({ problem: 'team' })
-    // a team of another workspace is no team
-    expect(await apply({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: w.eng, title: 'Lost' } })).toEqual({ problem: 'team' })
+    // one CLI call for the three: each takes seconds, and three in a row could run past the time limit
+    const [r] = await asService<{ look: Lookup; none: Applied; other: Applied }>(
+      `select ${lookupSql(conn, hash)} as look, ` +
+        `${applySql({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: null, title: 'Lost' } })} as none, ` +
+        // a team of another workspace is no team
+        `${applySql({ connection: conn, hash, page: { id: pageId() }, issue: { team_id: w.eng, title: 'Lost' } })} as other`,
+    )
+    expect(r.look).toMatchObject({ state: 'ok', team: null })
+    expect(r.none).toEqual({ problem: 'team' })
+    expect(r.other).toEqual({ problem: 'team' })
     expect((await ok(ana.db.from('notion_connections').select('last_event').eq('id', conn).single())).last_event).toEqual({ title: 'Lost', problem: 'team' })
     expect(await ok(ana.db.from('issues').select('id').eq('workspace_id', ws))).toEqual([])
   })

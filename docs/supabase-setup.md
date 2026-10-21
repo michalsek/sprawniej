@@ -69,7 +69,7 @@ settings). These steps set up any project, in any account, and publish the app. 
    VITE_SUPABASE_KEY=sb_publishable_...
    ```
    Without them the app says "Sprawniej isn't set up yet".
-7. **Check it**, on a development or throwaway project only: `bun run test:db`, then the cleanup (below).
+7. **Check it**, on a development or throwaway project only: `bun run test:db` (it cleans up after itself, below).
 
 ## Sign-up codes
 
@@ -218,7 +218,7 @@ unset ADDR
 
 Expect 200 with the issue, 401 for a wrong or replaced key, 404 after Disconnect, 405 for anything but POST, 409 when
 the team is gone, 413 over 1 MB, 400 for something that isn't a page, 429 after 100 new pages in 10 minutes. Clean up
-with the usual SQL (below): deleting the workspaces takes their connections, issues and page rows with them.
+with `bun run test:db:clean <run>` (below): deleting the workspaces takes their connections, issues and page rows with them.
 
 **For a developer with a paid Notion plan**, once it works with curl:
 
@@ -250,22 +250,40 @@ history, deletions, invites, imports, realtime, pictures, GitHub and Notion thro
   `SPRAWNIEJ_TEST_EMAIL_DOMAIN=<domain> bun run test:db`.
 - A run signs up a few accounts. Sign-ups are limited per 5 minutes; `config.toml` raises the limit so a few runs in a
   row work.
-- `SPRAWNIEJ_TEST_RUN=<name>` names the run (it is in every account, handle and workspace name it makes).
-- Run one at a time: the cleanup removes every test run's leftovers, also a run still going.
+- `SPRAWNIEJ_TEST_RUN=<name>` names the run (letters and digits only; it is in every account, handle and workspace
+  name it makes). Without it, a run gets a name of its own, which its accounts show (`dbtest-<run>-ana@…`).
+- Several runs may go at the same time (other worktrees, browser checks with throwaway accounts): each one cleans up
+  only after itself. Their CLI calls take turns (a lock in the computer's temporary folder). Every
+  `bunx supabase db query --linked` gives the CLI's one login a new password, and when two calls overlap, or now and
+  then anyway, Supabase's connection pooler still has the password before: the CLI then tries it for minutes and fails.
+  The tests stop such a call at once and make it again (`SPRAWNIEJ_DB_DEBUG=1` shows when). A `db query` of your own
+  while tests run doesn't take a turn, so it may hang.
 - Plain `bun test` (and the GitHub Pages workflow, which runs it) skips `tests/db`: those tests only run when
   `SPRAWNIEJ_DB_TESTS` is set, which `test:db` does. Keep it that way, so building never touches a database.
 
-**Clean up** afterwards, first the database, then the test pictures:
+**Clean up** happens by itself: when a run ends, it removes what it made and nothing else (`tests/db/preload.ts`,
+loaded for every `bun test` by `bunfig.toml`). First its pictures (the ones in its workspaces and the ones its
+accounts added), through the Storage API, since the database can't delete files. Then `supabase/dev/cleanup-test-run.sql`:
+its workspaces (with everything in them), its profiles and accounts, its sign-up codes and the record of the accounts
+they made, and deletion notes of workspaces that are gone. It prints `Cleaned up test run <run>`.
+
+By hand, when a run was stopped halfway, or was kept for a look with `SPRAWNIEJ_TEST_KEEP=1`:
 
 ```sh
-bunx supabase db query --linked -f supabase/dev/cleanup-tests.sql
-# the picture folders of workspaces that are gone
-bunx supabase db query --linked "select distinct (storage.foldername(name))[1] as dir from storage.objects where bucket_id = 'pictures' and (storage.foldername(name))[1] not in (select id::text from public.workspaces)"
-bunx supabase storage rm -r ss:///pictures/<dir> --linked --experimental   # for each dir listed; never the bucket root
+bun run test:db:clean <run>
 ```
 
-The SQL removes the test workspaces (with everything in them), the test profiles and accounts, their sign-up codes and
-the record of what they made, and deletion notes of workspaces that are gone. Pictures need the Storage API; the database can't delete them.
+The same for browser checks: name their throwaway accounts `dbtest-<run>-<name>@…` and their workspaces
+`dbtest <run> …`, with a run name of their own, and clean up that run when done.
+
+To clear every run's leftovers at once (only when no other run is going: it also removes a run still going):
+
+```sh
+bun run test:db:clean --all
+```
+
+That runs `supabase/dev/cleanup-all-tests.sql` (which can also go through `bunx supabase db query --linked -f` alone,
+leaving the pictures) after removing every test run's pictures.
 
 ## Checking the advisors
 

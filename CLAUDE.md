@@ -90,12 +90,14 @@ Title line only, plain words. No AI attribution trailers.
   backend (`tests/support/fakeBackend.ts`, `fakeDb.ts`).
 - `bun run test:db` runs `tests/db` against the project in `.env.local` as throwaway accounts
   (`dbtest-<run>-<name>@…`) with their own workspaces (`dbtest <run> …`). Only on a development or throwaway project,
-  never one where a team works. Clean up afterwards: the SQL, then the test pictures (docs/supabase-setup.md).
+  never one where a team works. Each run cleans up only after itself when it ends; `bun run test:db:clean <run>` for a
+  run stopped halfway, `--all` only when no other run is going (docs/supabase-setup.md).
 - Browser checks: **never drive the user's own Chrome.** Use a private headless browser: `bun add playwright-core`
   in a scratch folder, `chromium.launchPersistentContext('<scratch>/profile', { channel: 'chrome', headless: true,
   serviceWorkers: 'block' })` against `bunx vite preview --port 5299` of a fresh `bun run build`. Blocking the
   service worker stops the PWA cache from serving an older build. Sign up throwaway accounts named like the database
-  tests' so the same cleanup removes them; never sign in as a real person.
+  tests', with a run name of your own (letters and digits), and remove them with `bun run test:db:clean <run>`; never
+  sign in as a real person.
 - Two people: two browser profiles signed in as two test accounts. Also one person in two tabs, and a dropped
   connection (`context.setOffline(true)`, then back).
 - `window.sprawniej` has `data` (the store), `actions` (everything a person can do), `backend` (`status`, the save

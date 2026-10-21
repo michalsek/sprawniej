@@ -270,7 +270,7 @@ Anything wrong or worth improving that turned up along the way, in this work or 
 | E137 | phase 4 QA | The profile load error always blames the connection | fixed | phase 4 fix round |
 | E138 | phase 4 QA | An issue page stays blank if loading the archive fails once | fixed | phase 4 fix round |
 | E139 | phase 4 QA | Sidebar "Your GitHub profile" links to github.com/<handle>, but handles are free now | fixed | phase 4 fix round |
-| E140 | phase 4 QA | `cleanup-tests.sql` wipes every dbtest workspace, also another run's in progress | won't do | test runs happen one at a time; documented in the briefs |
+| E140 | phase 4 QA | `cleanup-tests.sql` wipes every dbtest workspace, also another run's in progress | fixed | each run cleans up only its own run when it ends (`tests/db/cleanup.ts`); `cleanup-all-tests.sql` is the everything option |
 | E141 | phase 5 implementer | supabase-js writes had no timeout: a dead connection hung saving for good | fixed | phase 5 (`send.ts`, 30 s) |
 | E142 | phase 5 implementer | PostgREST answers P0002 with HTTP 500, so retrying by status alone would retry a missing row forever | fixed | phase 5 (`problems.ts` reads the code first) |
 | E143 | phase 5 implementer | `SetupWorkspace.tsx:29` dead GitHub-era screen ignores `startWorkspace`'s promise | fixed | phase 10 (deleted) |

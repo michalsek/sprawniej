@@ -4,15 +4,17 @@
  * these files and skips them: nothing here may connect or throw at import time.
  *
  * The project comes from VITE_SUPABASE_URL and VITE_SUPABASE_KEY (the environment, or .env.local).
- * Test accounts are dbtest-<run>-<name>@<domain>; supabase/dev/cleanup-tests.sql removes them afterwards. Set
- * SPRAWNIEJ_TEST_RUN to name the run yourself, so only its own accounts and workspaces can be removed afterwards.
- * Only for a development or throwaway project.
+ * Test accounts are dbtest-<run>-<name>@<domain> and workspaces 'dbtest <run> …'. When the run ends, tests/db/preload.ts
+ * removes them (tests/db/cleanup.ts), and only them: other runs going at the same time are left alone. Set
+ * SPRAWNIEJ_TEST_RUN to name the run yourself (letters and digits), and SPRAWNIEJ_TEST_KEEP to keep what it made for a
+ * look (then `bun run test:db:clean <run>`). Only for a development or throwaway project.
  *
  * New accounts need a sign-up code. The run makes its own (note "dbtest <run>") through the Supabase CLI, which must be
  * linked to the same project (`bunx supabase link`): codes can only be made in the SQL editor or with the CLI.
  */
 import { expect } from 'bun:test'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createClient, type RealtimeChannel, type SupabaseClient } from '@supabase/supabase-js'
 import { ulid as makeUlid } from 'ulid'
@@ -20,8 +22,11 @@ import type { Database } from '@/backend/database.types'
 
 export const enabled = !!process.env.SPRAWNIEJ_DB_TESTS
 
-/** one run of the tests: every account, login and workspace name carries it (SPRAWNIEJ_TEST_RUN picks it, to clean up after) */
+/** one run of the tests: every account, login and workspace name carries it (SPRAWNIEJ_TEST_RUN picks it) */
 export const RUN = process.env.SPRAWNIEJ_TEST_RUN ?? Date.now().toString(36) + Math.random().toString(36).slice(2, 4)
+/** a run's name: letters and digits, so cleaning up run "ab" never touches run "abc" (dbtest-ab-… and dbtest-abc-…) */
+export const RUN_NAME = /^[A-Za-z0-9]+$/
+if (enabled && !RUN_NAME.test(RUN)) throw new Error(`SPRAWNIEJ_TEST_RUN is letters and digits only, not "${RUN}".`)
 
 /** Auth refuses example and test domains, so the default is a real (throwaway) mail domain. */
 const DOMAIN = process.env.SPRAWNIEJ_TEST_EMAIL_DOMAIN ?? 'mailinator.com'
@@ -81,6 +86,7 @@ export const anonClient = client
  * sign-up codes, reading private tables. Returns the rows.
  */
 export function ownerSql<T = Record<string, unknown>>(sql: string): Promise<T[]> {
+  sqlUsed = true
   // one at a time: two CLI calls at once trip over each other
   const next = cliQueue.then(() => runSql<T>(sql))
   cliQueue = next.catch(() => undefined)
@@ -88,19 +94,128 @@ export function ownerSql<T = Record<string, unknown>>(sql: string): Promise<T[]>
 }
 
 let cliQueue: Promise<unknown> = Promise.resolve()
+let sqlUsed = false
 
-async function runSql<T>(sql: string): Promise<T[]> {
+/** whether this run made anything (every account needs a sign-up code, and those are made here), for the cleanup */
+export const madeAnything = () => sqlUsed
+
+/** the CLI must be linked to the project the tests use; the project's ref */
+function checkLinked(): string {
   const { url } = env()
   const refFile = join(import.meta.dir, '..', '..', 'supabase', '.temp', 'project-ref')
   const linked = existsSync(refFile) ? readFileSync(refFile, 'utf8').trim() : ''
   if (!linked || !url.startsWith(`https://${linked}.`)) {
     throw new Error(`The Supabase CLI must be linked to the project in .env.local (${url}): bunx supabase link --project-ref <ref>`)
   }
-  const proc = Bun.spawn(['bunx', 'supabase', 'db', 'query', '--linked', '--output-format', 'json', sql], { stdout: 'pipe', stderr: 'pipe' })
-  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+  return linked
+}
+
+/**
+ * One CLI call at a time on this computer, also across test runs going at once (other worktrees, a cleanup): every
+ * call makes a new temporary database login, and two at once lock each other out for minutes and then fail.
+ */
+async function withCliLock<T>(ref: string, run: () => Promise<T>): Promise<T> {
+  const dir = join(tmpdir(), `sprawniej-supabase-cli-${ref}.lock`)
+  for (;;) {
+    try {
+      mkdirSync(dir)
+      break
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
+    }
+    if (lockLeftBehind(dir)) rmSync(dir, { recursive: true, force: true })
+    else await Bun.sleep(100 + Math.random() * 200)
+  }
+  writeFileSync(join(dir, 'owner'), String(process.pid))
+  try {
+    return await run()
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+}
+
+/** a lock whose process is gone (stopped halfway), or that is far older than any call */
+function lockLeftBehind(dir: string): boolean {
+  try {
+    const age = Date.now() - statSync(dir).mtimeMs
+    const pid = Number(existsSync(join(dir, 'owner')) ? readFileSync(join(dir, 'owner'), 'utf8') : 0)
+    // no owner written yet: it is being taken right now
+    if (!pid) return age > 10_000
+    try {
+      process.kill(pid, 0)
+    } catch (e) {
+      if ((e as NodeJS.ErrnoException).code === 'ESRCH') return true
+    }
+    return age > 5 * 60_000
+  } catch {
+    return false   // let go meanwhile
+  }
+}
+
+/** far longer than a call takes (about 2 s); one that takes longer is stopped and tried again */
+const CLI_TIME_LIMIT = 20_000
+
+/**
+ * The CLI's login was refused. Every call gives the CLI's one login (cli_login_postgres) a new password, and now and
+ * then Supabase's connection pooler still has the one before: the CLI then tries the stale password again for minutes.
+ * Nothing has run yet, so the call is stopped at once and made again, with a new password.
+ */
+const STALE_LOGIN = /password authentication failed for user "cli_login_/
+
+/** what the CLI said, without its --debug lines (requests and retries) */
+const said = (err: string) =>
+  err
+    .split('\n')
+    .filter((l) => l.trim() && !/^(\d{4}\/\d\d\/\d\d |Using |Supabase CLI |NotFound: |Retry \()/.test(l))
+    .join('\n')
+
+/**
+ * Runs the Supabase CLI. A refused login (STALE_LOGIN), a call that hangs, and Supabase's API answering 500 or 544
+ * (it timed out) before or without running anything are tried again, a few times. A refused query (400) is not.
+ */
+async function cli(args: string[], what: string): Promise<string> {
+  const ref = checkLinked()
+  for (let attempt = 1; ; attempt++) {
+    const { out, err, code, hung, stale } = await withCliLock(ref, async () => {
+      const started = Date.now()
+      // --debug: the CLI says when its login is refused, which it otherwise keeps to itself while it tries again
+      const proc = Bun.spawn(['bunx', 'supabase', '--debug', ...args], { stdout: 'pipe', stderr: 'pipe', timeout: CLI_TIME_LIMIT })
+      let err = ''
+      let stale = false
+      const reading = (async () => {
+        const text = new TextDecoder()
+        for await (const chunk of proc.stderr) {
+          err += text.decode(chunk, { stream: true })
+          if (!stale && STALE_LOGIN.test(err)) {
+            stale = true
+            proc.kill()
+          }
+        }
+      })()
+      const [out, , code] = await Promise.all([new Response(proc.stdout).text(), reading, proc.exited])
+      // stopped: the CLI passes the signal on and ends with an exit code of its own
+      return { out, err, code, stale, hung: Date.now() - started >= CLI_TIME_LIMIT }
+    })
+    if (code === 0 && !stale) return out
+    const flaky = stale || hung || /unexpected status 5\d\d|connection reset by peer|i\/o timeout|TLS handshake timeout|unexpected EOF/i.test(err + out)
+    if (!flaky || attempt === 5) throw new Error(`${what} failed${stale ? ' (login refused)' : hung ? ' (no answer in time)' : ''}: ${said(err)}\n${out}`)
+    if (process.env.SPRAWNIEJ_DB_DEBUG) console.log(`CLI ${stale ? 'login refused' : hung ? 'no answer' : 'error'}, trying again (${attempt})`)
+    await Bun.sleep(stale ? 200 : 1000 * attempt)
+  }
+}
+
+async function runSql<T>(sql: string): Promise<T[]> {
+  const out = await cli(['db', 'query', '--linked', '--output-format', 'json', sql], `SQL ${sql}`)
   const start = out.indexOf('{')
-  if (code !== 0 || start < 0) throw new Error(`SQL failed: ${sql}\n${err}${out}`)
+  if (start < 0) throw new Error(`SQL gave no answer: ${sql}\n${out}`)
   return (JSON.parse(out.slice(start)) as { rows?: T[] }).rows ?? []
+}
+
+/** removes pictures from the bucket by path (through the Storage API: the database can't delete files) */
+export function storageRm(paths: string[]): Promise<unknown> {
+  const next = cliQueue.then(() => cli(['storage', 'rm', '--linked', '--experimental', '--yes', ...paths.map((p) => `ss:///pictures/${p}`)], 'Removing pictures'))
+  cliQueue = next.catch(() => undefined)
+  return next
 }
 
 /** a new sign-up code (shown as XXXX-XXXX-XXXX), noted as this run's */
@@ -266,7 +381,11 @@ export interface Listener {
   channel: RealtimeChannel
   status: string
   got: Change[]
-  /** waits for a message matching `pred`, or returns undefined after `ms` */
+  /**
+   * waits for a message matching `pred`, or returns undefined after `ms`. It returns as soon as one comes, so the
+   * default is generous: messages take longer while other runs keep the project busy. To check that nothing comes, pass
+   * a short `ms`.
+   */
   waitFor: (pred: (m: Change) => boolean, ms?: number) => Promise<Change | undefined>
 }
 
@@ -287,7 +406,7 @@ export async function listen(who: Someone, topic: string): Promise<Listener> {
       }
     })
   })
-  const waitFor = async (pred: (m: Change) => boolean, ms = 3000) => {
+  const waitFor = async (pred: (m: Change) => boolean, ms = 10_000) => {
     const until = Date.now() + ms
     while (Date.now() < until) {
       const m = got.find(pred)

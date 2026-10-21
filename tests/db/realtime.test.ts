@@ -13,7 +13,7 @@ describe.skipIf(!enabled)('realtime', () => {
     expect(heard.status).toBe('SUBSCRIBED')
     const issue = await newIssue(w.ana, w.ws, w.eng, { title: 'Before', description: 'Long words' })
     await ok(w.ana.db.from('issues').update({ title: 'After' }).eq('id', issue.id))
-    const m = await heard.waitFor((m) => m.table === 'issues' && m.op === 'UPDATE' && m.row?.id === issue.id, 3000)
+    const m = await heard.waitFor((m) => m.table === 'issues' && m.op === 'UPDATE' && m.row?.id === issue.id)
     expect(m).toBeDefined()
     expect(m?.row).toMatchObject({ id: issue.id, title: 'After' })
     expect(Object.keys(m?.row ?? {}).sort()).toEqual(['changed_at', 'id', 'title', 'updated_at'])

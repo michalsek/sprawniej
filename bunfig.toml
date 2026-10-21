@@ -1,0 +1,3 @@
+[test]
+# the database tests clean up after their own run (tests/db/preload.ts); plain bun test is left as it is
+preload = ["./tests/db/preload.ts"]

@@ -66,7 +66,7 @@ starting over is the same short runbook, kept as `docs/supabase-setup.md` (writt
 supabase/
   config.toml        auth and API settings as code; secrets only as env(...)
   migrations/        every table, rule, function, trigger, the pictures bucket, the realtime rule, pg_cron jobs
-  dev/               cleanup-tests.sql (removes what the database tests left behind)
+  dev/               cleanup-test-run.sql, cleanup-all-tests.sql (remove what the database tests left behind)
   templates/         email templates (when we have a sender)
   .env.example       the names of the values config.toml reads (never the secrets)
 ```

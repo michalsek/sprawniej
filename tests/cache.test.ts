@@ -194,8 +194,9 @@ describe('what a copy holds', () => {
 })
 
 describe('when a copy can be used', () => {
-  const meta = (more: Partial<CacheMeta> = {}): CacheMeta => ({ ...wanted(ID), mark: T(16), caughtUpAt: Date.now(), savedAt: Date.now(), chars: 2, archive: false, ...more })
+  // one clock for every copy: two calls a millisecond apart would make the later one look more up to date
   const now = Date.now()
+  const meta = (more: Partial<CacheMeta> = {}): CacheMeta => ({ ...wanted(ID), mark: T(16), caughtUpAt: now, savedAt: now, chars: 2, archive: false, ...more })
 
   test('another format, app version, database layout, project, person or workspace: not used', () => {
     const want = wanted(ID)
