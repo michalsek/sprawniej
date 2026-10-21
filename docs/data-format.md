@@ -296,8 +296,37 @@ their statuses; without `statuses` it means nothing, so older versions, which re
 issues or more), `assignees` (`null` = no one), `subscribers` (people
 following the issue), `priorities`, `labels` (ids), `projects` (ids; `null` = none), `teams` (keys). Inside one filter
 any value matches; different filters must all match. `grouping`: `status`, `assignee`, `priority`, `project`, `none`.
-`ordering`: `manual`, `priority`, `due`, `updated`, `created`. `layout`: `list`, `board`. `move_person` swaps logins
-inside `assignees` and `subscribers` when a guest is linked.
+`ordering`: `manual`, `priority`, `due`, `updated`, `created`. `layout`: `list`, `board`.
+
+**Groups (`filters.tree`).** What the flat keys can't say (an "or", groups, "is not", Me, project status, the same
+field twice) is kept in `tree`: a group `{"join": "and" | "or", "items": [...]}` whose items are conditions
+`{"field", "op": "is" | "not", "values": [...]}` or more groups, three levels deep at most (the app's limit; deeper
+ones still work). Fields are the seven flat keys plus `projectStatuses` (project status ids; an issue with no project
+never "is" one). `is` means any of the values, `not` none of them; for `labels` and `subscribers` that is "includes any"
+and "includes none". `@me` in `assignees` or `subscribers` is whoever is looking (no handle can start with `@`).
+
+```json
+{ "statuses": ["in_progress", "in_review"],
+  "tree": { "join": "and", "items": [
+    { "field": "statuses", "op": "is", "values": ["in_progress", "in_review"] },
+    { "join": "or", "items": [
+      { "field": "assignees", "op": "is", "values": ["@me"] },
+      { "field": "labels", "op": "is", "values": ["01J9…"] } ] } ] } }
+```
+
+The app writes the simplest shape that says the filter (`src/data/filterTree.ts`, `storedFilters`):
+
+- One "and" group with at most one `is` condition per flat field, and no `@me`: only the flat keys, no `tree`. Older
+  versions read it as they always did.
+- Anything else: `tree`, plus the flat keys as a rougher copy for older versions, which may show more issues but
+  never fewer: the `is` conditions right in a top "and" group, without ones that name `@me`. Two conditions on one
+  field keep the values they share (for `labels` and `subscribers`, the first one's). A top "or" has no copy.
+
+When `tree` is there it wins and the flat keys are ignored. A condition or group the app can't read (a field or `op`
+from a newer version) is left out of matching and kept as it is when the filter changes. Other keys inside `filters`
+are kept too. An older app that changes a chip changes only the flat keys and keeps `tree`; its "Clear all" removes
+both. Nothing checks the shape in SQL. `move_person` swaps logins inside `assignees`, `subscribers` and `tree` when a
+guest is linked (`swap_login`).
 
 ### inbox
 

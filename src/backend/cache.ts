@@ -20,7 +20,7 @@ export { MAX_AGE_DAYS } from './rows'
 /** bump when CacheBody or CacheMeta change shape */
 export const CACHE_FORMAT = 1
 /** the newest migration: a copy made for another database layout is never read (a test checks it) */
-export const SCHEMA_ID = '20261021190000'
+export const SCHEMA_ID = '20261022120000'
 /** a copy longer than this (JSON characters) leaves the archive out, and if it's still too long it isn't kept */
 export const MAX_CHARS = 20_000_000
 /** workspaces kept per browser */

@@ -152,6 +152,16 @@ describe.skipIf(!enabled)('imports and people from Linear', () => {
     const view = ulid()
     const filters = { assignees: [guestLogin, w.bob.login, 'x', null] }
     await ok(w.ana.db.from('views').insert({ id: view, workspace_id: w.ws, name: 'Theirs', filters, display: DISPLAY }))
+    // a view with groups: the login moves inside the tree too, and a login that only starts the same stays
+    const grouped = ulid()
+    const tree = (who: string) => ({
+      join: 'and',
+      items: [
+        { field: 'statuses', op: 'is', values: ['todo'] },
+        { join: 'or', items: [{ field: 'assignees', op: 'is', values: [who, `${guestLogin}-x`] }, { field: 'subscribers', op: 'not', values: [who] }] },
+      ],
+    })
+    await ok(w.ana.db.from('views').insert({ id: grouped, workspace_id: w.ws, name: 'Grouped', filters: { statuses: ['todo'], tree: tree(guestLogin) }, display: DISPLAY }))
 
     await expectError(w.bob.db.rpc('link_person', { p_ws: w.ws, p_guest: guest, p_to: w.bob.profileId }), '42501')
     await ok(w.ana.db.rpc('link_person', { p_ws: w.ws, p_guest: guest, p_to: w.bob.profileId }))
@@ -163,6 +173,8 @@ describe.skipIf(!enabled)('imports and people from Linear', () => {
     // the guest becomes bob, and bob, already there, isn't listed twice
     const after = await ok(w.ana.db.from('views').select('filters').eq('id', view).single())
     expect(after.filters).toEqual({ assignees: [w.bob.login, 'x', null] })
+    const afterTree = await ok(w.ana.db.from('views').select('filters').eq('id', grouped).single())
+    expect(afterTree.filters).toEqual({ statuses: ['todo'], tree: tree(w.bob.login) })
     const history = await ok(w.ana.db.from('issue_events').select('changes').eq('issue_id', issue.id))
     expect(history.map((e) => e.changes)).toEqual([{ assignee: [null, w.bob.profileId] }])
     expect(await ok(w.ana.db.from('team_members').select().eq('team_id', linkTeam).eq('profile_id', w.bob.profileId))).toHaveLength(1)
