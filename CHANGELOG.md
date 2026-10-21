@@ -4,6 +4,11 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.19.1: One pick per tab
+*2026-10-21*
+
+- In the side panel, each tab has one pick at a time: clicking another person, label, priority or project switches to it
+
 ## 2.19.0: A side panel for lists and boards
 *2026-10-21*
 
