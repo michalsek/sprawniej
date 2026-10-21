@@ -4,6 +4,13 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.17.0: Projects at a glance
+*2026-10-21*
+
+- Project cards show the start of the description and how many issues the project has
+- Progress is now a small ring next to the lead: point at it, tab to the project, or tap it on a phone to see how much is done and what is still open
+- The project list has an Issues column
+
 ## 2.16.0: Calmer text
 *2026-10-21*
 
