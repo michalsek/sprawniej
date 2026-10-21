@@ -10,7 +10,7 @@ import { Columns3, Layers, List } from 'lucide-react'
 import { toast } from 'sonner'
 import { useChrome, usePanelBeside, useSidePanelHere } from '@/app/chrome'
 import { Segmented } from '@/components/Segmented'
-import { useDisplay } from '@/data/displays'
+import { fieldsFor, lockedFields, useDisplay, type Fields } from '@/data/displays'
 import { FLAT_FIELDS, countConditions, matcher, movesWithClock, treeOf, viewFilters } from '@/data/filterTree'
 import { useNow } from '@/lib/useNow'
 import { PANEL_FIELDS, hasQuick, splitAndCount, toggleQuick, withQuick } from '@/data/quickFilters'
@@ -126,6 +126,11 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
   const groups = useMemo(() => groupIssues(shown, display, { people, projects, statuses, team, keep: kept }, tab, board), [shown, display, people, projects, statuses, tab, board, team, kept])
   // cards just dropped on a hidden column show too
   const visible = groups.reduce((n, g) => n + g.issues.length, 0)
+  // what rows and cards show; a project's page doesn't repeat its project on every issue
+  // (the same object while nothing in it changes: rows are memoised)
+  const locked = lockedFields(filters)
+  const fieldsKey = JSON.stringify(fieldsFor(display, locked))
+  const fields = useMemo(() => JSON.parse(fieldsKey) as Fields, [fieldsKey])
 
   /** every filter goes, except the ones the page decides; on a view (everyone's) there's a way back */
   const clear = () => {
@@ -145,14 +150,14 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
     () =>
       display.layout === 'list' ? (
         <div className="min-h-0 flex-1 overflow-y-auto pb-8" data-tour="issues">
-          <IssueList groups={groups} display={display} onAdd={addTo} />
+          <IssueList groups={groups} display={display} onAdd={addTo} fields={fields} />
         </div>
       ) : (
         <div className="min-h-0 flex-1" data-tour="issues">
-          <IssueBoard groups={groups} display={display} onAdd={addTo} onDrop={keep} />
+          <IssueBoard groups={groups} display={display} onAdd={addTo} onDrop={keep} fields={fields} />
         </div>
       ),
-    [groups, display, addTo, keep],
+    [groups, display, addTo, keep, fields],
   )
   const emptyKind = base.length === 0 ? (filtering ? 'filters' : 'page') : quickOn && visible === 0 ? 'quick' : null
 
@@ -172,7 +177,7 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
           {left}
           <div className="ml-auto flex items-center gap-2">
             <FilterButton ref={button} count={count} open={builder.open && builder.at === 'button'} onClick={() => toggleBuilder('button')} />
-            <DisplayOptions display={display} onChange={setDisplay} onReset={saved ? undefined : mine.resetDisplay} tab={tab} />
+            <DisplayOptions display={display} onChange={setDisplay} onReset={saved ? undefined : mine.resetDisplay} tab={tab} locked={locked} />
             <Segmented
               tour="layout"
               label="Layout"

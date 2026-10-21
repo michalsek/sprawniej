@@ -294,6 +294,10 @@ Next to each project status: how many projects have it.
 
 **Urgent** (orange), **High**, **Medium**, **Low** (fewer bars = lower), or no priority (three dashes).
 
+To change it without opening the issue, click the priority icon on a row or card (or tap it on a phone) and pick
+one. If you've picked several issues and click the icon on one of them, all of them change. From the keyboard,
+move to an issue and press `P`.
+
 ### Due dates and estimates
 
 - **Due date:** the day it should be done. Pick **Due date** on the right: **Today**, **Tomorrow**, **Next week**,
@@ -360,6 +364,12 @@ or deletes them); `S`, `P`, `A`, `L` and `E` do the same. `Esc` lets go of them.
   that group's assignee, priority or project.
 - **Ordering:** **Manual** is the order you and your teammates arrange by dragging. You can also sort by priority,
   by due date, by last update, or newest first. Dragging to reorder only works in Manual order.
+- **Show on issues:** what each row and card shows besides its status and title: **ID**, **Priority**,
+  **Assignee**, **Labels**, **Project**, **Due date**, **Estimate**, **Created** and **Progress** (sub-issues done
+  and boxes ticked). Click one to switch it on or off; the list follows at once. **Project** starts off, and boards
+  start without **Created**. A project's own page doesn't offer **Project**. On narrow lists (a phone, or a small
+  window with the sidebar open) some of these make room for the title: labels, project and estimate first, then the
+  ID and the day it was made. The board shows them all.
 - **Show sub-issues** hides or shows them. **Show finished issues** does the same for finished ones, on pages that
   can have them (not on the Active or Backlog tab, which never show finished issues).
 - **Back to default** undoes your changes. It shows up once you've changed something (a saved view has none: its
@@ -487,14 +497,21 @@ Favourites).
 
 A **project** is a bigger goal made of several issues, like "New onboarding". **New project** on the Projects page
 starts one; a new project starts in Planned. On its page you can change its emoji, name and description in place, and
-set its status, who leads it, a target date and which teams work on it. The bar shows how many of its issues are done.
+set its status, who leads it, a target date and which teams work on it.
+
+A small ring next to the lead's picture shows how much of the project is done: it fills up as its issues are done and
+closes when they all are. Point at it (or tap it on a phone, or move to the project with the keyboard) to see the
+numbers: how many are done, which are still open, and which are left out. Canceled and duplicate issues don't count,
+and archived ones do. A project's page shows the same ring, with "8 of 12 done" next to it.
 
 The Projects page (for the whole workspace, and for each team) shows projects as a **List** or a **Board**; switch
 with the buttons next to New project. Sprawniej remembers your choice for each page, in this browser.
 
-- **List**: every project by name, with its status, lead, target date and progress. Click an emoji to change it, or
-  use **⋯** to rename or delete a project.
-- **Board**: a column for each project status (Backlog, Planned, In progress, Paused, Completed, Canceled, and any
+- **List**: every project by name, with its status, progress ring and lead, target date and how many issues count.
+  Click an emoji to change it, or use **⋯** to rename or delete a project.
+- **Board**: each card shows the project's name, its progress ring and lead, the start of its description, the target
+  date and how many issues count.
+- The board has a column for each project status (Backlog, Planned, In progress, Paused, Completed, Canceled, and any
   your workspace adds in Settings › Statuses), with how many projects are in it. Drag a card to another column to change its status, or up
   and down to put it in order; the order is the same for everyone. **+** at the top of a column starts a project in
   that status. On a phone, press and hold a card to pick it up. With the keyboard, move to a card, press Space to pick

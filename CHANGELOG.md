@@ -4,6 +4,22 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.18.0: Choose what issues show
+*2026-10-21*
+
+- Display › Show on issues: switch the ID, priority, assignee, labels, project, due date, estimate, created day and progress on or off for each list or board
+- Issues can show their project, and board cards can show the day they were made
+- Change an issue's priority right from the list or board: click its priority icon
+- Long lists and boards respond faster: a change redraws only the issues it touches
+- On narrower lists, labels and the project make room for the title first
+
+## 2.17.0: Projects at a glance
+*2026-10-21*
+
+- Project cards show the start of the description and how many issues the project has
+- Progress is now a small ring next to the lead: point at it, tab to the project, or tap it on a phone to see how much is done and what is still open
+- The project list has an Issues column
+
 ## 2.16.0: Calmer text
 *2026-10-21*
 

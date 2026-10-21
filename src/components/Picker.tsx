@@ -3,7 +3,7 @@
  * filters as you type, works with the keyboard, and can offer "Create …" for what doesn't exist yet.
  * The open state can be controlled from outside, so keyboard shortcuts can open a picker too.
  */
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Check, Plus } from 'lucide-react'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
@@ -31,6 +31,19 @@ interface Common<V> {
   onOpenChange?: (open: boolean) => void
   /** the trigger is not a button of its own (it's wrapped) */
   asChild?: boolean
+  /** a click outside only closes the menu (it doesn't also reach what's under it) */
+  modal?: boolean
+  /**
+   * presses, touches and keys inside the menu stay in it: the menu is drawn elsewhere on the page but its events
+   * still pass through the trigger's parents (a row that can be dragged would start a drag)
+   */
+  isolate?: boolean
+  /**
+   * asked as the menu opens: true puts the focus on the list rather than the search box (on a touch screen, so no
+   * on-screen keyboard comes up; screen readers and a tablet's keyboard still land in the menu)
+   */
+  focusList?: () => boolean
+  onCloseAutoFocus?: (e: Event) => void
 }
 
 type Props<V> = Common<V> & ({ multiple?: false; value: V; onSelect: (v: V) => void } | { multiple: true; value: V[]; onSelect: (v: V[]) => void })
@@ -38,8 +51,11 @@ type Props<V> = Common<V> & ({ multiple?: false; value: V; onSelect: (v: V) => v
 /** an item's key: it keeps items apart in the menu, and is never searched (a hidden login) */
 const keyOf = (v: unknown) => JSON.stringify(v)
 
+const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
+
 export function Picker<V>(props: Props<V>) {
-  const { items, placeholder, children, onCreate, createLabel, align = 'start', asChild = true } = props
+  const { items, placeholder, children, onCreate, createLabel, align = 'start', asChild = true, modal, isolate, focusList, onCloseAutoFocus } = props
+  const list = useRef<HTMLDivElement>(null)
   const [ownOpen, setOwnOpen] = useState(false)
   const [query, setQuery] = useState('')
   const open = props.open ?? ownOpen
@@ -62,10 +78,21 @@ export function Picker<V>(props: Props<V>) {
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal={modal}>
       <PopoverTrigger asChild={asChild}>{children}</PopoverTrigger>
-      <PopoverContent align={align} className="w-64 p-0" onClick={(e) => e.stopPropagation()}>
-        <Command shouldFilter={false}>
+      <PopoverContent
+        align={align}
+        className="w-64 p-0"
+        onClick={(e) => e.stopPropagation()}
+        {...(isolate && { onPointerDown: stop, onMouseDown: stop, onTouchStart: stop, onKeyDown: stop })}
+        onOpenAutoFocus={(e) => {
+          if (!focusList?.()) return
+          e.preventDefault()
+          list.current?.focus()
+        }}
+        onCloseAutoFocus={onCloseAutoFocus}
+      >
+        <Command shouldFilter={false} ref={list} tabIndex={-1} className="outline-none">
           <CommandInput placeholder={placeholder} value={query} onValueChange={setQuery} />
           <CommandList>
             <CommandEmpty>{onCreate ? 'Nothing yet. Type a name to create it.' : 'Nothing found.'}</CommandEmpty>

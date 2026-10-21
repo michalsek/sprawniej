@@ -5,14 +5,13 @@
  * move it, Space drops it and Esc puts it back. A column is a droppable with the id `columnDropId(key)`; a card is a
  * sortable with its own id.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   closestCenter,
   getFirstCollision,
   KeyboardSensor,
   MouseSensor,
   pointerWithin,
-  rectIntersection,
   TouchSensor,
   useSensor,
   useSensors,
@@ -73,21 +72,64 @@ export function arrowTarget(o: {
   return undefined
 }
 
+interface Box {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/**
+ * The column a dragged card covers the most of (by area, not by share: a long column isn't worse than a short one),
+ * undefined when it covers none. Only columns count, never cards, so moving the card between columns can't change
+ * the answer: the columns stay where they are, or (stacked groups in a list) grow around the card.
+ */
+export function mostCovered<Id>(columns: readonly { id: Id; rect: Box }[], card: Box): Id | undefined {
+  let best: Id | undefined
+  let most = 0
+  for (const { id, rect } of columns) {
+    const w = Math.min(rect.left + rect.width, card.left + card.width) - Math.max(rect.left, card.left)
+    const h = Math.min(rect.top + rect.height, card.top + card.height) - Math.max(rect.top, card.top)
+    const area = w > 0 && h > 0 ? w * h : 0
+    if (area > most) [best, most] = [id, area]
+  }
+  return best
+}
+
 /** the card nearest in height to `top` (a card moved sideways lands next to it), undefined in an empty column */
 export function nearestCard(cards: readonly { id: string; top: number }[], top: number): string | undefined {
   return [...cards].sort((a, b) => Math.abs(a.top - top) - Math.abs(b.top - top))[0]?.id
 }
 
-/** mouse, touch (press and hold; a quick swipe still scrolls) and keyboard (Space; Enter still opens the card) */
+const MOUSE = { activationConstraint: { distance: 6 } }
+const TOUCH = { activationConstraint: { delay: 250, tolerance: 8 } }
+const KEYS = { start: ['Space'], cancel: ['Escape'], end: ['Space'] }
+
+/**
+ * mouse, touch (press and hold; a quick swipe still scrolls) and keyboard (Space; Enter still opens the card). The
+ * options stay the same objects from one render to the next, so dnd-kit keeps the rows' listeners and memoised rows
+ * aren't drawn again.
+ */
 function useBoardSensors(coordinateGetter: KeyboardCoordinateGetter) {
-  return useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter,
-      keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space'] },
-    }),
-  )
+  const keyboard = useMemo(() => ({ coordinateGetter, keyboardCodes: KEYS }), [coordinateGetter])
+  return useSensors(useSensor(MouseSensor, MOUSE), useSensor(TouchSensor, TOUCH), useSensor(KeyboardSensor, keyboard))
+}
+
+/**
+ * The new order, keeping each column's list from `prev` when it holds the same ids: a column whose issues didn't
+ * change keeps the very same list, so dnd-kit (and the rows in it) see nothing new. `prev` itself when nothing
+ * changed at all.
+ */
+export function keepSame(prev: ColumnOrder, next: ColumnOrder): ColumnOrder {
+  const out: ColumnOrder = {}
+  let same = Object.keys(prev).length === Object.keys(next).length
+  for (const [key, ids] of Object.entries(next)) {
+    const old = prev[key]
+    const kept = old && old.length === ids.length && old.every((id, i) => id === ids[i])
+    out[key] = kept ? old : ids
+    if (!kept) same = false
+  }
+  return same ? prev : out
 }
 
 /**
@@ -156,11 +198,22 @@ export function useColumnsDrag(base: ColumnOrder, closed: ReadonlySet<string>) {
   )
   const sensors = useBoardSensors(coordinateGetter)
 
-  /** the pointer's column, then the closest card in it (dnd-kit's multiple-containers recipe) */
+  /**
+   * The pointer's column, then the closest card in it (dnd-kit's multiple-containers recipe). Without a pointer in
+   * one (the keyboard, or the pointer in a gap), the column the dragged card covers most. Never the card it overlaps
+   * most: moving the card to another column moves the cards in both, and with cards of different heights the best
+   * overlap could then be back in the first column, and so on forever (the board froze with "Maximum update depth").
+   * A column keeps its place when a card moves.
+   */
   const collisionDetection: CollisionDetection = useCallback((args) => {
-    const within = pointerWithin(args)
-    const hits = within.length ? within : rectIntersection(args)
-    let overId = getFirstCollision(hits, 'id')
+    let overId = getFirstCollision(pointerWithin(args), 'id')
+    if (overId == null && args.collisionRect) {
+      const columns = args.droppableContainers.flatMap((c) => {
+        const rect = isColumnId(c.id) ? args.droppableRects.get(c.id) : undefined
+        return rect ? [{ id: c.id, rect }] : []
+      })
+      overId = mostCovered(columns, args.collisionRect) ?? null
+    }
     if (overId != null) {
       if (isColumnId(overId)) {
         const ids = orderRef.current[columnKey(overId)] ?? []

@@ -24,6 +24,7 @@ scrollbars, the date picker) are light in Light and dark in Dark.
 | Main button | `primary` | near-black with white text | white with dark text |
 | Focus ring | `ring` | `#71717a` | `#8b8b93` |
 | Behind pictures | `picture-backdrop` | `#ffffff` | `#e4e4e7` |
+| A progress ring's track | `progress-track` | `#c0c0c5` | `#48484f` |
 
 The light page colour is also in `src/lib/theme.ts` (`THEME_COLORS`) and index.html's `theme-color`; change all three
 together (`tests/themeScript.test.ts` checks). `tests/contrast.test.ts` checks every text pair is 4.5:1 (Dark's red in
@@ -160,9 +161,53 @@ Two groups follow their box, not the text, so they stay when the text gets small
   chosen button); ← →, Home and End move along and choose, as in a group of radio buttons. ↑ ↓ stay the issue
   list's.
 - **Tabs that are pages** (Active / Backlog / All issues): separate outlined buttons (`src/components/Tabs.tsx`).
-- **Issue row**: priority, ID, status, title (with `code` in backticks), sub-issue counter, labels, assignee, date.
-- **Board card**: ID and assignee, then status and title, then priority, counter and labels. A project card: emoji,
-  name and lead, then the target date and the progress bar. An empty column says "Drop a project here".
+- **Issue row** (44 px): priority, ID, status, title (with `code` in backticks), progress (sub-issue and checklist
+  counters), then on the right the project and labels, estimate, due date, assignee and the day it was made. Display ›
+  Show on issues switches each of them (`propertiesOf` in `src/data/displays.ts`); status and title always show.
+  What fits goes by the row's own width (the row is a container), never the window's, so an open sidebar, a side
+  panel and a phone count alike. In the order they give way: the project and label chips (they only get the room the
+  title leaves; those that don't fit drop out whole from the end, a lone long one ends in "…"), the estimate (under
+  38.5rem, with the chips), progress (dropped whole, only when the title would otherwise get squeezed), then the ID
+  and the day it was made (under 23rem: phones). Under 30rem the gaps are smaller and the ID and date take only their
+  own width. The steps are set so the fixed parts leave the title at least 7rem (8rem from 30rem), counting a long ID,
+  a due date, an assignee and the date, and none sits close to a width common screens give a list (768 px with the
+  sidebar is about 24rem, 1280 px with the sidebar and a side panel about 36.5rem, both with or without a scroll bar),
+  so nothing comes and goes as a list starts scrolling. Sub-issues sit further in inside the row, so every row of a
+  list has the same width to fill. The project is a square-cornered chip like the due date (its emoji and name),
+  never a pill.
+- **Board card**: ID · created day and assignee (the line is left out when all three are off), then status and title,
+  then priority, due date, estimate, progress, project and labels (left out when empty).
+- **Project card**: emoji, name, progress ring and lead; the start of its description in quiet grey (two lines at
+  most, cut with an ellipsis, none when it has none); then the target date and how many issues count ("12 issues", "1
+  issue", "No issues"). An empty column says "Drop a project here".
+- **Controls inside a row or card** (the priority button): a small button whose hover is a light wash of the text
+  colour (`bg-foreground/10`, so it shows on a hovered row in both looks) and the focus ring, no colour but the
+  priority's own. It opens the same menu as on the issue page, anchored to it; a click on it never opens the issue, a
+  click outside only closes the menu, and the row stays one Tab stop (the button has `tabIndex -1`; `P` on the row
+  is the keyboard way). On touch screens its tap area is 32 px, inside the row's 44, and the menu opens with the
+  focus on its list, not the search box, so no on-screen keyboard comes up. Build new ones on `RowPicker`
+  (`src/features/issues/PriorityButton.tsx`): it makes the menu only on the first click, keeps the menu's presses and
+  keys from starting a drag, closes it when a question blocks the app, and puts the focus back on the row afterwards
+  (or the one in its place, if the row went). The drag copy and archived issues show the plain icon.
+- **Display › Show on issues**: a wrapping group of outlined toggles, one Tab stop (← → move along). One that is on
+  is filled with a light wash of the text colour, with a stronger edge and the text colour; one that is off is clear,
+  with quiet grey text.
+- **Progress ring** (`src/components/ProgressRing.tsx`, a project's in `src/features/projects/ProjectRing.tsx`): how
+  much of a project is done, 16 px, just left of the lead's picture on cards and list rows (at the end of the row when
+  there is no lead), and after the property chips on the project's page, next to "8 of 12 done". A `progress-track`
+  ring with a `status-done` arc that starts at the top; all done is a closed circle, none done yet is the track
+  alone, and nothing to count (no issues, or only canceled ones) is the track at half strength. No fill and no check
+  (those are the Done status), never a dashed ring (that is Backlog). A little done still shows a small arc, nearly
+  done still leaves a gap. The arc is a meaning colour, so it reads at 3:1 on the card, the page and a hovered row;
+  the track only has to be seen, at 1.5:1 on the same, so a ring with nothing done doesn't vanish. The arc on the
+  track is lower than 3:1: they differ in colour too, and the tooltip has the numbers (`tests/contrast.test.ts`). Its tooltip says it in words, a line each (text only, as status
+  icons don't read on the tooltip's dark surface): "66% done: 8 of 12 issues" (rounded down, never 0% once something
+  is done, never 100% until all is), what is still open by group, what is left out (canceled and duplicate issues)
+  and how many archived issues count. It opens on hover, when the card or row is reached with the keyboard (the ring
+  is not a Tab stop of its own there), and on a tap on the ring (which doesn't open the project); Esc closes it. A
+  screen reader hears the first line as part of the card or row. The words are in
+  `src/features/projects/progressText.ts`; the numbers come from one table for every project (`projectCountsIndex`,
+  read with `useProjectCounts`), so one issue changing redraws only the cards it touches.
 - **Filters**: each condition is a pill of joined segments (field, is / is not, values, ×), 32 px tall, like the
   chips. Several values show their icons and a count ("4 statuses"). Rows after the first start with a quiet "and" /
   "or" that switches its group (on a phone, on a short line of its own above the row, so pills keep the width); a

@@ -88,6 +88,16 @@ for (const [name, t] of Object.entries(themes)) {
       expect(failing(t, ['ring'], ['background', 'accent', 'sidebar', 'sidebar-accent', 'popover', 'muted'], 3)).toEqual([])
     })
 
+    test('a progress ring shows on cards, the page and list rows, hovered too', () => {
+      // a list row on hover: bg-accent/60 on the page
+      const backs = ['card', 'background', 'accent', over(t.accent, 0.6, t.background)]
+      // the done arc carries meaning: 3:1 on what is around it; the track only has to be seen: 1.5:1, so a ring with
+      // nothing done yet doesn't vanish (the arc on the track may be lower: the colours differ and the tooltip has
+      // the numbers)
+      expect(failing(t, ['status-done'], backs, 3)).toEqual([])
+      expect(failing(t, ['progress-track'], backs, 1.5)).toEqual([])
+    })
+
     test('the marks inside status and urgent icons show', () => {
       expect(failing(t, ['status-mark'], ['status-done', 'status-canceled'], 3)).toEqual([])
       expect(failing(t, ['urgent-mark'], ['urgent'], 3)).toEqual([])

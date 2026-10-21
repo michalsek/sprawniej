@@ -84,6 +84,19 @@ describe('views', () => {
   })
 })
 
+test('picking the priority an issue already has sends nothing', async () => {
+  const i = createIssue({ team: 'ENG', title: 'Urgent already', priority: 1 })
+  await w.settle()
+  const sent = w.since()
+  updateIssue(i.id, { priority: 1 })
+  await w.settle()
+  expect(sent()).toEqual([])
+  updateIssue(i.id, { priority: 4 })
+  await w.settle()
+  expect(sent().map((r) => r.kind === 'update' && r.fields)).toEqual([{ priority: 4 }])
+  expect(state().issues[i.id].priority).toBe(4)
+})
+
 test('deleting a project: its issues stay, without it, at once; one request', async () => {
   const p = createProject({ name: 'Launch', emoji: '🚀', teams: ['ENG'] })
   const i = createIssue({ team: 'ENG', title: 'Write the post', project: p.id })

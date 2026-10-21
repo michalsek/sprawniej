@@ -228,6 +228,9 @@ export const GROUPINGS = ['status', 'assignee', 'priority', 'project', 'none'] a
 export type Grouping = (typeof GROUPINGS)[number]
 export const ORDERINGS = ['manual', 'priority', 'due', 'updated', 'created'] as const
 export type Ordering = (typeof ORDERINGS)[number]
+/** what a list row or board card can show besides its status and title, each switched on or off under Display */
+export const DISPLAY_PROPERTIES = ['id', 'priority', 'assignee', 'labels', 'project', 'dueDate', 'estimate', 'created', 'progress'] as const
+export type DisplayProperty = (typeof DISPLAY_PROPERTIES)[number]
 
 /**
  * What a filter condition can look at. The first seven are also the keys of the simple, flat filters (see
@@ -332,6 +335,11 @@ export const displaySchema = z
     ordering: z.enum(ORDERINGS),
     showCompleted: z.boolean(),
     showSubIssues: z.boolean(),
+    /**
+     * only what a person turned on or off (yes or no per DISPLAY_PROPERTIES key); unknown keys and values come from a
+     * newer version and are kept as they are
+     */
+    properties: z.record(z.string(), z.unknown()).optional(),
   })
   .loose()
 export type Display = z.infer<typeof displaySchema>

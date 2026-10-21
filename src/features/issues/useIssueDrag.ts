@@ -3,14 +3,14 @@
  * the issue moves between groups on screen. On drop it gets one change: a new place among its neighbours, plus the
  * status, priority, assignee or project of the group it landed in. Picked issues move along with it.
  */
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { DragEndEvent, DragStartEvent } from '@dnd-kit/core'
 import { toast } from 'sonner'
 import { moveIssue, moveIssues } from '@/data/actions'
 import { changedOnly, groupPatch, neighbours } from '@/data/ordering'
 import { nestChildren, type Group } from '@/data/select'
 import type { Display, Issue } from '@/model/schema'
-import { columnKey, isColumnId, useColumnsDrag } from '@/features/board/columnsDrag'
+import { columnKey, isColumnId, keepSame, useColumnsDrag } from '@/features/board/columnsDrag'
 import { clearSelection, useSelection } from './selection'
 
 const ORDER_NAMES: Record<Display['ordering'], string> = { manual: 'manual', priority: 'priority', due: 'due date', updated: 'last update', created: 'creation date' }
@@ -26,7 +26,11 @@ function baseOrder(groups: Group[], nest: boolean): Record<string, string[]> {
  * which issues were dropped, so the page can keep showing them.
  */
 export function useIssueDrag(groups: Group[], display: Display, { nest = false, park = false, onDrop }: { nest?: boolean; park?: boolean; onDrop?: (ids: string[]) => void } = {}) {
-  const base = useMemo(() => baseOrder(groups, nest), [groups, nest])
+  // a group whose issues are the same keeps the same list (a change to one issue redraws only its own row)
+  const fresh = useMemo(() => baseOrder(groups, nest), [groups, nest])
+  const [kept, setKept] = useState(fresh)
+  const base = useMemo(() => keepSame(kept, fresh), [kept, fresh])
+  if (base !== kept) setKept(base)
   const parked = useMemo(() => new Set(park ? groups.filter((g) => g.issues.length === 0).map((g) => g.key) : []), [groups, park])
   const issues = useMemo(() => new Map(groups.flatMap((g) => g.issues.map((i) => [i.id, i] as const))), [groups])
   const cols = useColumnsDrag(base, parked)

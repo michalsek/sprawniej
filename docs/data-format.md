@@ -297,6 +297,12 @@ issues or more), `assignees` (`null` = no one), `subscribers` (people
 following the issue), `priorities`, `labels` (ids), `projects` (ids; `null` = none), `teams` (keys). Inside one filter
 any value matches; different filters must all match. `grouping`: `status`, `assignee`, `priority`, `project`, `none`.
 `ordering`: `manual`, `priority`, `due`, `updated`, `created`. `layout`: `list`, `board`.
+`properties` (optional): what rows and cards show, as yes or no per key: `id`, `priority`, `assignee`, `labels`,
+`project`, `dueDate`, `estimate`, `created`, `progress` (`{"project": true, "created": false}`). Only what someone
+switched is there; a key left out follows the layout's default (`PROPERTY_DEFAULTS` in `src/data/displays.ts`: all on
+but `project`, and on a board `created` off too), so a view without it looks as it always did. A switch writes the
+whole `properties` object, keeping keys this version doesn't know. The database doesn't check `display`, so this
+needed no migration.
 
 **Groups (`filters.tree`).** What the flat keys can't say (an "or", groups, "is not", Me, project status, dates,
 the same field twice) is kept in `tree`: a group `{"join": "and" | "or", "items": [...]}` whose items are conditions
