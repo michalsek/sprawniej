@@ -85,7 +85,7 @@ export function LabelsSettings() {
                 allowed={(v) => !labels.some((o) => o.id !== l.id && o.name.toLowerCase() === v.toLowerCase())}
                 label={`Name of ${l.name}`}
                 required
-                className="h-8 text-ui"
+                className="h-8 text-field"
               />
               <span className="w-24 shrink-0 text-right text-sm text-muted-foreground tabular-nums">{n === 1 ? '1 issue' : `${n} issues`}</span>
               <Button variant="ghost" size="icon-sm" className="text-muted-foreground [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100" aria-label={`Delete ${l.name}`} onClick={() => setDeleting(l)}>

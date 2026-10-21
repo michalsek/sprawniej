@@ -66,7 +66,10 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted }: CardProp
         </span>
       </div>
       <div className="flex items-start gap-2">
-        <IssueStatusIcon issue={issue} className="mt-[3px]" />
+        {/* one line of the title tall, so the icon sits in the middle of its first line */}
+        <span className="flex h-[1lh] shrink-0 items-center text-row-title">
+          <IssueStatusIcon issue={issue} />
+        </span>
         <span className="line-clamp-3 text-row-title">
           <TitleText title={issue.title} />
         </span>

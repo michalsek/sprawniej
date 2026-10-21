@@ -28,7 +28,7 @@ export function TeamsDialog({ open, onOpenChange }: { open: boolean; onOpenChang
           <ul className="flex flex-col gap-1">
             {others.map((t) => (
               <li key={t.key} className="flex items-center gap-3 rounded-lg border px-3 py-2">
-                <span className="text-lg">{t.emoji}</span>
+                <span className="text-emoji">{t.emoji}</span>
                 <span className="flex-1 font-medium">{t.name}</span>
                 <Button
                   variant="outline"

@@ -26,10 +26,10 @@ function ViewRow({ view, owner }: { view: View; owner?: Person }) {
   const [confirm, setConfirm] = useState(false)
   return (
     <div className="group flex items-center gap-4 rounded-md px-4 py-2 hover:bg-accent/60">
-      <EmojiPicker value={view.emoji} onChange={(emoji) => updateView(view.id, { emoji })} label={`Change the emoji of ${view.name}`} className="size-9 border-transparent text-lg hover:border-border" />
+      <EmojiPicker value={view.emoji} onChange={(emoji) => updateView(view.id, { emoji })} label={`Change the emoji of ${view.name}`} className="size-9 border-transparent text-emoji hover:border-border" />
       {renaming ? (
         <span className="min-w-0 flex-1 py-1">
-          <InlineText value={view.name} onSave={(name) => updateView(view.id, { name })} label="View name" required autoFocus onDone={() => setRenaming(false)} className="text-ui font-medium" />
+          <InlineText value={view.name} onSave={(name) => updateView(view.id, { name })} label="View name" required autoFocus onDone={() => setRenaming(false)} className="text-field font-medium" />
         </span>
       ) : (
         <Link href={`/view/${view.id}`} className="min-w-0 flex-1 py-1">

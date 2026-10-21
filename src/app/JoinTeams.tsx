@@ -64,7 +64,7 @@ export function JoinTeams() {
                     checked={on}
                     onChange={(e) => setPicked(e.target.checked ? [...picked, t.key] : picked.filter((k) => k !== t.key))}
                   />
-                  <span className="text-lg leading-none">{t.emoji}</span>
+                  <span className="text-emoji leading-none">{t.emoji}</span>
                   <span className="flex-1 font-medium">{t.name}</span>
                   <span className="text-sm text-muted-foreground">
                     {t.members.length} {t.members.length === 1 ? 'member' : 'members'}

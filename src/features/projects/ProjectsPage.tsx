@@ -36,10 +36,10 @@ function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; 
   const [confirm, setConfirm] = useState(false)
   return (
     <div className="group flex items-center gap-4 rounded-md px-4 py-1.5 text-ui hover:bg-accent/60">
-      <EmojiPicker value={p.emoji} onChange={(emoji) => updateProject(p.id, { emoji })} label={`Change the emoji of ${p.name}`} className="size-9 border-transparent text-lg hover:border-border" />
+      <EmojiPicker value={p.emoji} onChange={(emoji) => updateProject(p.id, { emoji })} label={`Change the emoji of ${p.name}`} className="size-9 border-transparent text-emoji hover:border-border" />
       {renaming ? (
         <span className="min-w-0 flex-1">
-          <InlineText value={p.name} onSave={(name) => updateProject(p.id, { name })} label="Project name" required autoFocus onDone={() => setRenaming(false)} className="font-medium" />
+          <InlineText value={p.name} onSave={(name) => updateProject(p.id, { name })} label="Project name" required autoFocus onDone={() => setRenaming(false)} className="text-field font-medium" />
         </span>
       ) : (
         <Link href={`/project/${p.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-1.5">

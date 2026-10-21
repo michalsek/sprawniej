@@ -44,7 +44,7 @@ export function PageHeader({ emoji, onEmoji, name, onName, description, onDescri
           </DropdownMenu>
         )}
       </div>
-      <InlineText value={description} onSave={onDescription} label="Description" placeholder="Add a description…" lines="many" className={`${editable} text-ui text-muted-foreground`} />
+      <InlineText value={description} onSave={onDescription} label="Description" placeholder="Add a description…" lines="many" className={`${editable} text-field text-muted-foreground`} />
       {children}
     </div>
   )

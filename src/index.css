@@ -165,8 +165,8 @@
 /*
  * The type scale: every text size in the app, in one place (docs/design.md, "Type"). Each one is a Tailwind class:
  * `--text-ui` is `text-ui`, with its line height in `--text-ui--line-height`. Change a size here and every screen
- * follows. Use these, never a size in pixels like `text-[15px]` (tests/typeScale.test.ts checks). A size added here also goes in TEXT_SIZES
- * (src/lib/utils.ts), so `cn` knows it is a size and not a colour.
+ * follows. Use these, never a size of its own like `text-[Npx]` (tests/typeScale.test.ts checks). A size added
+ * here also goes in TEXT_SIZES (src/lib/utils.ts), so `cn` knows it is a size and not a colour.
  */
 @theme {
   /* badges, counts, chips, tooltips, keyboard hints */
@@ -201,17 +201,42 @@
   /* a page's title (a view, a project, a settings page) */
   --text-page-title: 1.375rem; /* 22px */
   --text-page-title--line-height: 1.875rem;
-  /* initials in a picture-less avatar, by the avatar's size: size-4, size-5 (the usual), size-7 */
+  /*
+   * Initials in a picture-less avatar, by the avatar's size: size-4, size-5 (the usual), size-7, size-12. They
+   * follow the avatar, not the text, so they stay when the text gets smaller.
+   */
   --text-initials-sm: 0.4375rem; /* 7px */
   --text-initials-sm--line-height: 1;
   --text-initials: 0.5625rem; /* 9px */
   --text-initials--line-height: 1;
   --text-initials-md: 0.625rem; /* 10px */
   --text-initials-md--line-height: 1;
+  --text-initials-lg: 1rem; /* 16px */
+  --text-initials-lg--line-height: 1;
+  /* emoji: in the sidebar's rows, in team and project rows, in emoji buttons. Like initials, they follow their box */
+  --text-emoji-sm: 1rem; /* 16px */
+  --text-emoji-sm--line-height: 1.5rem;
+  --text-emoji: 1.125rem; /* 18px */
+  --text-emoji--line-height: 1.75rem;
+  --text-emoji-lg: 1.25rem; /* 20px */
+  --text-emoji-lg--line-height: 1.75rem;
   /*
-   * Tailwind's own text-base (16px) stays: a phone zooms into any field with smaller text, so inputs are text-base
-   * on phones (src/ui/input.tsx). text-lg and up are only for emoji.
+   * Tailwind's own 16px step stays as it is: a phone zooms into a field whose text is smaller, so shadcn's Input and
+   * Textarea use it on phones (src/ui/input.tsx). Our other fields use text-field, below.
    */
+}
+
+/*
+ * Text you type into (a name edited in place, a search box, the editor): 16px on phones, where smaller text makes the
+ * phone zoom in when the field is picked, and text-ui from md up.
+ */
+@utility text-field {
+  font-size: var(--text-base);
+  line-height: var(--text-base--line-height);
+  @variant md {
+    font-size: var(--text-ui);
+    line-height: var(--text-ui--line-height);
+  }
 }
 
 @layer base {
@@ -238,13 +263,14 @@
    */
   .prose-sprawniej {
     @apply text-prose text-foreground/90;
-    & h1 { @apply mb-4 text-[2em]/[1.2] font-semibold text-foreground; }
+    /* below an issue's title (text-issue-title), even the biggest heading in its description */
+    & h1 { @apply mb-4 text-[1.4em]/[1.3] font-semibold text-foreground; }
     & img { @apply my-3 max-h-[32rem] max-w-full rounded-lg border; background: var(--picture-backdrop); }
     & img.ProseMirror-selectednode, & .ProseMirror-selectednode > img { outline: 2px solid var(--ring); }
     /* a picture whose address hasn't arrived yet: a grey space where it will be */
     & img:not([src]) { @apply inline-block h-24 w-40 bg-muted; }
     & img[hidden] { @apply hidden; }
-    & h2 { @apply mt-10 mb-3 text-[1.25em]/[1.4] font-semibold text-foreground; }
+    & h2 { @apply mt-10 mb-3 text-[1.2em]/[1.4] font-semibold text-foreground; }
     & h3 { @apply mt-6 mb-2 text-[1.075em]/[1.5] font-semibold text-foreground; }
     & p { @apply my-3; }
     & ul { @apply my-3 list-disc pl-6; }
@@ -253,7 +279,7 @@
     & a { @apply text-foreground underline decoration-muted-foreground underline-offset-2 hover:decoration-foreground; }
     & strong { @apply font-semibold text-foreground; }
     & code { @apply rounded border bg-muted px-1 font-mono text-[0.85em]; }
-    & kbd { @apply rounded border px-1.5 py-0.5 font-sans text-xs; }
+    & kbd { @apply rounded border px-1.5 py-0.5 font-sans text-[0.8em]; }
     & blockquote { @apply my-4 border-l-2 pl-4 text-muted-foreground; }
     & table { @apply my-4 w-full text-left; }
     & th { @apply border-b py-2 pr-4 font-medium text-muted-foreground; }
@@ -281,13 +307,24 @@
   }
 
   .prose-sprawniej pre {
-    @apply my-4 overflow-x-auto rounded-lg border bg-muted/60 p-3 font-mono text-label;
+    @apply my-4 overflow-x-auto rounded-lg border bg-muted/60 p-3 font-mono text-label leading-relaxed;
     /* the block's own size, not the smaller one of code inside a line */
     & code { @apply border-0 bg-transparent p-0 text-[1em]; }
   }
 }
 
 /* ---------- the editor (src/editor) ---------- */
+/* typing on a phone: 16px, as in text-field, so the phone doesn't zoom in; reading views keep text-prose */
+.tiptap-editor,
+.editor-fallback {
+  @variant max-md {
+    font-size: var(--text-base);
+    /* the text is bigger here, so headings grow less, and the biggest stays under the issue's title */
+    & h1 { @apply text-[1.225em]; }
+    & h2 { @apply text-[1.125em]; }
+    & h3 { @apply text-[1.05em]; }
+  }
+}
 .tiptap-editor {
   min-height: inherit;
   & > :first-child { margin-top: 0; }

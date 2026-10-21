@@ -94,9 +94,9 @@ export function TeamMenu({ teamKey, className }: { teamKey: string; className?: 
           <DialogTitle>Edit team</DialogTitle>
           <DialogDescription>Changes save by themselves.</DialogDescription>
           <div className="flex items-center gap-3">
-            <EmojiPicker value={team.emoji} onChange={(emoji) => updateTeam(team.key, { emoji })} label={`Change the emoji of ${team.name}`} className="size-10 text-xl" />
+            <EmojiPicker value={team.emoji} onChange={(emoji) => updateTeam(team.key, { emoji })} label={`Change the emoji of ${team.name}`} className="size-10 text-emoji-lg" />
             <div className="min-w-0 flex-1 rounded-md border px-3 py-2">
-              <InlineText value={team.name} onSave={(name) => updateTeam(team.key, { name })} label="Team name" required className="font-medium" />
+              <InlineText value={team.name} onSave={(name) => updateTeam(team.key, { name })} label="Team name" required className="text-field font-medium" />
             </div>
           </div>
           <p className="text-sm text-muted-foreground">

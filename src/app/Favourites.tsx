@@ -52,7 +52,7 @@ function FavouriteRow({ id, first, last }: { id: string; first: boolean; last: b
         aria-current={active ? 'page' : undefined}
         className={cn(NAV_LINK, 'min-w-0 flex-1 touch-manipulation select-none [-webkit-touch-callout:none]', active && 'text-sidebar-foreground')}
       >
-        {thing.emoji ? <span className="w-[18px] text-center text-base leading-none">{thing.emoji}</span> : project ? <Box /> : <Layers />}
+        {thing.emoji ? <span className="w-[18px] text-center text-emoji-sm leading-none">{thing.emoji}</span> : project ? <Box /> : <Layers />}
         <span className="truncate">{thing.name}</span>
       </Link>
       <DropdownMenu>

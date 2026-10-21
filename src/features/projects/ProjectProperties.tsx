@@ -52,7 +52,7 @@ export function ProjectProperties({ value, onChange }: { value: Value; onChange:
             value={value.targetDate ?? ''}
             onChange={(e) => onChange({ targetDate: e.target.value || null })}
             onClick={(e) => e.currentTarget.showPicker?.()}
-            className="absolute inset-0 cursor-pointer opacity-0"
+            className="absolute inset-0 cursor-pointer text-field opacity-0"
           />
         </label>
         {value.targetDate && (

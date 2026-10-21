@@ -47,7 +47,7 @@ function ProjectCard({ project: p, issues, dragRef, dragProps, style, ghost, lif
       )}
     >
       <div className="flex items-start gap-2">
-        <span className="text-lg leading-6">{p.emoji}</span>
+        <span className="text-emoji leading-6">{p.emoji}</span>
         <span className="line-clamp-3 flex-1 font-medium leading-6">{p.name}</span>
         {p.lead && (
           <span className="mt-0.5">

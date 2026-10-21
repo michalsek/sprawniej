@@ -27,7 +27,7 @@ export function EmptyState({
       }
     >
       {icon && <div className={compact ? 'text-muted-foreground [&_svg]:size-6' : 'text-muted-foreground [&_svg]:size-8'}>{icon}</div>}
-      <Heading className={compact ? 'text-sm font-semibold' : 'text-base font-semibold'}>{title}</Heading>
+      <Heading className={compact ? 'text-sm font-semibold' : 'text-heading font-semibold'}>{title}</Heading>
       {children && <p className="text-sm text-muted-foreground">{children}</p>}
       {action}
     </div>

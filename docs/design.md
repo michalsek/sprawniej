@@ -93,32 +93,45 @@ with: Backlog, Paused and Canceled grey, Planned light grey, In progress yellow,
 
 Inter, 14 px for most text. Every size is a token in `src/index.css`, in the `@theme` block called "the type scale",
 and each token is a Tailwind class (`--text-ui` is `text-ui`, its line height `--text-ui--line-height`). To make text
-bigger or smaller, change the token there: every screen follows. Use a token, never a size in pixels like
-`text-[15px]`; `tests/typeScale.test.ts` stops one from coming in.
+bigger or smaller, change the token there: every screen follows. Use a token, never a size of its own
+(`text-[15px]`, `text-[length:…]`, `font-size: 13px`); `tests/typeScale.test.ts` stops one from coming in. Sizes in
+`em` are fine, for something sized from the text around it (code in a line, a key in the Help page).
 
 | Class | Size / line height | For |
 | --- | --- | --- |
 | `text-xs` | 11 / 16 px | badges, counts, chips, tooltips, keyboard hints |
 | `text-label` | 12 / 16 px | small grey labels (*Workspace* in the sidebar), the @handle, code blocks |
-| `text-sm` | 13 / 18 px | buttons, menus, quiet text (dates, property names) |
 | `text-ref` | 12.5 / 20 px | an issue's ID ("ENG-12") in a list row or on a board card, in quiet grey |
+| `text-sm` | 13 / 18 px | buttons, menus, toasts, quiet text (dates, property names) |
 | `text-row-title` | 13.5 / 20 px | an issue's title in a list row or on a board card |
 | `text-ui` | 14 / 20 px | most text: the sidebar, breadcrumbs, lists, settings (and the page's own size) |
 | `text-prose` | 14 px, 1.625 | descriptions, comments, the Help page (`.prose-sprawniej`) |
-| `text-heading` | 17 / 24 px | dialog titles, settings sections, releases in What's new |
+| `text-field` | 16 / 24 px on phones, 14 / 20 px from `md` | text you type into: names edited in place, search boxes, the editor |
+| `text-heading` | 17 / 24 px | dialog titles, settings sections, releases in What's new, empty states |
 | `text-title` | 18 / 26 px | "Sprawniej" in the sidebar and on sign-in, Settings' title, a new issue's title |
 | `text-issue-title` | 20 / 28 px | an issue's title on its page |
 | `text-page-title` | 22 / 30 px | a page's title (a view, a project, a settings page) |
-| `text-initials-sm`, `text-initials`, `text-initials-md` | 7, 9, 10 px | initials in an avatar of `size-4`, `size-5`, `size-7` |
+
+Two groups follow their box, not the text, so they stay when the text gets smaller:
+
+| Class | Size | For |
+| --- | --- | --- |
+| `text-initials-sm`, `text-initials`, `text-initials-md`, `text-initials-lg` | 7, 9, 10, 16 px | initials in an avatar of `size-4`, `size-5` (the usual), `size-7`, `size-12` |
+| `text-emoji-sm`, `text-emoji`, `text-emoji-lg` | 16, 18, 20 px | emoji in sidebar rows, in team and project rows, in emoji buttons |
 
 - `text-xs` and `text-sm` are Tailwind's own steps, set one step smaller here, so shadcn components follow without
-  changes. A size of our own also goes in `TEXT_SIZES` (`src/lib/utils.ts`), or `cn` takes it for a colour and drops
-  the colour next to it; the test checks the two lists match.
-- Headings in descriptions and comments are sized in `em` from `text-prose` (2, 1.25 and 1.075 times; a
-  code block is `text-label`), so they follow it.
-- Tailwind's `text-base` stays 16 px, for fields on phones: a phone zooms into a field with smaller text, so shadcn's
-  `Input` and `Textarea` are `text-base` on phones and `text-sm` from `md` up. Keep that for new fields.
-- `text-lg` and bigger are only for emoji (in emoji buttons, team rows).
+  changes. Tailwind's bigger steps (`text-base`, `text-lg` and up) are not used, but for the one below. A size of our
+  own also goes in `TEXT_SIZES` (`src/lib/utils.ts`), or `cn` takes it for a colour and drops the colour next to it;
+  the test checks the two lists match.
+- **Fields are 16 px on phones.** A phone zooms in when you pick a field whose text is smaller. Our own fields use
+  `text-field` (an `@utility` under the scale: 16 px, then `text-ui` from `md`); the editor does the same under `md`,
+  and reading views keep `text-prose`. shadcn's `Input` and `Textarea` already are 16 px on phones (`text-base`) and
+  `text-sm` from `md`: to make one bigger, pass `md:text-ui`, never `text-ui`, which would make it small on phones too.
+  A field inside a pill can add `md:text-sm` after `text-field` to match the pill from `md` up.
+- Headings in descriptions and comments are sized in `em` from `text-prose` (1.4, 1.2 and 1.075 times), so they
+  follow it, and the biggest stays below an issue's title. In the editor on a phone, where the text is 16 px, they
+  are 1.225, 1.125 and 1.05 times, for the same reason. A code block is `text-label`.
+- Toasts take `text-sm` (their buttons `text-label`) through `toastOptions` in `src/ui/sonner.tsx`.
 - In a list the ID is quieter than the title: smaller and in `muted-foreground`.
 
 ## Spacing

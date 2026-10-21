@@ -26,6 +26,12 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--border-radius": "var(--radius)",
         } as React.CSSProperties
       }
+      // sizes from the type scale (src/index.css), set inline: sonner's own CSS would win over a class
+      toastOptions={{
+        style: { fontSize: "var(--text-sm)", lineHeight: "var(--text-sm--line-height)" },
+        actionButtonStyle: { fontSize: "var(--text-label)" },
+        cancelButtonStyle: { fontSize: "var(--text-label)" },
+      }}
       {...props}
     />
   )

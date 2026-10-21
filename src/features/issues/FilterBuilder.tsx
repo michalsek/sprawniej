@@ -561,7 +561,9 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
             aria-invalid={!typedOk || undefined}
             className={cn(
               segment,
-              'w-11 shrink-0 border-l bg-transparent text-center tabular-nums [appearance:textfield] aria-invalid:ring-2 aria-invalid:ring-destructive aria-invalid:ring-inset md:w-12 [&::-webkit-inner-spin-button]:appearance-none',
+              // the pill's size from md up, 16px on phones (text-field)
+              'w-11 shrink-0 border-l bg-transparent text-center text-field tabular-nums md:text-sm',
+              '[appearance:textfield] aria-invalid:ring-2 aria-invalid:ring-destructive aria-invalid:ring-inset md:w-12 [&::-webkit-inner-spin-button]:appearance-none',
             )}
           />
           <DropdownMenu modal={false}>

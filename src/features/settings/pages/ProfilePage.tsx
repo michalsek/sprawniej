@@ -48,7 +48,7 @@ export function ProfilePage() {
   return (
     <div className="flex flex-col gap-8">
       <div className="flex items-start gap-4">
-        <PersonAvatar person={me ?? undefined} className="size-12 text-base" />
+        <PersonAvatar person={me ?? undefined} className="size-12 text-initials-lg" />
         {/* remount when the name changes elsewhere (another tab) */}
         {me && <MyName key={me.name} me={me} />}
       </div>

@@ -9,7 +9,7 @@ export function EmojiPicker({ value, onChange, label = 'Choose an emoji', classN
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className={cn('flex size-10 shrink-0 items-center justify-center rounded-lg border text-xl hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', className)}
+        className={cn('flex size-10 shrink-0 items-center justify-center rounded-lg border text-emoji-lg hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', className)}
         aria-label={label}
       >
         {value}
@@ -41,7 +41,7 @@ export function EmojiPicker({ value, onChange, label = 'Choose an emoji', classN
                   </div>
                 ),
                 Emoji: ({ emoji, ...props }) => (
-                  <button className="flex size-8 items-center justify-center rounded-md text-lg data-[active]:bg-accent" {...props}>
+                  <button className="flex size-8 items-center justify-center rounded-md text-emoji data-[active]:bg-accent" {...props}>
                     {emoji.emoji}
                   </button>
                 ),

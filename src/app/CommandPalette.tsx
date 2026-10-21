@@ -144,7 +144,7 @@ function Palette() {
 
   return (
     <Command shouldFilter={false} loop className="[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-item]]:py-2.5 [&_[cmdk-item]_svg]:size-4">
-      <CommandInput placeholder="Search issues, or type a command…" value={query} onValueChange={setQuery} className="h-12 text-ui" />
+      <CommandInput placeholder="Search issues, or type a command…" value={query} onValueChange={setQuery} className="h-12 text-field" />
       <CommandList className="max-h-[min(60vh,28rem)]">
         <CommandEmpty>Nothing matches “{query.trim()}”.</CommandEmpty>
         {oldFirst && archivedGroup}

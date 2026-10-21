@@ -36,7 +36,7 @@ export function TeamsPage() {
               const mine = !!me && t.members.includes(me)
               return (
                 <li key={t.key} className="flex flex-wrap items-center gap-3 py-1.5" data-team={t.key}>
-                  <span className="w-8 text-center text-lg">{t.emoji}</span>
+                  <span className="w-8 text-center text-emoji">{t.emoji}</span>
                   <span className="min-w-0 flex-1">
                     <Link href={`/team/${t.key}/issues/active`} className="block truncate font-medium hover:underline">
                       {t.name}

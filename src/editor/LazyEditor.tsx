@@ -11,7 +11,7 @@ const Real = lazy(() => loadEditor().then((m) => ({ default: m.Editor })))
 
 export function Editor(props: ComponentProps<typeof RealEditor>) {
   return (
-    <Suspense fallback={<div className={cn('prose-sprawniej min-h-6 whitespace-pre-wrap text-muted-foreground', props.className)}>{props.value}</div>}>
+    <Suspense fallback={<div className={cn('prose-sprawniej editor-fallback min-h-6 whitespace-pre-wrap text-muted-foreground', props.className)}>{props.value}</div>}>
       <Real {...props} />
     </Suspense>
   )

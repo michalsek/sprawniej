@@ -62,7 +62,7 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
       style={{ paddingLeft: `${1 + depth * 2}rem`, ...style }}
     >
       <PriorityIcon priority={issue.priority} />
-      <span className="hidden min-w-[4.5rem] shrink-0 whitespace-nowrap text-ref text-muted-foreground tabular-nums sm:inline">{issueRef(issue)}</span>
+      <span className="hidden min-w-[5.75em] shrink-0 whitespace-nowrap text-ref text-muted-foreground tabular-nums sm:inline">{issueRef(issue)}</span>
       <IssueStatusIcon issue={issue} />
       <span className={cn('min-w-0 truncate text-row-title', closed && 'text-muted-foreground')}>
         <TitleText title={issue.title} />

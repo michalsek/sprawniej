@@ -341,12 +341,12 @@ export function ImportPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={guests.get(u.id)!}>
-                    <PersonAvatar login={guests.get(u.id)} className="size-5 text-initials" /> {linearName(u)} (hasn’t joined)
+                    <PersonAvatar login={guests.get(u.id)} /> {linearName(u)} (hasn’t joined)
                   </SelectItem>
                   <SelectItem value={NOBODY}>No one</SelectItem>
                   {here.map((p) => (
                     <SelectItem key={p.login} value={p.login}>
-                      <PersonAvatar person={p} className="size-5 text-initials" /> {p.name || handleOf(p)}
+                      <PersonAvatar person={p} /> {p.name || handleOf(p)}
                     </SelectItem>
                   ))}
                 </SelectContent>

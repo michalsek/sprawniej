@@ -26,7 +26,7 @@ function TeamGroup({ teamKey }: { teamKey: string }) {
     <div>
       <div className="group/team relative flex items-center rounded-lg hover:bg-sidebar-accent/60">
         <button type="button" onClick={() => setOpen((o) => !o)} className="flex h-9 min-w-0 flex-1 items-center gap-3 rounded-lg px-3 text-left text-ui text-sidebar-foreground/90">
-          <span className="w-[18px] text-center text-base leading-none">{team.emoji}</span>
+          <span className="w-[18px] text-center text-emoji-sm leading-none">{team.emoji}</span>
           <span className="truncate">{team.name}</span>
           <ChevronDown className={cn('ml-auto size-4 shrink-0 text-muted-foreground transition-transform', !open && '-rotate-90')} />
         </button>

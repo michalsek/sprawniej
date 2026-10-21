@@ -87,7 +87,7 @@ function ConnectDialog({ onDone }: { onDone: (repo?: string) => void }) {
             </label>
             <Input
               id="github-repo"
-              className="h-10 font-mono text-sm"
+              className="h-10 font-mono"
               placeholder="owner/name"
               autoFocus
               autoComplete="off"
