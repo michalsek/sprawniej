@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.13.0'
+export const APP_VERSION = '2.14.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,19 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.14.0',
+    date: '2026-10-21',
+    title: 'Combine filters with and / or',
+    notes: [
+      'Join filters with "and" or "or": click the word between two filters to switch it',
+      'Put filters in groups, up to three levels deep, for example (In Progress or In Review) and (Me or Urgent)',
+      'Any filter can say "is not", and Labels can say "don\'t include"',
+      'Filter by Me, so one view shows each person their own issues',
+      'Filter by the status of the issue\'s project',
+      'One short sentence above the list says what\'s filtered. Tap it to change the filters, on a phone too',
+    ],
+  },
   {
     version: '2.13.0',
     date: '2026-10-21',

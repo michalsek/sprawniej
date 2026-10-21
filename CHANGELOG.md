@@ -4,6 +4,16 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.14.0: Combine filters with and / or
+*2026-10-21*
+
+- Join filters with "and" or "or": click the word between two filters to switch it
+- Put filters in groups, up to three levels deep, for example (In Progress or In Review) and (Me or Urgent)
+- Any filter can say "is not", and Labels can say "don't include"
+- Filter by Me, so one view shows each person their own issues
+- Filter by the status of the issue's project
+- One short sentence above the list says what's filtered. Tap it to change the filters, on a phone too
+
 ## 2.13.0: A contact email teammates can see
 *2026-10-21*
 
