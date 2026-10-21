@@ -24,13 +24,11 @@ export const hasQuick = (q: QuickFilters): boolean => PANEL_FIELDS.some((f) => !
 /** picked or not */
 export const isPicked = (q: QuickFilters, field: PanelField, value: FilterValue): boolean => !!q[field]?.some((v) => valueKey(v) === valueKey(value))
 
-/** `value` picked if it wasn't, let go if it was; a field with nothing picked goes */
+/** one pick per tab, like radio buttons: `value` takes the place of what was picked there, or is let go if it was it */
 export function toggleQuick(q: QuickFilters, field: PanelField, value: FilterValue): QuickFilters {
-  const now = q[field] ?? []
-  const next = isPicked(q, field, value) ? now.filter((v) => valueKey(v) !== valueKey(value)) : [...now, value]
   const out: QuickFilters = { ...q }
-  if (next.length) out[field] = next
-  else delete out[field]
+  if (isPicked(q, field, value)) delete out[field]
+  else out[field] = [value]
   return out
 }
 

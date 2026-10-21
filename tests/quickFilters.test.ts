@@ -33,17 +33,18 @@ const all = () => true
 const count = (m: Map<string, number>, v: unknown) => m.get(valueKey(v)) ?? 0
 
 describe('toggleQuick', () => {
-  test('adds, removes, and drops a field with nothing left', () => {
-    let q: QuickFilters = {}
+  test('one pick per tab: another value takes its place, the same one lets go; other tabs stay', () => {
+    let q: QuickFilters = { labels: ['bug'] }
     q = toggleQuick(q, 'assignees', 'ania')
-    expect(q).toEqual({ assignees: ['ania'] })
+    expect(q).toEqual({ labels: ['bug'], assignees: ['ania'] })
     q = toggleQuick(q, 'assignees', null)
-    expect(q).toEqual({ assignees: ['ania', null] })
-    expect(isPicked(q, 'assignees', null)).toBe(true)
-    q = toggleQuick(q, 'assignees', 'ania')
-    q = toggleQuick(q, 'assignees', null)
+    expect(q).toEqual({ labels: ['bug'], assignees: [null] })
+    expect(isPicked(q, 'assignees', 'ania')).toBe(false)
+    q = toggleQuick(toggleQuick(q, 'assignees', null), 'labels', 'bug')
     expect(q).toEqual({})
     expect(hasQuick(q)).toBe(false)
+    // several kept from before (an older version) all go when one of them is clicked
+    expect(toggleQuick({ assignees: ['ania', 'ben'] }, 'assignees', 'ben')).toEqual({})
   })
   test('priority 0 and project null are values like any other', () => {
     const q = toggleQuick(toggleQuick({}, 'priorities', 0), 'projects', null)
