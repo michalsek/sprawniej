@@ -23,21 +23,9 @@ import { PickLogin } from './PickLogin'
 import { Problem, Step } from './Step'
 import { SignInForm, type Mode } from './Welcome'
 
-const pressedFor = (token: string) => {
-  try {
-    return sessionStore.getItem(JOINING_KEY) === token
-  } catch {
-    return false
-  }
-}
+const pressedFor = (token: string) => sessionStore.getItem(JOINING_KEY) === token
 
-function forget() {
-  try {
-    sessionStore.removeItem(JOINING_KEY)
-  } catch {
-    // nothing kept, nothing to forget
-  }
-}
+const forget = () => sessionStore.removeItem(JOINING_KEY)
 
 function GoHome({ title, children }: { title: string; children: string }) {
   const [, navigate] = useLocation()
@@ -254,11 +242,8 @@ function Join({ token, profile }: { token: string; profile: MyProfileState }) {
               <Button
                 size="lg"
                 onClick={() => {
-                  try {
-                    sessionStore.setItem(JOINING_KEY, token)
-                  } catch {
-                    // this tab only, then
-                  }
+                  // with storage blocked, only this screen remembers it (a trip to GitHub forgets it)
+                  sessionStore.setItem(JOINING_KEY, token)
                   setPressed(true)
                 }}
               >

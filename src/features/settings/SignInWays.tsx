@@ -54,13 +54,8 @@ export function SignInWays() {
   })
 
   useEffect(() => {
-    let adding: string | null = null
-    try {
-      adding = sessionStore.getItem(ADDING_KEY)
-      sessionStore.removeItem(ADDING_KEY)
-    } catch {
-      // nothing was being added
-    }
+    const adding = sessionStore.getItem(ADDING_KEY)
+    sessionStore.removeItem(ADDING_KEY)
     let stop = false
     waysToSignIn().then(
       (w) => {

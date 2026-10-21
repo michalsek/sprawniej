@@ -200,7 +200,8 @@ function onAuthEvent(event: AuthChangeEvent, session: AuthSession | null) {
       if (leaving) return
       // "Sign out" in another tab: the client tells every tab, and the mark says it was on purpose
       if (deliberate()) return startOver()
-      setUser(null, { lost: was.user !== null || was.lost })
+      // a problem from adding a way to sign in is old news by now (it would show again in "Please sign in again")
+      setUser(null, { lost: was.user !== null || was.lost, urlProblem: undefined })
       break
     case 'TOKEN_REFRESHED':
     case 'USER_UPDATED':

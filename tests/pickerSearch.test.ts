@@ -14,8 +14,8 @@ test('nothing typed: everything, in its own order', () => {
 
 test('the best match comes first, so Enter picks it, even when it was hidden a moment ago', () => {
   expect(labels(searchItems(people, 'dbt-rob'))).toEqual(['Bob Test'])
-  // typed on: Dee's handle is an exact match, and comes before Bob, who matches by name
   expect(labels(searchItems(people, 'bob'))).toEqual(['Bob Test', 'Dee'])
+  // typed on: Dee's handle is an exact match, and comes before Bob, who matches by name
   expect(labels(searchItems(people, 'dbt-bob'))[0]).toBe('Dee')
 })
 
