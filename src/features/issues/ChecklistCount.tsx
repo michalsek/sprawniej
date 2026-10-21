@@ -10,11 +10,12 @@ export function ChecklistCount({ description, className }: { description: string
   if (!count) return null
   const words = `${count.done} of ${count.total} checklist items done`
   return (
-    <span className={cn('inline-flex items-center gap-1 text-xs leading-5 text-muted-foreground tabular-nums', className)} title={words}>
+    <span className={cn('relative inline-flex items-center gap-1 text-xs leading-5 text-muted-foreground tabular-nums', className)} title={words}>
       <ListChecks className="size-3.5" aria-hidden />
       <span aria-hidden>
         {count.done}/{count.total}
       </span>
+      {/* inside this positioned box: on a card far down a long column it would otherwise stretch the whole page */}
       <span className="sr-only">{words}</span>
     </span>
   )

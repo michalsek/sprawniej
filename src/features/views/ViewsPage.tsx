@@ -93,7 +93,7 @@ export function ViewsPage() {
     )
   }
   return (
-    <div className="flex-1 overflow-y-auto px-4 md:px-8 pt-6">
+    <div className="relative flex-1 overflow-y-auto px-4 md:px-8 pt-6">
       <div className="mb-4 flex justify-end">{newButton}</div>
       <div className="flex h-10 items-center border-b px-4 text-sm text-muted-foreground">
         <span>Name</span>

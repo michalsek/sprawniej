@@ -135,7 +135,7 @@ function Column({ column, ids, projectOf, onAdd }: { column: ProjectColumn; ids:
         )}
       </header>
       <SortableContext id={status.id} items={ids} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+        <div className="relative flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
           {ids.map((id) => {
             const project = projectOf(id)
             return project && <SortableCard key={id} project={project} />
@@ -156,7 +156,7 @@ export function ProjectBoard({ projects, onAdd }: { projects: Project[]; onAdd?:
   const active = drag.activeId ? drag.project(drag.activeId) : undefined
   return (
     <DndContext {...drag.dnd} autoScroll={AUTO_SCROLL} accessibility={{ announcements: projectDragAnnouncements(all, columns, drag.order) }}>
-      <div className="flex h-full gap-4 overflow-x-auto pb-4" onClickCapture={(e) => drag.justDropped() && e.preventDefault()}>
+      <div className="relative flex h-full gap-4 overflow-x-auto pb-4" onClickCapture={(e) => drag.justDropped() && e.preventDefault()}>
         {columns.map((c) => (
           <Column key={c.status.id} column={c} ids={drag.order[c.status.id] ?? []} projectOf={drag.project} onAdd={onAdd} />
         ))}

@@ -67,7 +67,7 @@ export function ArchiveList({ team, left }: { team: string; left: React.ReactNod
             : 'This team keeps finished issues in its lists. You can archive any issue from its menu.'}
         </EmptyState>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-8">
+        <div className="relative min-h-0 flex-1 overflow-y-auto pb-8">
           {list.length === 0 && <p className="px-4 py-8 text-center text-sm text-muted-foreground">No archived issue matches “{query}”.</p>}
           <ul className="flex flex-col">
             {list.slice(0, shown).map((a) => (

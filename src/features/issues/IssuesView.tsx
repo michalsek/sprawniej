@@ -149,7 +149,7 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
   const issues = useMemo(
     () =>
       display.layout === 'list' ? (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-8" data-tour="issues">
+        <div className="relative min-h-0 flex-1 overflow-y-auto pb-8" data-tour="issues">
           <IssueList groups={groups} display={display} onAdd={addTo} fields={fields} />
         </div>
       ) : (

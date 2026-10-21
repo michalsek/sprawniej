@@ -137,7 +137,7 @@ function Column({ group, ids, issueOf, onAdd, fields }: { group: Group; ids: str
         )}
       </header>
       <SortableContext id={group.key} items={ids} strategy={verticalListSortingStrategy}>
-        <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
+        <div className="relative flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
           {ids.map((id) => {
             const issue = issueOf(id)
             return issue && <SortableCard key={id} issue={issue} fields={fields} />
@@ -170,7 +170,7 @@ function HiddenColumn({ group, onAdd }: { group: Group; onAdd?: (group: Group) =
 function HiddenColumns({ groups, onAdd }: { groups: Group[]; onAdd?: (group: Group) => void }) {
   const [open, setOpen] = useState(true)
   return (
-    <section className="flex w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2" aria-label="Hidden columns">
+    <section className="relative flex w-72 shrink-0 flex-col gap-2 overflow-y-auto pb-2" aria-label="Hidden columns">
       <button type="button" onClick={() => setOpen((o) => !o)} className="flex h-12 shrink-0 items-center gap-2 px-2 text-ui text-muted-foreground hover:text-foreground" aria-expanded={open}>
         <ChevronDown className={cn('size-4 transition-transform', !open && '-rotate-90')} />
         Hidden columns
@@ -201,7 +201,7 @@ export function IssueBoard({
   const parked = groups.filter((g) => drag.parked.has(g.key)).sort((a, b) => Number(!!a.outside) - Number(!!b.outside))
   return (
     <DndContext {...drag.dnd} autoScroll={AUTO_SCROLL} accessibility={{ announcements: dragAnnouncements(issues, groups, drag.order) }}>
-      <div className="flex h-full gap-4 overflow-x-auto pb-4" onClickCapture={(e) => drag.justDropped() && e.preventDefault()}>
+      <div className="relative flex h-full gap-4 overflow-x-auto pb-4" onClickCapture={(e) => drag.justDropped() && e.preventDefault()}>
         {groups
           .filter((g) => !drag.parked.has(g.key))
           .map((g) => (

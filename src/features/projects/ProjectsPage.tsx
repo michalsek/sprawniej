@@ -131,7 +131,7 @@ export function ProjectsPage() {
   const board = display.layout === 'board'
   const sorted = [...projects].sort((a, b) => a.name.localeCompare(b.name))
   return (
-    <div className={board ? 'flex min-h-0 flex-1 flex-col gap-4 px-4 pt-6 md:px-8' : 'flex-1 overflow-y-auto px-4 pt-6 md:px-8'}>
+    <div className={board ? 'flex min-h-0 flex-1 flex-col gap-4 px-4 pt-6 md:px-8' : 'relative flex-1 overflow-y-auto px-4 pt-6 md:px-8'}>
       <div className={cn('flex items-center justify-end gap-2', !board && 'mb-4')}>
         {newButton}
         <Segmented

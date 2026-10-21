@@ -150,7 +150,7 @@ export function InboxPage() {
         )}
       </div>
       {inbox.length ? (
-        <ol className="flex-1 overflow-y-auto px-4 py-3">
+        <ol className="relative flex-1 overflow-y-auto px-4 py-3">
           {inbox.map((n) => (
             <Note key={n.id} n={n} unread={isUnread(n, read)} />
           ))}
