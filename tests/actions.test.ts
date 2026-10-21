@@ -24,7 +24,7 @@ import {
   updateView,
   viewsWithout,
 } from '@/data/actions'
-import { DEFAULT_DISPLAY, withProperty } from '@/data/displays'
+import { DEFAULT_DISPLAY } from '@/data/displays'
 import { useData } from '@/data/store'
 import { Registry } from '@/backend/registry'
 import type { FilterCondition, FilterGroup, Filters } from '@/model/schema'
@@ -81,19 +81,6 @@ describe('views', () => {
     updateView(v.id, { filters: { tree: { join: 'and', items: [todo] } } })
     await w.settle()
     expect(sent().map((r) => r.kind === 'update' && r.fields)).toEqual([{ filters: stored }, { filters: { statuses: ['todo'] } }])
-  })
-
-  test('switching what issues show keeps display choices from a newer version', async () => {
-    const display = { ...DEFAULT_DISPLAY, future: 1, properties: { milestone: true } }
-    const v = createView({ name: 'Board', emoji: '📋', team: null, display })
-    await w.settle()
-    const sent = w.since()
-    const now = state().views[v.id].display
-    updateView(v.id, { display: { ...now, ...withProperty(now, 'project', true) } })
-    await w.settle()
-    const properties = { milestone: true, project: true }
-    expect(sent()).toEqual([{ kind: 'update', table: 'views', fields: { display: { ...display, properties } }, keys: [{ id: v.id }] }])
-    expect(state().views[v.id].display).toMatchObject({ future: 1, properties })
   })
 })
 

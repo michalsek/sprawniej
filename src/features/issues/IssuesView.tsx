@@ -9,12 +9,12 @@ import { Columns3, Layers, List, Plus, SearchX, SquareStack } from 'lucide-react
 import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
 import { Segmented } from '@/components/Segmented'
-import { propertiesOf, useDisplay } from '@/data/displays'
+import { fieldsFor, lockedFields, useDisplay, type Fields } from '@/data/displays'
 import { FLAT_FIELDS, countConditions, matcher, movesWithClock, presetFrom, treeOf, viewFilters } from '@/data/filterTree'
 import { useNow } from '@/lib/useNow'
 import { groupIssues, inTab } from '@/data/select'
 import { useData } from '@/data/store'
-import type { Display, DisplayProperty, FilterField, Filters } from '@/model/schema'
+import type { Display, FilterField, Filters } from '@/model/schema'
 import type { IssueTab } from '@/model/status'
 import { Button } from '@/ui/button'
 import { NewViewDialog } from '@/features/views/NewViewDialog'
@@ -103,8 +103,10 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
   const groups = useMemo(() => groupIssues(shown, display, { people, projects, statuses, team, keep: kept }, tab, board), [shown, display, people, projects, statuses, tab, board, team, kept])
   const visible = groups.reduce((n, g) => n + (g.outside ? 0 : g.issues.length), 0)
   // what rows and cards show; a project's page doesn't repeat its project on every issue
-  const locked: DisplayProperty[] = filters.projects?.length === 1 && filters.projects[0] ? ['project'] : []
-  const show = useMemo(() => ({ ...propertiesOf(display), ...(locked.length && { project: false }) }), [display, locked.length])
+  // (the same object while nothing in it changes: rows are memoised)
+  const locked = lockedFields(filters)
+  const fieldsKey = JSON.stringify(fieldsFor(display, locked))
+  const fields = useMemo(() => JSON.parse(fieldsKey) as Fields, [fieldsKey])
 
   /** every filter goes, except the ones the page decides; on a view (everyone's) there's a way back */
   const clear = () => {
@@ -207,11 +209,11 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
         )
       ) : display.layout === 'list' ? (
         <div className="min-h-0 flex-1 overflow-y-auto pb-8" data-tour="issues">
-          <IssueList groups={groups} display={display} onAdd={addTo} show={show} />
+          <IssueList groups={groups} display={display} onAdd={addTo} fields={fields} />
         </div>
       ) : (
         <div className="min-h-0 flex-1" data-tour="issues">
-          <IssueBoard groups={groups} display={display} onAdd={addTo} onDrop={keep} show={show} />
+          <IssueBoard groups={groups} display={display} onAdd={addTo} onDrop={keep} fields={fields} />
         </div>
       )}
       {saving && (

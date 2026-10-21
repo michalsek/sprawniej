@@ -335,8 +335,11 @@ export const displaySchema = z
     ordering: z.enum(ORDERINGS),
     showCompleted: z.boolean(),
     showSubIssues: z.boolean(),
-    /** only what a person turned on or off; unknown keys come from a newer version and are kept */
-    properties: z.record(z.string(), z.boolean()).optional(),
+    /**
+     * only what a person turned on or off (yes or no per DISPLAY_PROPERTIES key); unknown keys and values come from a
+     * newer version and are kept as they are
+     */
+    properties: z.record(z.string(), z.unknown()).optional(),
   })
   .loose()
 export type Display = z.infer<typeof displaySchema>

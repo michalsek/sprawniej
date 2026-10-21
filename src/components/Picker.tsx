@@ -3,7 +3,7 @@
  * filters as you type, works with the keyboard, and can offer "Create …" for what doesn't exist yet.
  * The open state can be controlled from outside, so keyboard shortcuts can open a picker too.
  */
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { Check, Plus } from 'lucide-react'
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/ui/command'
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
@@ -38,7 +38,11 @@ interface Common<V> {
    * still pass through the trigger's parents (a row that can be dragged would start a drag)
    */
   isolate?: boolean
-  onOpenAutoFocus?: (e: Event) => void
+  /**
+   * asked as the menu opens: true puts the focus on the list rather than the search box (on a touch screen, so no
+   * on-screen keyboard comes up; screen readers and a tablet's keyboard still land in the menu)
+   */
+  focusList?: () => boolean
   onCloseAutoFocus?: (e: Event) => void
 }
 
@@ -50,7 +54,8 @@ const keyOf = (v: unknown) => JSON.stringify(v)
 const stop = (e: { stopPropagation: () => void }) => e.stopPropagation()
 
 export function Picker<V>(props: Props<V>) {
-  const { items, placeholder, children, onCreate, createLabel, align = 'start', asChild = true, modal, isolate, onOpenAutoFocus, onCloseAutoFocus } = props
+  const { items, placeholder, children, onCreate, createLabel, align = 'start', asChild = true, modal, isolate, focusList, onCloseAutoFocus } = props
+  const list = useRef<HTMLDivElement>(null)
   const [ownOpen, setOwnOpen] = useState(false)
   const [query, setQuery] = useState('')
   const open = props.open ?? ownOpen
@@ -80,10 +85,14 @@ export function Picker<V>(props: Props<V>) {
         className="w-64 p-0"
         onClick={(e) => e.stopPropagation()}
         {...(isolate && { onPointerDown: stop, onMouseDown: stop, onTouchStart: stop, onKeyDown: stop })}
-        onOpenAutoFocus={onOpenAutoFocus}
+        onOpenAutoFocus={(e) => {
+          if (!focusList?.()) return
+          e.preventDefault()
+          list.current?.focus()
+        }}
         onCloseAutoFocus={onCloseAutoFocus}
       >
-        <Command shouldFilter={false}>
+        <Command shouldFilter={false} ref={list} tabIndex={-1} className="outline-none">
           <CommandInput placeholder={placeholder} value={query} onValueChange={setQuery} />
           <CommandList>
             <CommandEmpty>{onCreate ? 'Nothing yet. Type a name to create it.' : 'Nothing found.'}</CommandEmpty>

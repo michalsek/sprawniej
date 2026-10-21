@@ -162,25 +162,35 @@ Two groups follow their box, not the text, so they stay when the text gets small
 - **Tabs that are pages** (Active / Backlog / All issues): separate outlined buttons (`src/components/Tabs.tsx`).
 - **Issue row** (44 px): priority, ID, status, title (with `code` in backticks), progress (sub-issue and checklist
   counters), then on the right the project and labels, estimate, due date, assignee and the day it was made. Display ›
-  Show on issues switches each of them (`propertiesOf` in `src/data/displays.ts`); status and title always show. What
-  fits goes by the row's own width (a container query on the row, so an open sidebar or a narrow window count alike),
-  never the window's: the project and label chips only get the room the title leaves (those that don't fit drop out
-  whole from the end, a lone long one ends in "…"), then the day it was made (from 31rem), the ID (36rem) and the
-  estimate and chips (40rem) give way, so the title keeps 8rem from a 26rem row and 12rem from 44rem. A phone's row is
-  priority, status, title, progress, due date and assignee. The project is a square-cornered chip like the due date
-  (its emoji and name), never a pill.
+  Show on issues switches each of them (`propertiesOf` in `src/data/displays.ts`); status and title always show.
+  What fits goes by the row's own width (the row is a container), never the window's, so an open sidebar, a side
+  panel and a phone count alike. In the order they give way: the project and label chips (they only get the room the
+  title leaves; those that don't fit drop out whole from the end, a lone long one ends in "…"), the estimate (under
+  38.5rem, with the chips), progress (dropped whole, only when the title would otherwise get squeezed), then the ID
+  and the day it was made (under 23rem: phones). Under 30rem the gaps are smaller and the ID and date take only their
+  own width. The steps are set so the fixed parts leave the title at least 7rem (8rem from 30rem), counting a long ID,
+  a due date, an assignee and the date, and none sits close to a width common screens give a list (768 px with the
+  sidebar is about 24rem, 1280 px with the sidebar and a side panel about 36.5rem, both with or without a scroll bar),
+  so nothing comes and goes as a list starts scrolling. Sub-issues sit further in inside the row, so every row of a
+  list has the same width to fill. The project is a square-cornered chip like the due date (its emoji and name),
+  never a pill.
 - **Board card**: ID · created day and assignee (the line is left out when all three are off), then status and title,
   then priority, due date, estimate, progress, project and labels (left out when empty).
 - **Project card**: emoji, name, progress ring and lead; the start of its description in quiet grey (two lines at
   most, cut with an ellipsis, none when it has none); then the target date and how many issues count ("12 issues", "1
   issue", "No issues"). An empty column says "Drop a project here".
-- **Controls inside a row or card** (the priority button): a small button with a soft `accent` hover and the focus
-  ring, no colour but the priority's own. It opens the same menu as on the issue page, anchored to it; a click on it
-  never opens the issue, a click outside only closes the menu, and the row stays one Tab stop (the button has
-  `tabIndex -1`; `P` on the row is the keyboard way). On touch screens its tap area is 32 px, inside the row's 44.
-  Build new ones on `RowPicker` (`src/features/issues/PriorityButton.tsx`): it keeps the menu's presses and keys
-  from starting a drag and puts the focus back on the row afterwards. The drag copy and archived issues show the
-  plain icon.
+- **Controls inside a row or card** (the priority button): a small button whose hover is a light wash of the text
+  colour (`bg-foreground/10`, so it shows on a hovered row in both looks) and the focus ring, no colour but the
+  priority's own. It opens the same menu as on the issue page, anchored to it; a click on it never opens the issue, a
+  click outside only closes the menu, and the row stays one Tab stop (the button has `tabIndex -1`; `P` on the row
+  is the keyboard way). On touch screens its tap area is 32 px, inside the row's 44, and the menu opens with the
+  focus on its list, not the search box, so no on-screen keyboard comes up. Build new ones on `RowPicker`
+  (`src/features/issues/PriorityButton.tsx`): it makes the menu only on the first click, keeps the menu's presses and
+  keys from starting a drag, closes it when a question blocks the app, and puts the focus back on the row afterwards
+  (or the one in its place, if the row went). The drag copy and archived issues show the plain icon.
+- **Display › Show on issues**: a wrapping group of outlined toggles, one Tab stop (← → move along). One that is on
+  is filled with a light wash of the text colour, with a stronger edge and the text colour; one that is off is clear,
+  with quiet grey text.
 - **Progress ring** (`src/components/ProgressRing.tsx`, a project's in `src/features/projects/ProjectRing.tsx`): how
   much of a project is done, 16 px, just left of the lead's picture on cards and list rows (at the end of the row when
   there is no lead), and after the property chips on the project's page, next to "8 of 12 done". A `progress-track`

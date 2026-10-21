@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { arrowTarget, columnBeside, mostCovered, nearestCard } from '@/features/board/columnsDrag'
+import { arrowTarget, columnBeside, keepSame, mostCovered, nearestCard } from '@/features/board/columnsDrag'
 import { dropMove, type Drop } from '@/features/projects/drop'
 
 const drop = (more: Partial<Drop>): Drop => ({ id: 'p', from: 'planned', to: 'planned', ids: ['a', 'p', 'b'], was: 1, over: 'planned', closed: new Set(['on-hold']), ...more })
@@ -78,4 +78,15 @@ describe('the column a card is over, without a pointer in one', () => {
     // it leaves Done for Todo: Todo grows by a row and Done moves down, so it is even more in Todo
     expect(mostCovered([{ id: 'todo', rect: { left: 0, top: 0, width: 300, height: 244 } }, { id: 'done', rect: { left: 0, top: 244, width: 300, height: 156 } }], rect)).toBe('todo')
   })
+})
+
+test('a column whose issues are the same keeps its very list, so its cards aren’t drawn again', () => {
+  const prev = { todo: ['a', 'b'], done: ['c'] }
+  const next = keepSame(prev, { todo: ['a', 'b'], done: ['c', 'd'] })
+  expect(next.todo).toBe(prev.todo)
+  expect(next.done).toEqual(['c', 'd'])
+  expect(keepSame(prev, { todo: ['a', 'b'], done: ['c'] })).toBe(prev)
+  // a column gone or new is a change
+  expect(keepSame(prev, { todo: ['a', 'b'] })).not.toBe(prev)
+  expect(keepSame(prev, { ...prev, later: [] })).not.toBe(prev)
 })

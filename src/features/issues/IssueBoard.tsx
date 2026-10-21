@@ -3,16 +3,15 @@
  * including statuses this page leaves out (Done on the Active tab), wait under "Hidden columns" at the end; drop a
  * card on one and it becomes a column with that card in it.
  */
-import { useState, type CSSProperties, type HTMLAttributes, type Ref } from 'react'
+import { memo, useState, type CSSProperties, type HTMLAttributes, type Ref } from 'react'
 import { Link } from 'wouter'
 import { ChevronDown, Plus } from 'lucide-react'
 import { DndContext, DragOverlay, useDroppable } from '@dnd-kit/core'
-import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { PersonAvatar } from '@/components/Avatar'
 import { LabelChip } from '@/components/LabelChip'
 import { ProjectChip } from '@/components/ProjectChip'
-import { PROPERTY_DEFAULTS, type Shown } from '@/data/displays'
+import { PROPERTY_DEFAULTS, type Fields } from '@/data/displays'
 import { isClosed, type Group } from '@/data/select'
 import { issueRef, useData } from '@/data/store'
 import type { Display, Issue } from '@/model/schema'
@@ -30,7 +29,7 @@ import { AUTO_SCROLL, columnDropId } from '@/features/board/columnsDrag'
 import { useIssueDrag } from './useIssueDrag'
 import { shortDate } from './format'
 import { PriorityButton } from './PriorityButton'
-import { ROW_CONTROL, useDragRefs } from './rowControls'
+import { ROW_CONTROL, useSortableRow } from './rowControls'
 
 interface CardProps {
   issue: Issue
@@ -40,10 +39,11 @@ interface CardProps {
   ghost?: boolean
   lifted?: boolean
   /** what the card shows besides status and title (the page's Display) */
-  show?: Shown
+  fields?: Fields
 }
 
-function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted, show = PROPERTY_DEFAULTS.board }: CardProps) {
+/** memoised: a board of thousands draws again only the cards whose issue (or what they show) changed */
+const IssueCard = memo(function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted, fields = PROPERTY_DEFAULTS.board }: CardProps) {
   const assignee = useData((s) => (issue.assignee ? s.people[issue.assignee] : undefined))
   const labels = useData((s) => s.labels)
   const picked = useSelection((s) => s.ids.includes(issue.id))
@@ -59,7 +59,7 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted, show = PRO
       // capture: the link itself leaves ⌘/Shift-clicks to the browser (new tab), before an onClick would run
       onClickCapture={(e) => selectionClick(e, issue.id)}
       // a click on the priority button (or another control on the card) only works that control
-      onClick={(e) => (e.target as HTMLElement).closest(ROW_CONTROL) && e.preventDefault()}
+      onClick={(e) => (e.target as Element).closest(ROW_CONTROL) && e.preventDefault()}
       style={style}
       className={cn(
         'flex flex-col gap-2 rounded-lg border bg-card p-3 text-ui shadow-xs hover:border-ring/60 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
@@ -68,14 +68,14 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted, show = PRO
         lifted && 'cursor-grabbing rotate-1 shadow-lg',
       )}
     >
-      {(show.id || show.created || show.assignee) && (
+      {(fields.id || fields.created || fields.assignee) && (
         <div className="flex items-center gap-2 text-ref text-muted-foreground">
           <span className="tabular-nums">
-            {show.id && issueRef(issue)}
-            {show.id && show.created && ' · '}
-            {show.created && <span title={`Created ${shortDate(issue.createdAt)}`}>{shortDate(issue.createdAt)}</span>}
+            {fields.id && issueRef(issue)}
+            {fields.id && fields.created && ' · '}
+            {fields.created && <span title={`Created ${shortDate(issue.createdAt)}`}>{shortDate(issue.createdAt)}</span>}
           </span>
-          {show.assignee && (
+          {fields.assignee && (
             <span className="ml-auto">
               <PersonAvatar person={assignee} login={issue.assignee} />
             </span>
@@ -93,7 +93,7 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted, show = PRO
       </div>
       {/* left out when there's nothing to show on it */}
       <div className="flex flex-wrap items-center gap-2 empty:hidden">
-        {show.priority &&
+        {fields.priority &&
           (lifted ? (
             <span className="inline-flex h-6 items-center rounded-md border px-1.5">
               <PriorityIcon priority={issue.priority} />
@@ -101,39 +101,28 @@ function IssueCard({ issue, dragRef, dragProps, style, ghost, lifted, show = PRO
           ) : (
             <PriorityButton issue={issue} look="card" />
           ))}
-        {show.dueDate && issue.dueDate && <DueChip day={issue.dueDate} closed={isClosed(issue)} />}
-        {show.estimate && issue.estimate != null && <EstimateChip points={issue.estimate} />}
-        {show.progress && (
+        {fields.dueDate && issue.dueDate && <DueChip day={issue.dueDate} closed={isClosed(issue)} />}
+        {fields.estimate && issue.estimate != null && <EstimateChip points={issue.estimate} />}
+        {fields.progress && (
           <>
             <SubIssueCount id={issue.id} />
             <ChecklistCount description={issue.description} />
           </>
         )}
-        {show.project && <ProjectChip id={issue.project} className="max-w-full" />}
-        {show.labels && issue.labels.map((id) => labels[id] && <LabelChip key={id} label={labels[id]} className="min-w-0 max-w-40" />)}
+        {fields.project && <ProjectChip id={issue.project} className="max-w-full" />}
+        {fields.labels && issue.labels.map((id) => labels[id] && <LabelChip key={id} label={labels[id]} className="min-w-0 max-w-40" />)}
       </div>
     </Link>
   )
-}
+})
 
-function SortableCard({ issue, show }: { issue: Issue; show: Shown }) {
-  const { attributes, listeners, setNodeRef, setActivatorNodeRef, transform, transition, isDragging } = useSortable({ id: issue.id })
-  const ref = useDragRefs(setNodeRef, setActivatorNodeRef)
-  return (
-    <IssueCard
-      issue={issue}
-      show={show}
-      dragRef={ref}
-      dragProps={{ ...attributes, role: undefined, ...listeners }}
-      style={{ transform: CSS.Translate.toString(transform), transition }}
-      ghost={isDragging}
-    />
-  )
-}
+const SortableCard = memo(function SortableCard({ issue, fields }: { issue: Issue; fields: Fields }) {
+  return <IssueCard issue={issue} fields={fields} {...useSortableRow(issue.id)} />
+})
 
 const iconButton = 'rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground'
 
-function Column({ group, ids, issueOf, onAdd, show }: { group: Group; ids: string[]; issueOf: (id: string) => Issue | undefined; onAdd?: (group: Group) => void; show: Shown }) {
+function Column({ group, ids, issueOf, onAdd, fields }: { group: Group; ids: string[]; issueOf: (id: string) => Issue | undefined; onAdd?: (group: Group) => void; fields: Fields }) {
   const { setNodeRef, isOver } = useDroppable({ id: columnDropId(group.key) })
   return (
     <section ref={setNodeRef} className={cn('flex w-[21rem] shrink-0 flex-col rounded-xl bg-accent/30 transition-colors', isOver && 'bg-accent/50')}>
@@ -151,7 +140,7 @@ function Column({ group, ids, issueOf, onAdd, show }: { group: Group; ids: strin
         <div className="flex flex-1 flex-col gap-2 overflow-y-auto px-2 pb-2">
           {ids.map((id) => {
             const issue = issueOf(id)
-            return issue && <SortableCard key={id} issue={issue} show={show} />
+            return issue && <SortableCard key={id} issue={issue} fields={fields} />
           })}
         </div>
       </SortableContext>
@@ -197,13 +186,13 @@ export function IssueBoard({
   display,
   onAdd,
   onDrop,
-  show,
+  fields,
 }: {
   groups: Group[]
   display: Display
   onAdd?: (group: Group) => void
   onDrop?: (ids: string[]) => void
-  show: Shown
+  fields: Fields
 }) {
   const drag = useIssueDrag(groups, display, { park: true, onDrop })
   const active = drag.activeId ? drag.issue(drag.activeId) : undefined
@@ -216,14 +205,14 @@ export function IssueBoard({
         {groups
           .filter((g) => !drag.parked.has(g.key))
           .map((g) => (
-            <Column key={g.key} group={g} ids={drag.order[g.key] ?? []} issueOf={drag.issue} onAdd={onAdd} show={show} />
+            <Column key={g.key} group={g} ids={drag.order[g.key] ?? []} issueOf={drag.issue} onAdd={onAdd} fields={fields} />
           ))}
         {parked.length > 0 && <HiddenColumns groups={parked} onAdd={onAdd} />}
       </div>
       <DragOverlay>
         {active && (
           <div className="relative">
-            <IssueCard issue={active} lifted show={show} />
+            <IssueCard issue={active} lifted fields={fields} />
             <CarryCount />
           </div>
         )}

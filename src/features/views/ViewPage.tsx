@@ -12,6 +12,7 @@ import { ConfirmDialog } from '@/components/ConfirmDialog'
 import { FavouriteButton } from '@/components/FavouriteButton'
 import { PageHeader } from '@/components/PageHeader'
 import { deleteView, updateView } from '@/data/actions'
+import { changedDisplay } from '@/data/displays'
 import { useData } from '@/data/store'
 import { IssuesView } from '@/features/issues/IssuesView'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/ui/dropdown-menu'
@@ -42,7 +43,7 @@ export function ViewPage() {
           filters: view.filters,
           display: view.display,
           onFilters: (filters) => updateView(view.id, { filters }),
-          onDisplay: (patch) => updateView(view.id, { display: { ...view.display, ...patch } }),
+          onDisplay: (patch) => updateView(view.id, { display: changedDisplay(view.display, patch) }),
         }}
         header={
           <PageHeader

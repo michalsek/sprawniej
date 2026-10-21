@@ -114,12 +114,12 @@ export function DisplayOptions({ display, onChange, onReset, tab, locked = [] }:
             }}
           >
             {offered.map((k) => (
-              <ToggleGroupItem key={k} value={k} title={PROPERTY_HINTS[k]} className="font-normal data-[state=off]:text-muted-foreground">
+              <ToggleGroupItem key={k} value={k} title={PROPERTY_HINTS[k]} className="font-normal data-[state=off]:text-muted-foreground data-[state=on]:border-foreground/40 data-[state=on]:bg-foreground/10 data-[state=on]:text-foreground">
                 {PROPERTY_NAMES[k]}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-          <div className="text-xs text-muted-foreground md:hidden">Labels, project and estimate show on wider screens and on the board.</div>
+          <div className="text-xs text-muted-foreground">On narrow lists some of these make room for the title; the board shows them all.</div>
         </div>
         <div className="border-t" />
         {canShowCompleted && (

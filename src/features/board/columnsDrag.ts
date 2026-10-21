@@ -5,7 +5,7 @@
  * move it, Space drops it and Esc puts it back. A column is a droppable with the id `columnDropId(key)`; a card is a
  * sortable with its own id.
  */
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   closestCenter,
   getFirstCollision,
@@ -101,16 +101,35 @@ export function nearestCard(cards: readonly { id: string; top: number }[], top: 
   return [...cards].sort((a, b) => Math.abs(a.top - top) - Math.abs(b.top - top))[0]?.id
 }
 
-/** mouse, touch (press and hold; a quick swipe still scrolls) and keyboard (Space; Enter still opens the card) */
+const MOUSE = { activationConstraint: { distance: 6 } }
+const TOUCH = { activationConstraint: { delay: 250, tolerance: 8 } }
+const KEYS = { start: ['Space'], cancel: ['Escape'], end: ['Space'] }
+
+/**
+ * mouse, touch (press and hold; a quick swipe still scrolls) and keyboard (Space; Enter still opens the card). The
+ * options stay the same objects from one render to the next, so dnd-kit keeps the rows' listeners and memoised rows
+ * aren't drawn again.
+ */
 function useBoardSensors(coordinateGetter: KeyboardCoordinateGetter) {
-  return useSensors(
-    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter,
-      keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space'] },
-    }),
-  )
+  const keyboard = useMemo(() => ({ coordinateGetter, keyboardCodes: KEYS }), [coordinateGetter])
+  return useSensors(useSensor(MouseSensor, MOUSE), useSensor(TouchSensor, TOUCH), useSensor(KeyboardSensor, keyboard))
+}
+
+/**
+ * The new order, keeping each column's list from `prev` when it holds the same ids: a column whose issues didn't
+ * change keeps the very same list, so dnd-kit (and the rows in it) see nothing new. `prev` itself when nothing
+ * changed at all.
+ */
+export function keepSame(prev: ColumnOrder, next: ColumnOrder): ColumnOrder {
+  const out: ColumnOrder = {}
+  let same = Object.keys(prev).length === Object.keys(next).length
+  for (const [key, ids] of Object.entries(next)) {
+    const old = prev[key]
+    const kept = old && old.length === ids.length && old.every((id, i) => id === ids[i])
+    out[key] = kept ? old : ids
+    if (!kept) same = false
+  }
+  return same ? prev : out
 }
 
 /**
