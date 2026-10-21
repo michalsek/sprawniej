@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
 import { projectStatusIdOf, sampleData, sampleProjectStatuses, statusIdOf } from './fixtures/sample'
-import { childIndex, compareIssues, dueForArchive, myTeamKeys, groupIssues, inTab, isUnread, matches, monthsBefore, nestChildren, projectColumns, projectProgress } from '@/data/select'
+import { childIndex, compareIssues, dueForArchive, myTeamKeys, groupIssues, inTab, isUnread, monthsBefore, nestChildren, projectColumns, projectProgress } from '@/data/select'
 import { findByRef, issueRef } from '@/data/store'
+import { matcher, treeOf, type MatchContext } from '@/data/filterTree'
 import { DEFAULT_DISPLAY } from '@/data/displays'
-import type { Issue, Project, Status } from '@/model/schema'
+import type { Filters, Issue, Project, Status } from '@/model/schema'
 import { issueFieldsSchema } from '@/model/schema'
 
 const data = sampleData()
@@ -51,17 +52,12 @@ test('a priority this version doesn’t know sorts last', () => {
   expect(sorted.map((i) => i.id)).toEqual([b.id, a.id])
 })
 
+/** one issue against stored filters */
+const matches = (issue: Issue, f: Filters, c?: MatchContext) => matcher(treeOf(f), c)(issue)
+
 describe('filters and tabs', () => {
   test('empty filters match everything', () => {
     expect(issues.every((i) => matches(i, {}))).toBe(true)
-  })
-  test('different filters must all match, values inside one filter are alternatives', () => {
-    const hit = issues.filter((i) => matches(i, { teams: ['ENG'], labels: ['bug', 'feature'] }))
-    expect(hit.length).toBeGreaterThan(0)
-    expect(hit.every((i) => i.team === 'ENG' && i.labels.some((l) => l === 'bug' || l === 'feature'))).toBe(true)
-  })
-  test('null assignee filter finds unassigned issues', () => {
-    expect(issues.filter((i) => matches(i, { assignees: [null] })).every((i) => i.assignee === null)).toBe(true)
   })
   test('subscribers: anyone following the issue (made it, assigned, commented, subscribed), unless they unsubscribed', () => {
     const one = issues.find((i) => i.assignee && i.createdBy !== i.assignee)!

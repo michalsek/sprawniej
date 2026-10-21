@@ -60,6 +60,7 @@ import { endKey, isFavourite, kindOf, placeAt, visibleFavourites } from './favou
 import { cleanHandle, HANDLE_WORDS, handleProblem } from './handles'
 import { commentNotes, followLists, followers, issueNotes, type Note } from './notify'
 import { tickItem } from './checklist'
+import { normalise, storedFilters, treeOf, treeWithout } from './filterTree'
 import { changedOnly, keyBetween, keysBetween, lastKey } from './ordering'
 import { isAdmin, isUnread, ownerCount, projectOrder } from './select'
 import { canHide, pickProjectStatus, pickStatus, statusesOf, statusNamed, statusOfProject } from './statuses'
@@ -657,17 +658,19 @@ export function updateLabel(id: string, patch: Partial<Pick<Label, 'name' | 'col
 
 /**
  * A label, project or team that's gone comes out of saved views' filters where others are left ("Bug or Design"
- * becomes "Design"). Where it was the only one, it stays: the view keeps showing nothing rather than suddenly showing
- * every issue, and its filter says the one it was about was deleted. `skip`: views being deleted anyway.
+ * becomes "Design"), in groups too. Where it was the only one, it stays: the view keeps showing nothing rather than
+ * suddenly showing every issue, and its filter says the one it was about was deleted. `skip`: views being deleted
+ * anyway.
  */
 export function viewsWithout(views: Record<string, View>, field: 'labels' | 'projects' | 'teams', id: string, skip: ReadonlySet<string> = new Set()): AnyChange[] {
   const out: AnyChange[] = []
   for (const v of Object.values(views)) {
     if (skip.has(v.id)) continue
-    const list = v.filters[field] as (string | null)[] | undefined
-    if (!list?.includes(id)) continue
-    const rest = list.filter((x) => x !== id)
-    if (rest.length) out.push(upd('views', { id: v.id }, { filters: toJson({ ...v.filters, [field]: rest }) }))
+    const tree = treeOf(v.filters)
+    const rest = treeWithout(tree, field, id)
+    if (rest === tree) continue
+    const filters = storedFilters(v.filters, normalise(rest))
+    if (!equal(filters, v.filters)) out.push(upd('views', { id: v.id }, { filters: toJson(filters) }))
   }
   return out
 }
@@ -761,8 +764,8 @@ export interface NewView {
   display: Display
 }
 
-/** empty filter lists are left out, so a view says only what it filters by */
-const cleanFilters = (f: Filters): Filters => Object.fromEntries(Object.entries(f).filter(([, v]) => !Array.isArray(v) || v.length > 0))
+/** empty filters are left out, so a view says only what it filters by, in the simplest shape that says it */
+const cleanFilters = (f: Filters): Filters => storedFilters(f, normalise(treeOf(f)))
 
 export function createView(input: NewView): View {
   const c = context()

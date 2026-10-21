@@ -27,6 +27,7 @@ import {
 import { DEFAULT_DISPLAY } from '@/data/displays'
 import { useData } from '@/data/store'
 import { Registry } from '@/backend/registry'
+import type { FilterCondition, FilterGroup, Filters } from '@/model/schema'
 import { profileIdOf, seed, teamIdOf, type World } from './support/fakeBackend'
 
 let w: World
@@ -63,6 +64,23 @@ describe('views', () => {
     await w.settle()
     expect(sent()).toEqual([{ kind: 'update', table: 'views', fields: { filters: { labels: ['l1'] } }, keys: [{ id: v.id }] }])
     expect(state().views[v.id].filters).toEqual({ labels: ['l1'] })
+  })
+
+  test('groups are saved as the tree plus a flat copy for older versions; back to simple, as flat keys only', async () => {
+    const v = createView({ name: 'Mine', emoji: '🙋', team: null, filters: { statuses: ['todo'] }, display: DEFAULT_DISPLAY })
+    await w.settle()
+    // an empty condition and a group of one, as the builder's draft may have them
+    const todo: FilterCondition = { field: 'statuses', op: 'is', values: ['todo'] }
+    const me: FilterCondition = { field: 'assignees', op: 'is', values: ['@me'] }
+    const tree: FilterGroup = { join: 'and', items: [todo, { field: 'labels', op: 'is', values: [] }, { join: 'or', items: [me] }] }
+    const stored: Filters = { statuses: ['todo'], tree: { join: 'and', items: [todo, me] } }
+    const sent = w.since()
+    updateView(v.id, { filters: { tree } })
+    expect(state().views[v.id].filters).toEqual(stored)
+    await w.settle()
+    updateView(v.id, { filters: { tree: { join: 'and', items: [todo] } } })
+    await w.settle()
+    expect(sent().map((r) => r.kind === 'update' && r.fields)).toEqual([{ filters: stored }, { filters: { statuses: ['todo'] } }])
   })
 })
 
@@ -251,6 +269,14 @@ describe('the rows behind an issue', () => {
     const view = (id: string, teams: string[]) => ({ id, name: id, emoji: '', description: '', owner: 'ana', team: null, filters: { teams, statuses: ['todo'] }, display: DEFAULT_DISPLAY, createdAt: '' }) as never
     const views = { a: view('a', ['ENG', 'DES']), b: view('b', ['DES']), c: view('c', ['DES', 'OPS']) }
     expect(viewsWithout(views, 'teams', 'DES', new Set(['c']))).toEqual([{ table: 'views', key: { id: 'a' }, op: 'update', fields: { filters: { teams: ['ENG'], statuses: ['todo'] } } }])
+  })
+
+  test('viewsWithout: inside groups too, and the flat copy follows', () => {
+    const grouped = { join: 'or', items: [{ field: 'labels', op: 'is', values: ['bug', 'gone'] }, { field: 'labels', op: 'not', values: ['gone'] }] }
+    const v = { id: 'g', name: 'g', emoji: '', description: '', owner: 'ana', team: null, filters: { labels: ['gone'], tree: grouped }, display: DEFAULT_DISPLAY, createdAt: '' } as never
+    expect(viewsWithout({ g: v }, 'labels', 'gone')).toEqual([
+      { table: 'views', key: { id: 'g' }, op: 'update', fields: { filters: { tree: { join: 'or', items: [{ field: 'labels', op: 'is', values: ['bug'] }, grouped.items[1]] } } } },
+    ])
   })
 })
 

@@ -2,34 +2,9 @@
  * Pure helpers that turn the store into what a list or board shows: filter, sort, group. No React, no store
  * access, so they are easy to test (tests/select.test.ts).
  */
-import type { Comment, Display, Filters, InboxItem, Issue, Member, Ordering, Person, Project, ReadState, Status, Team } from '@/model/schema'
-import { followers } from './notify'
-import { issueStatuses, matchesStatus, projectStatuses, statusOfIssue, statusOfProject } from './statuses'
+import type { Display, InboxItem, Issue, Member, Ordering, Person, Project, ReadState, Status, Team } from '@/model/schema'
+import { issueStatuses, projectStatuses, statusOfIssue, statusOfProject } from './statuses'
 import { PRIORITY_NAMES, PRIORITY_ORDER, TAB_GROUPS, categoryOf, type IssueTab, type Priority } from '@/model/status'
-
-/**
- * For the Subscribers filter: who follows an issue depends on its comments and on who is in the workspace. For the
- * Status filter: which category each status belongs to (without them, only the categories count).
- */
-export interface MatchContext {
-  comments: Record<string, Comment[]>
-  people: Record<string, Person>
-  statuses?: Record<string, Status>
-}
-
-export function matches(issue: Issue, f: Filters, ctx?: MatchContext): boolean {
-  if (f.teams?.length && !f.teams.includes(issue.team)) return false
-  if (!matchesStatus(issue, f, ctx?.statuses ?? {})) return false
-  if (f.assignees?.length && !f.assignees.includes(issue.assignee)) return false
-  if (f.subscribers?.length && ctx) {
-    const following = followers(issue, ctx.comments[issue.id] ?? [], ctx.people)
-    if (!f.subscribers.some((l) => following.includes(l))) return false
-  }
-  if (f.priorities?.length && !f.priorities.includes(issue.priority)) return false
-  if (f.labels?.length && !issue.labels.some((l) => f.labels!.includes(l))) return false
-  if (f.projects?.length && !f.projects.includes(issue.project)) return false
-  return true
-}
 
 export function inTab(issue: Issue, tab: IssueTab): boolean {
   return TAB_GROUPS[tab].includes(categoryOf(issue.status).group)

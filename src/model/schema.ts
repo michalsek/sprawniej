@@ -228,6 +228,41 @@ export type Grouping = (typeof GROUPINGS)[number]
 export const ORDERINGS = ['manual', 'priority', 'due', 'updated', 'created'] as const
 export type Ordering = (typeof ORDERINGS)[number]
 
+/**
+ * What a filter condition can look at. The first seven are also the keys of the simple, flat filters (see
+ * src/data/filterTree.ts). Status values are status ids from src/model/status.ts, never a list of our own.
+ */
+export const FILTER_FIELDS = ['statuses', 'assignees', 'subscribers', 'priorities', 'labels', 'projects', 'teams', 'projectStatuses'] as const
+export type FilterField = (typeof FILTER_FIELDS)[number]
+export const isFilterField = (v: unknown): v is FilterField => (FILTER_FIELDS as readonly unknown[]).includes(v)
+
+/** "whoever is looking", in the assignee and subscribers filters: no handle can start with @ (LOGIN_PATTERN) */
+export const ME = '@me'
+
+/** one condition: `is` = any of the values, `not` = none of them. Another field or op comes from a newer version. */
+export const filterConditionSchema = z
+  .object({
+    field: z.string(),
+    op: z.enum(['is', 'not']),
+    values: z.array(z.union([z.string(), z.number(), z.null()])),
+  })
+  .loose()
+export type FilterCondition = z.infer<typeof filterConditionSchema>
+/** a status id, a login, a priority, a label or project id, null (no one, no project), or ME */
+export type FilterValue = FilterCondition['values'][number]
+
+/** conditions and groups joined by "and" (all must match) or "or" (one is enough) */
+export const filterGroupSchema = z
+  .object({
+    join: z.enum(['and', 'or']),
+    get items() {
+      return z.array(z.union([filterConditionSchema, filterGroupSchema]))
+    },
+  })
+  .loose()
+export type FilterGroup = z.infer<typeof filterGroupSchema>
+export type FilterNode = FilterGroup['items'][number]
+
 export const filtersSchema = z
   .object({
     teams: z.array(z.string()).optional(),
@@ -244,6 +279,11 @@ export const filtersSchema = z
     priorities: z.array(z.number().int()).optional(),
     labels: z.array(z.string()).optional(),
     projects: z.array(z.string().nullable()).optional(),
+    /**
+     * Filters the flat keys can't say (or, groups, "is not", Me, project status). When it's there it wins, and the
+     * flat keys are only a rougher copy for older versions of the app (src/data/filterTree.ts, `storedFilters`).
+     */
+    tree: filterGroupSchema.optional(),
   })
   .loose()
 export type Filters = z.infer<typeof filtersSchema>
