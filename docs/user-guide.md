@@ -401,7 +401,8 @@ Point at a team in the sidebar and press **⋯** to:
 ## Filters
 
 **Filter** (above every list) narrows it down. Pick what to look at (status, assignee, subscribers, priority, labels,
-project, project status or team), then pick the values. The list changes straight away, and there's nothing to save.
+project, project status or team), then pick the values. Or pick a date: when an issue was **Created**, last
+**Updated**, **Completed**, or its **Due date**. The list changes straight away, and there's nothing to save.
 A page leaves out what it already is: there's no Team filter on a team's own page (or a team's view), no Assignee
 filter on My issues and no Project or Project status filter on a project's page.
 
@@ -415,6 +416,17 @@ Each filter is a line like **Status | is | 2 statuses | ×**:
   "Assignee is not Ana" also shows issues nobody is assigned to, and "Labels don’t include Bug" also shows issues with
   no labels.
 - **×** removes the filter.
+
+A date filter reads like **Created | in the last | 7 | days | ×**. Click the second part to say something else:
+
+- **in the last…** or **more than… ago**: type a number and pick hours, days, weeks or months. "Completed in the
+  last 1 day" shows what was finished since this time yesterday.
+- **before…** or **after…** a day you pick on a calendar. "After Oct 1" starts on Oct 2.
+- **is empty** or **is set** (Completed and Due date): "Completed is empty" shows what isn't finished yet.
+- For a due date also **in the next…** ("Due date in the next 7 days", today included) and **is overdue** (due before
+  today, finished or not: add "Status is not Done" to leave finished ones out).
+
+"In the last 7 days" counts from when you open the list, so a view like that keeps up by itself.
 
 **Me** (at the top of the people) means whoever is looking. A view with "Assignee is Me" shows each teammate their own
 issues. **Subscribers** finds the issues someone follows: ones they made, are assigned to, commented on, were
@@ -439,7 +451,7 @@ sidebar to see them, and **New view** to make one. A view shows issues from the 
 
 A view belongs to everyone. Changing its name, emoji, description, filters, grouping or List / Board saves straight
 away, for everyone. Clearing a view's filters asks no questions, but shows **Undo** for a moment, in case it was a
-slip. A view keeps its groups and "is not" filters. Someone still on an older version of Sprawniej sees a simpler
+slip. A view keeps its groups, dates and "is not" filters. Someone still on an older version of Sprawniej sees a simpler
 version of them (sometimes a few more issues) until they update. In the list of views, click a view's emoji to change
 it, or use **⋯** to rename or delete it. On the view's own page, click its name or description to change them.
 Deleting a view leaves its issues as they are. Press the star (☆) on a view to keep it in your sidebar (see

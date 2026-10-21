@@ -255,12 +255,44 @@ export type FilterCondition = z.infer<typeof filterConditionSchema>
 /** a status category, a project status id, a login, a priority, a label or project id, null (no one, no project), or ME */
 export type FilterValue = FilterCondition['values'][number]
 
+/**
+ * What a date condition can look at: when an issue was created, last changed or finished, and its due day. These
+ * are not FILTER_FIELDS on purpose: a version from before date filters (2.14) reads such a condition as one from a
+ * newer version and leaves it out, so it shows more issues, never breaks.
+ */
+export const DATE_FIELDS = ['created', 'updated', 'completed', 'due'] as const
+export type DateField = (typeof DATE_FIELDS)[number]
+export const isDateField = (v: unknown): v is DateField => (DATE_FIELDS as readonly unknown[]).includes(v)
+
+/**
+ * What a date condition says: in the last `amount` `unit`s, more than that long ago, in the next (due dates), before
+ * or after a day (`date`), overdue (due before today), and is empty or is set.
+ */
+export const DATE_OPS = ['within', 'ago', 'next', 'overdue', 'before', 'after', 'empty', 'set'] as const
+export type DateOp = (typeof DATE_OPS)[number]
+export const DATE_UNITS = ['hours', 'days', 'weeks', 'months'] as const
+export type DateUnit = (typeof DATE_UNITS)[number]
+
+/** one date condition: "Completed in the last 1 day", "Due date before 2026-10-31", "Completed is empty" */
+export const dateConditionSchema = z
+  .object({
+    field: z.enum(DATE_FIELDS),
+    op: z.enum(DATE_OPS),
+    /** within, ago, next: how far from now (a whole number, 1 or more) */
+    amount: z.number().int().positive().optional(),
+    unit: z.enum(DATE_UNITS).optional(),
+    /** before, after: a day, "2026-10-31" */
+    date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  })
+  .loose()
+export type DateCondition = z.infer<typeof dateConditionSchema>
+
 /** conditions and groups joined by "and" (all must match) or "or" (one is enough) */
 export const filterGroupSchema = z
   .object({
     join: z.enum(['and', 'or']),
     get items() {
-      return z.array(z.union([filterConditionSchema, filterGroupSchema]))
+      return z.array(z.union([filterConditionSchema, dateConditionSchema, filterGroupSchema]))
     },
   })
   .loose()
@@ -284,7 +316,7 @@ export const filtersSchema = z
     labels: z.array(z.string()).optional(),
     projects: z.array(z.string().nullable()).optional(),
     /**
-     * Filters the flat keys can't say (or, groups, "is not", Me, project status). When it's there it wins, and the
+     * Filters the flat keys can't say (or, groups, "is not", Me, project status, dates). When it's there it wins, and the
      * flat keys are only a rougher copy for older versions of the app (src/data/filterTree.ts, `storedFilters`).
      */
     tree: filterGroupSchema.optional(),

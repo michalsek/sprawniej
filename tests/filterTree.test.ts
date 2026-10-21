@@ -21,8 +21,9 @@ import {
   type MatchContext,
 } from '@/data/filterTree'
 import { followers } from '@/data/notify'
+import { dateReady, isDateCondition, sayDate, withDateField, withDateOp } from '@/data/dateFilters'
 import { matchesStatus } from '@/data/statuses'
-import { ME, type FilterCondition, type FilterGroup, type FilterNode, type Filters, type Issue, type Status } from '@/model/schema'
+import { ME, isFilterField, type DateCondition, type FilterCondition, type FilterGroup, type FilterNode, type Filters, type Issue, type Status } from '@/model/schema'
 import { ISSUE_CATEGORIES } from '@/model/status'
 
 const data = sampleData()
@@ -169,7 +170,7 @@ describe('matcher', () => {
     const only = and({ ...is('statuses', 'in_progress'), statusIds: [statusIdOf('in_progress')] })
     expect(matcher(only, c)(testing)).toBe(false)
     expect(matcher(and(is('statuses', 'in_progress')), c)(testing)).toBe(true)
-    expect(matcher({ ...only, items: [{ ...only.items[0], op: 'not' }] }, c)(testing)).toBe(true)
+    expect(matcher({ ...only, items: [{ ...(only.items[0] as FilterCondition), op: 'not' }] }, c)(testing)).toBe(true)
     // stored flat, the refinement goes with it, and comes back
     const flat = storedFilters({}, only)
     expect(flat).toEqual({ statuses: ['in_progress'], statusIds: [statusIdOf('in_progress')] })
@@ -291,7 +292,7 @@ describe('edits', () => {
   test('counting and saying the filter', () => {
     const tree = and(is('statuses', 'todo'), is('labels'), or(is('assignees', ME), cycle))
     expect(countConditions(tree)).toBe(3)
-    expect(describeTree(tree, (c) => `${c.field} ${c.op} ${c.values.join('/')}`)).toBe('statuses is todo and labels is  and (assignees is @me or a filter from a newer version)')
+    expect(describeTree(tree, (c) => `${c.field} ${c.op} ${(c as FilterCondition).values.join('/')}`)).toBe('statuses is todo and labels is  and (assignees is @me or a filter from a newer version)')
   })
 })
 
@@ -437,5 +438,125 @@ describe('a teammate’s change while the builder is open', () => {
     expect(means(tree)).toEqual(means(deep))
     const depth = (n: FilterNode): number => (isGroup(n) ? 1 + Math.max(0, ...n.items.map(depth)) : 0)
     expect(depth(tree)).toBe(3)
+  })
+})
+
+describe('dates', () => {
+  // Wednesday Oct 21 2026, noon, in this computer's time zone
+  const now = new Date(2026, 9, 21, 12)
+  const at = (...a: [number, number, number, number?]) => new Date(...(a as [number, number, number, number])).toISOString()
+  const base = issues[0]
+  const issue = (o: Partial<Issue>): Issue => ({ ...base, completedAt: null, dueDate: null, ...o })
+  const date = (field: DateCondition['field'], op: DateCondition['op'], more: Partial<DateCondition> = {}): DateCondition => ({ field, op, ...more })
+  const fits = (c: FilterNode, i: Issue) => matcher(and(c), { ...ctx, now })(i)
+
+  test('times: in the last, more than … ago, before and after a day', () => {
+    const week = date('created', 'within', { amount: 7, unit: 'days' })
+    expect(fits(week, issue({ createdAt: at(2026, 9, 18) }))).toBe(true)
+    expect(fits(week, issue({ createdAt: at(2026, 9, 11) }))).toBe(false)
+    const old = date('created', 'ago', { amount: 7, unit: 'days' })
+    expect(fits(old, issue({ createdAt: at(2026, 9, 18) }))).toBe(false)
+    expect(fits(old, issue({ createdAt: at(2026, 9, 11) }))).toBe(true)
+    const hours = date('updated', 'within', { amount: 2, unit: 'hours' })
+    expect(fits(hours, issue({ updatedAt: at(2026, 9, 21, 11) }))).toBe(true)
+    expect(fits(hours, issue({ updatedAt: at(2026, 9, 21, 9) }))).toBe(false)
+    // a month back is Sep 21, a week two Oct 7
+    expect(fits(date('updated', 'within', { amount: 1, unit: 'months' }), issue({ updatedAt: at(2026, 8, 25) }))).toBe(true)
+    expect(fits(date('updated', 'within', { amount: 1, unit: 'months' }), issue({ updatedAt: at(2026, 8, 20) }))).toBe(false)
+    expect(fits(date('updated', 'within', { amount: 2, unit: 'weeks' }), issue({ updatedAt: at(2026, 9, 8) }))).toBe(true)
+    // days here: before Oct 1 ends when Oct 1 starts; after Oct 1 starts on Oct 2
+    expect(fits(date('updated', 'before', { date: '2026-10-01' }), issue({ updatedAt: at(2026, 8, 30, 23) }))).toBe(true)
+    expect(fits(date('updated', 'before', { date: '2026-10-01' }), issue({ updatedAt: at(2026, 9, 1, 1) }))).toBe(false)
+    expect(fits(date('updated', 'after', { date: '2026-10-01' }), issue({ updatedAt: at(2026, 9, 1, 23) }))).toBe(false)
+    expect(fits(date('updated', 'after', { date: '2026-10-01' }), issue({ updatedAt: at(2026, 9, 2, 0) }))).toBe(true)
+  })
+
+  test('finished: not yet is empty, and matches no time', () => {
+    const open = issue({ completedAt: null })
+    const done = issue({ completedAt: at(2026, 9, 20, 18) })
+    expect([fits(date('completed', 'empty'), open), fits(date('completed', 'empty'), done)]).toEqual([true, false])
+    expect([fits(date('completed', 'set'), open), fits(date('completed', 'set'), done)]).toEqual([false, true])
+    const day = date('completed', 'within', { amount: 1, unit: 'days' })
+    expect([fits(day, open), fits(day, done)]).toEqual([false, true])
+    expect(fits(date('completed', 'ago', { amount: 1, unit: 'days' }), open)).toBe(false)
+  })
+
+  test('due dates are days', () => {
+    const due = (dueDate: string | null) => issue({ dueDate })
+    const next = date('due', 'next', { amount: 7, unit: 'days' })
+    expect(['2026-10-20', '2026-10-21', '2026-10-28', '2026-10-29'].map((d) => fits(next, due(d)))).toEqual([false, true, true, false])
+    expect(fits(next, due(null))).toBe(false)
+    expect(['2026-10-20', '2026-10-21'].map((d) => fits(date('due', 'overdue'), due(d)))).toEqual([true, false])
+    const lately = date('due', 'within', { amount: 3, unit: 'days' })
+    expect(['2026-10-17', '2026-10-18', '2026-10-21', '2026-10-22'].map((d) => fits(lately, due(d)))).toEqual([false, true, true, false])
+    const ago = date('due', 'ago', { amount: 3, unit: 'days' })
+    expect(['2026-10-17', '2026-10-18'].map((d) => fits(ago, due(d)))).toEqual([true, false])
+    expect(fits(date('due', 'next', { amount: 1, unit: 'months' }), due('2026-11-21'))).toBe(true)
+    expect(['2026-10-20', '2026-10-21'].map((d) => fits(date('due', 'before', { date: '2026-10-21' }), due(d)))).toEqual([true, false])
+    expect(['2026-10-21', '2026-10-22'].map((d) => fits(date('due', 'after', { date: '2026-10-21' }), due(d)))).toEqual([false, true])
+    expect([fits(date('due', 'empty'), due(null)), fits(date('due', 'set'), due(null))]).toEqual([true, false])
+  })
+
+  test('with the other conditions, in groups; counted from the time of matching when no clock is given', () => {
+    const mine = issue({ assignee: 'ania-k', completedAt: at(2026, 9, 21, 9) })
+    const tree = and(is('assignees', ME), or(date('completed', 'within', { amount: 1, unit: 'days' }), date('due', 'overdue')))
+    expect(matcher(tree, { ...ctx, now })(mine)).toBe(true)
+    expect(matcher(tree, { ...ctx, now: new Date(2026, 9, 25) })(mine)).toBe(false)
+    expect(matcher(and(date('created', 'within', { amount: 1, unit: 'hours' })), ctx)(issue({ createdAt: new Date().toISOString() }))).toBe(true)
+  })
+
+  test('one with no amount or day yet is a draft line: left out, tidied away, not counted', () => {
+    const draft = date('created', 'within', { unit: 'days' })
+    const half = date('updated', 'before')
+    expect([dateReady(draft), dateReady(half), dateReady(date('due', 'overdue'))]).toEqual([false, false, true])
+    expect(dateReady(date('created', 'within', { amount: 1.5, unit: 'days' }))).toBe(false)
+    expect(ids(and(draft, half))).toEqual(ids(and()))
+    expect(normalise(and(draft, is('labels', 'bug')))).toEqual(and(is('labels', 'bug')))
+    expect(countConditions(and(draft, date('due', 'set'), is('labels')))).toBe(1)
+    // a teammate's change keeps your unfinished one
+    const { tree } = alignDraft(and(is('labels', 'bug'), draft), and(is('labels', 'bug'), is('teams', 'ENG')))
+    expect(tree.items).toContain(draft)
+  })
+
+  test('stored: only in the tree, the flat keys leave them out (older versions show more)', () => {
+    const day = date('completed', 'within', { amount: 1, unit: 'days' })
+    expect(storedFilters({}, and(day))).toEqual({ tree: and(day) })
+    expect(storedFilters({}, and(is('statuses', 'done'), day))).toEqual({ statuses: ['done'], tree: and(is('statuses', 'done'), day) })
+    expect(mirrorOf(and(is('labels', 'bug'), day))).toEqual({ labels: ['bug'] })
+    expect(toFlat(and(day))).toBeUndefined()
+    expect(treeOf(storedFilters({}, and(day)))).toEqual(and(day))
+  })
+
+  test('safe for older versions: they read a date as a filter from a newer version', () => {
+    const day = date('completed', 'within', { amount: 1, unit: 'days' })
+    // what 2.14 checks: a field it knows, "is" or "is not", and a list of values; a date has none of them
+    expect(isFilterField(day.field)).toBe(false)
+    expect('values' in day).toBe(false)
+    // so it does with it what this version does with one it can't read: leaves it out, keeps it, counts it
+    const newer = { field: 'due', op: 'between', from: 1, to: 3 } as unknown as FilterNode
+    expect(isDateCondition(newer)).toBe(false)
+    expect(ids(and(newer, is('labels', 'bug')))).toEqual(ids(and(is('labels', 'bug'))))
+    expect(normalise(and(newer, is('labels', 'bug'))).items).toContain(newer)
+    expect(countConditions(and(newer))).toBe(1)
+    expect(mirrorOf(and(newer, is('labels', 'bug')))).toEqual({ labels: ['bug'] })
+    expect(describeTree(and(newer), () => '')).toBe('a filter from a newer version')
+  })
+
+  test('in words', () => {
+    const say = (c: FilterNode) => (isDateCondition(c) ? sayDate(c) : 'x')
+    const tree = and(date('completed', 'within', { amount: 1, unit: 'days' }), or(date('due', 'overdue'), date('created', 'before', { date: '2026-10-01' })))
+    expect(describeTree(tree, say)).toBe('Completed in the last 1 day and (Due date is overdue or Created before 2026-10-01)')
+    expect(sayDate(date('updated', 'ago', { amount: 2, unit: 'weeks' }))).toBe('Updated more than 2 weeks ago')
+    expect(sayDate(date('due', 'next', { amount: 3, unit: 'days' }))).toBe('Due date in the next 3 days')
+    expect(sayDate(date('completed', 'empty'))).toBe('Completed is empty')
+  })
+
+  test('changing what it says or its field keeps what fits', () => {
+    const c = date('created', 'within', { amount: 3, unit: 'hours' })
+    expect(withDateOp(c, 'ago')).toMatchObject({ op: 'ago', amount: 3, unit: 'hours' })
+    expect(withDateOp(c, 'before')).toEqual({ field: 'created', op: 'before', amount: undefined, unit: undefined, date: undefined })
+    // a due date has no hours, and created has no "overdue"
+    expect(withDateField(c, 'due')).toMatchObject({ field: 'due', op: 'within', amount: 3, unit: 'days' })
+    expect(withDateField(date('due', 'overdue'), 'created')).toMatchObject({ field: 'created', op: 'within', amount: 7, unit: 'days' })
   })
 })

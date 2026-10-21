@@ -7,11 +7,16 @@
  * rougher copy for older versions: it may show them more issues, never fewer (`storedFilters`).
  *
  * A condition or group this version can't read (a newer one wrote it) is left out of matching, and kept as it is.
+ *
+ * Date conditions ("Created in the last 7 days", src/data/dateFilters.ts) have a shape of their own, with fields
+ * older versions don't know: those read them as a filter from a newer version and leave them out, so they show more
+ * issues, never fewer. The flat keys can't say them either, so `mirrorOf` leaves them out too.
  */
-import type { Comment, FilterCondition, FilterField, FilterGroup, FilterNode, FilterValue, Filters, Issue, Person, Project, Status } from '@/model/schema'
+import type { Comment, DateCondition, FilterCondition, FilterField, FilterGroup, FilterNode, FilterValue, Filters, Issue, Person, Project, Status } from '@/model/schema'
 import { ME, isFilterField } from '@/model/schema'
 import { equal } from '@/lib/equal'
 import { CATEGORIES, TAB_GROUPS, type IssueCategory, type IssueTab } from '@/model/status'
+import { dateReady, dateTest, isDateCondition } from './dateFilters'
 import { followers } from './notify'
 import { matchesStatus, statusOfProject } from './statuses'
 
@@ -28,6 +33,11 @@ const MANY: ReadonlySet<FilterField> = new Set(['labels', 'subscribers'])
 
 /** one value as a string, to compare values of any kind ("1" and 1 are different) */
 export const valueKey = (v: unknown) => JSON.stringify(v)
+
+export { isDateCondition }
+
+/** a condition this version can read: on values ("Status is Todo") or on a date ("Created in the last 7 days") */
+export type KnownCondition = (FilterCondition & { field: FilterField }) | DateCondition
 
 /** what the app calls a condition or group it can't read */
 export const NEWER_FILTER = 'a filter from a newer version'
@@ -153,14 +163,16 @@ function tidy(g: FilterGroup): FilterGroup {
       if (!values.length) continue
       const same = values.length === n.values.length && statusIds?.length === n.statusIds?.length
       items.push(same ? n : { ...n, values, ...(statusIds && { statusIds }) })
+    } else if (isDateCondition(n)) {
+      if (dateReady(n)) items.push(n)
     } else items.push(n)
   }
   return { ...g, items }
 }
 
-/** how many filters are set: conditions with values, and ones from a newer version */
+/** how many filters are set: conditions with values, finished date conditions, and ones from a newer version */
 export function countConditions(tree: FilterGroup): number {
-  return tree.items.reduce<number>((n, i) => n + (isGroup(i) ? countConditions(i) : !isCondition(i) || i.values.length ? 1 : 0), 0)
+  return tree.items.reduce<number>((n, i) => n + (isGroup(i) ? countConditions(i) : isPending(i) ? 0 : 1), 0)
 }
 
 /** what some fields need to know besides the issue */
@@ -174,6 +186,8 @@ export interface MatchContext {
   statuses?: Record<string, Status>
   /** your login, for Me */
   me?: string
+  /** the time "in the last 7 days" counts from (now, when it's left out) */
+  now?: Date
 }
 
 type Test = (issue: Issue) => boolean
@@ -183,15 +197,16 @@ type Test = (issue: Issue) => boolean
  * needs context that wasn't given is left out of its group; a group with nothing left is left out of its own.
  */
 export function matcher(tree: FilterGroup, ctx?: MatchContext): Test {
-  return compile(tree, ctx) ?? (() => true)
+  return compile(tree, ctx, ctx?.now ?? new Date()) ?? (() => true)
 }
 
-function compile(n: unknown, ctx?: MatchContext): Test | null {
+function compile(n: unknown, ctx: MatchContext | undefined, now: Date): Test | null {
   if (isGroup(n)) {
-    const tests = n.items.map((i) => compile(i, ctx)).filter((t): t is Test => !!t)
+    const tests = n.items.map((i) => compile(i, ctx, now)).filter((t): t is Test => !!t)
     if (tests.length <= 1) return tests[0] ?? null
     return n.join === 'and' ? (i) => tests.every((t) => t(i)) : (i) => tests.some((t) => t(i))
   }
+  if (isDateCondition(n)) return dateTest(n, now)
   if (!isCondition(n)) return null
   const values = n.values.flatMap((v) => (v !== ME ? [v] : ctx?.me ? [ctx.me] : []))
   const test = values.length ? fieldTest(n.field, new Set<unknown>(values), ctx, n.statusIds) : null
@@ -302,14 +317,18 @@ export function presetFrom(tree: FilterGroup, me?: string): Filters {
 }
 
 /** the whole filter as a sentence ("Status is Todo and (Assignee is Me or Labels include Bug)") */
-export function describeTree(tree: FilterGroup, say: (c: FilterCondition & { field: FilterField }) => string): string {
+export function describeTree(tree: FilterGroup, say: (c: KnownCondition) => string): string {
   return tree.items
-    .map((n) => (isGroup(n) ? `(${describeTree(n, say)})` : isCondition(n) ? say(n) : NEWER_FILTER))
+    .map((n) => (isGroup(n) ? `(${describeTree(n, say)})` : isCondition(n) || isDateCondition(n) ? say(n) : NEWER_FILTER))
     .join(` ${tree.join} `)
 }
 
-/** nothing to match yet: a condition with no values, or a group of such (only the builder's draft has them) */
-const isPending = (n: FilterNode): boolean => (isGroup(n) ? n.items.every(isPending) : isCondition(n) && !n.values.length)
+/**
+ * nothing to match yet: a condition with no values, a date condition with no amount or day yet, or a group of such
+ * (only the builder's draft has them)
+ */
+const isPending = (n: FilterNode): boolean =>
+  isGroup(n) ? n.items.every(isPending) : isCondition(n) ? !n.values.length : isDateCondition(n) && !dateReady(n)
 
 /** how deep the groups go: 1 = no groups inside */
 const depthOf = (g: FilterGroup): number => 1 + Math.max(0, ...g.items.filter(isGroup).map(depthOf))

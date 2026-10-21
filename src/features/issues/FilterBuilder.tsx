@@ -8,19 +8,22 @@
  * the draft (`alignDraft`): it shows at once, while your unfinished lines and open menus stay.
  */
 import { createContext, useContext, useRef, useState, type ReactNode, type RefObject } from 'react'
-import { Brackets, Check, Plus, X } from 'lucide-react'
+import { Brackets, Check, ChevronDown, Plus, X } from 'lucide-react'
 import { Picker } from '@/components/Picker'
-import { MAX_DEPTH, NEWER_FILTER, alignDraft, isCondition, isGroup, normalise, storedFilters, treeOf, withField } from '@/data/filterTree'
+import { MAX_DEPTH, NEWER_FILTER, alignDraft, isCondition, isDateCondition, isGroup, normalise, storedFilters, treeOf, withField } from '@/data/filterTree'
+import { OP_CHOICES, OP_WORDS, isRelative, newDateCondition, opsFor, unitsFor, withDateField, withDateOp } from '@/data/dateFilters'
 import { useData } from '@/data/store'
 import { equal } from '@/lib/equal'
 import { useNarrow } from '@/lib/useNarrow'
 import { cn } from '@/lib/utils'
-import type { FilterCondition, FilterField, FilterGroup, FilterNode, Filters, Status } from '@/model/schema'
+import type { DateCondition, DateField, DateUnit, FilterCondition, FilterField, FilterGroup, FilterNode, Filters, Status } from '@/model/schema'
+import { Calendar } from '@/ui/calendar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
-import { Popover, PopoverAnchor, PopoverContent } from '@/ui/popover'
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/ui/popover'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/ui/sheet'
 import { ValuesLabel } from './FilterBar'
-import { KINDS, kindOf, pickedOf, sayCondition, upperFirst, useFilterItems, withPicked, type FilterItems } from './filterKinds'
+import { DATE_KINDS, KINDS, dateKindOf, kindOf, pickedOf, sayCondition, upperFirst, useFilterItems, withPicked, type FilterItems } from './filterKinds'
+import { fromDay, shortDate, toDay } from './format'
 
 // Draft nodes are plain data; React keys come from here. An edit makes a new node, which takes over the old one's key.
 const keys = new WeakMap<object, string>()
@@ -221,6 +224,8 @@ function GroupRows({ group, depth, onGroup, onRemove }: { group: FilterGroup; de
               <NestedGroup group={n} depth={depth + 1} onGroup={(g) => setItem(at, g)} onRemove={() => remove(at)} />
             ) : isCondition(n) ? (
               <ConditionPill condition={n} onChange={(c) => setItem(at, c)} onRemove={() => remove(at)} />
+            ) : isDateCondition(n) ? (
+              <DatePill condition={n} onChange={(c) => setItem(at, c)} onRemove={() => remove(at)} />
             ) : (
               <UnknownPill onRemove={() => remove(at)} />
             )}
@@ -290,6 +295,12 @@ function AddMenu({ group, depth, onGroup }: { group: FilterGroup; depth: number;
     add(c)
     next.current = () => setPickerFor(keyOf(c))
   }
+  // a date starts as something useful ("in the last 7 days"), and the focus goes to what it says
+  const addDate = (field: DateField) => {
+    const c = newDateCondition(field)
+    add(c)
+    next.current = () => focus(`[data-row="${keyOf(c)}"] [data-op]`)
+  }
   const addGroup = () => {
     // a group inside an "and" is most useful as an "or", and the other way round
     const g: FilterGroup = { join: group.join === 'and' ? 'or' : 'and', items: [] }
@@ -310,6 +321,12 @@ function AddMenu({ group, depth, onGroup }: { group: FilterGroup; depth: number;
             {k.icon} {k.name}
           </DropdownMenuItem>
         ))}
+        <DropdownMenuSeparator />
+        {DATE_KINDS.map((k) => (
+          <DropdownMenuItem key={k.key} onSelect={() => addDate(k.key)} className="[&_svg]:text-muted-foreground">
+            {k.icon} {k.name}
+          </DropdownMenuItem>
+        ))}
         {depth < MAX_DEPTH && (
           <>
             <DropdownMenuSeparator />
@@ -324,51 +341,28 @@ function AddMenu({ group, depth, onGroup }: { group: FilterGroup; depth: number;
 }
 
 /** one condition as four joined segments: the field, is / is not, the values, × */
-function ConditionPill({ condition: c, onChange, onRemove }: { condition: FilterCondition & { field: FilterField }; onChange: (c: FilterCondition) => void; onRemove: () => void }) {
-  const { items, statuses, hide, pickerFor, setPickerFor } = useBuilder()
+function ConditionPill({ condition: c, onChange, onRemove }: { condition: FilterCondition & { field: FilterField }; onChange: (n: FilterNode) => void; onRemove: () => void }) {
+  const { items, statuses, pickerFor, setPickerFor, focus } = useBuilder()
   const key = keyOf(c)
   const kind = kindOf(c.field)
   const [word, other] = c.op === 'is' ? [kind.is, kind.not] : [kind.not, kind.is]
-  const next = useRef<(() => void) | null>(null)
-  const setField = (field: FilterField) => {
-    if (field === c.field) return
-    onChange(replacing(c, withField(c, field)))
-    // a new field starts with no values: its picker opens next
-    next.current = () => setPickerFor(key)
-  }
   return (
     <Pill onRemove={onRemove} label={`the ${kind.name.toLowerCase()} filter`}>
-      <DropdownMenu modal={false}>
-        <DropdownMenuTrigger asChild>
-          {/* a pill too long for its line gives way here first, so it stays on one line */}
-          <button
-            type="button"
-            data-focus
-            className={cn(segment, 'min-w-14 shrink-[3] [&_svg]:text-muted-foreground')}
-            aria-label={`${kind.name}. Change the field`}
-          >
-            {kind.icon}{' '}
-            <span className="truncate" title={kind.name}>
-              {kind.name}
-            </span>
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" loop className="w-52" onCloseAutoFocus={(e) => thenFocus(e, next)}>
-          {KINDS.filter((k) => !hide.includes(k.key) || k.key === c.field).map((k) => (
-            // one field is the current one, ticked, and said so to screen readers
-            <DropdownMenuItem
-              key={k.key}
-              role="menuitemradio"
-              aria-checked={k.key === c.field}
-              onSelect={() => setField(k.key)}
-              className="[&>svg:first-child]:text-muted-foreground"
-            >
-              {k.icon} {k.name}
-              <Check className={cn('ml-auto', k.key !== c.field && 'invisible')} />
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <FieldMenu
+        current={c.field}
+        icon={kind.icon}
+        name={kind.name}
+        onField={(field) => {
+          if (field === c.field) return
+          onChange(replacing(c, withField(c, field)))
+          // a new field starts with no values: its picker opens next
+          return () => setPickerFor(key)
+        }}
+        onDate={(field) => {
+          onChange(replacing(c, newDateCondition(field)))
+          return () => focus(`[data-row="${key}"] [data-op]`)
+        }}
+      />
       <button
         type="button"
         onClick={() => onChange(replacing(c, { ...c, op: c.op === 'is' ? 'not' : 'is' }))}
@@ -393,6 +387,174 @@ function ConditionPill({ condition: c, onChange, onRemove }: { condition: Filter
           </span>
         </button>
       </Picker>
+    </Pill>
+  )
+}
+
+/**
+ * The field segment of a condition and its menu: the fields with values, then the dates. Choosing one hands back what
+ * to focus once the menu has closed, if anything.
+ */
+function FieldMenu({
+  current,
+  icon,
+  name,
+  onField,
+  onDate,
+}: {
+  current: FilterField | DateField
+  icon: ReactNode
+  name: string
+  onField: (f: FilterField) => (() => void) | undefined
+  onDate: (f: DateField) => (() => void) | undefined
+}) {
+  const { hide } = useBuilder()
+  const next = useRef<(() => void) | null>(null)
+  const item = (key: FilterField | DateField, kindIcon: ReactNode, kindName: string, pick: () => (() => void) | undefined) => (
+    // one field is the current one, ticked, and said so to screen readers
+    <DropdownMenuItem
+      key={key}
+      role="menuitemradio"
+      aria-checked={key === current}
+      onSelect={() => {
+        next.current = pick() ?? null
+      }}
+      className="[&>svg:first-child]:text-muted-foreground"
+    >
+      {kindIcon} {kindName}
+      <Check className={cn('ml-auto', key !== current && 'invisible')} />
+    </DropdownMenuItem>
+  )
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        {/* a pill too long for its line gives way here first, so it stays on one line */}
+        <button type="button" data-focus className={cn(segment, 'min-w-14 shrink-[3] [&_svg]:text-muted-foreground')} aria-label={`${name}. Change the field`}>
+          {icon}{' '}
+          <span className="truncate" title={name}>
+            {name}
+          </span>
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" loop className="w-52" onCloseAutoFocus={(e) => thenFocus(e, next)}>
+        {KINDS.filter((k) => !hide.includes(k.key) || k.key === current).map((k) => item(k.key, k.icon, k.name, () => onField(k.key)))}
+        <DropdownMenuSeparator />
+        {DATE_KINDS.map((k) => item(k.key, k.icon, k.name, () => onDate(k.key)))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const UNIT_NAMES: Record<DateUnit, [one: string, many: string]> = { hours: ['hour', 'hours'], days: ['day', 'days'], weeks: ['week', 'weeks'], months: ['month', 'months'] }
+
+/**
+ * A date condition as joined segments: the field, what it says ("in the last"), then how long ("7" and "days") or
+ * which day, and ×. Every change saves at once; an amount being typed counts once it's a whole number from 1.
+ */
+function DatePill({ condition: c, onChange, onRemove }: { condition: DateCondition; onChange: (n: FilterNode) => void; onRemove: () => void }) {
+  const { setPickerFor } = useBuilder()
+  const kind = dateKindOf(c.field)
+  const set = (next: DateCondition) => onChange(replacing(c, next))
+  const [dayOpen, setDayOpen] = useState(false)
+  const unitWord = (u: DateUnit) => UNIT_NAMES[u][c.amount === 1 ? 0 : 1] + (c.op === 'ago' ? ' ago' : '')
+  return (
+    <Pill onRemove={onRemove} label={`the ${kind.name.toLowerCase()} filter`}>
+      <FieldMenu
+        current={c.field}
+        icon={kind.icon}
+        name={kind.name}
+        onField={(field) => {
+          const n: FilterCondition = { field, op: 'is', values: [] }
+          onChange(replacing(c, n))
+          return () => setPickerFor(keyOf(n))
+        }}
+        onDate={(field) => {
+          if (field !== c.field) set(withDateField(c, field))
+          return undefined
+        }}
+      />
+      <DropdownMenu modal={false}>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            data-op
+            className={cn(segment, 'shrink-0 gap-0.5 border-l whitespace-nowrap text-muted-foreground hover:text-foreground md:gap-1')}
+            aria-label={`${OP_WORDS[c.op]}. Change what it says`}
+          >
+            {OP_WORDS[c.op]}
+            <ChevronDown />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" loop className="w-48">
+          {opsFor(c.field).map((op) => (
+            <DropdownMenuItem key={op} role="menuitemradio" aria-checked={op === c.op} onSelect={() => op !== c.op && set(withDateOp(c, op))}>
+              {OP_CHOICES[op]}
+              <Check className={cn('ml-auto', op !== c.op && 'invisible')} />
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+      {isRelative(c.op) && (
+        <>
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={1}
+            value={c.amount ?? ''}
+            onChange={(e) => {
+              const n = e.target.value === '' ? undefined : Number(e.target.value)
+              set({ ...c, amount: n !== undefined && Number.isFinite(n) ? n : undefined })
+            }}
+            aria-label="How many"
+            aria-invalid={c.amount === undefined || !Number.isInteger(c.amount) || c.amount < 1 || undefined}
+            className={cn(
+              segment,
+              'w-11 shrink-0 border-l bg-transparent text-center tabular-nums [appearance:textfield] aria-invalid:ring-2 aria-invalid:ring-destructive aria-invalid:ring-inset md:w-12 [&::-webkit-inner-spin-button]:appearance-none',
+            )}
+          />
+          <DropdownMenu modal={false}>
+            <DropdownMenuTrigger asChild>
+              <button type="button" className={cn(segment, 'shrink-0 border-l whitespace-nowrap')} aria-label={`${unitWord(c.unit ?? 'days')}. Change the unit`}>
+                {unitWord(c.unit ?? 'days')}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" loop className="w-40">
+              {unitsFor(c.field).map((u) => (
+                <DropdownMenuItem key={u} role="menuitemradio" aria-checked={u === c.unit} onSelect={() => set({ ...c, unit: u })}>
+                  {unitWord(u)}
+                  <Check className={cn('ml-auto', u !== c.unit && 'invisible')} />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </>
+      )}
+      {(c.op === 'before' || c.op === 'after') && (
+        <Popover open={dayOpen} onOpenChange={setDayOpen}>
+          <PopoverTrigger asChild>
+            <button
+              type="button"
+              className={cn(segment, 'shrink-0 border-l whitespace-nowrap', !c.date && 'text-muted-foreground')}
+              aria-label={`${c.date ? shortDate(c.date) : 'No day yet'}. Pick a day`}
+            >
+              {c.date ? shortDate(c.date) : 'a day…'}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-auto p-0">
+            <Calendar
+              mode="single"
+              selected={c.date ? fromDay(c.date) : undefined}
+              defaultMonth={c.date ? fromDay(c.date) : undefined}
+              onSelect={(d) => {
+                if (d) set({ ...c, date: toDay(d) })
+                setDayOpen(false)
+              }}
+              weekStartsOn={1}
+            />
+          </PopoverContent>
+        </Popover>
+      )}
     </Pill>
   )
 }

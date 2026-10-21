@@ -298,8 +298,8 @@ following the issue), `priorities`, `labels` (ids), `projects` (ids; `null` = no
 any value matches; different filters must all match. `grouping`: `status`, `assignee`, `priority`, `project`, `none`.
 `ordering`: `manual`, `priority`, `due`, `updated`, `created`. `layout`: `list`, `board`.
 
-**Groups (`filters.tree`).** What the flat keys can't say (an "or", groups, "is not", Me, project status, the same
-field twice) is kept in `tree`: a group `{"join": "and" | "or", "items": [...]}` whose items are conditions
+**Groups (`filters.tree`).** What the flat keys can't say (an "or", groups, "is not", Me, project status, dates,
+the same field twice) is kept in `tree`: a group `{"join": "and" | "or", "items": [...]}` whose items are conditions
 `{"field", "op": "is" | "not", "values": [...]}` or more groups, three levels deep at most (the app's limit; deeper
 ones still work). Fields are the seven flat keys plus `projectStatuses` (the workspace's project status ids, the one
 a project shows; an issue with no project never "is" one; a project status added later is not in a condition that
@@ -307,6 +307,29 @@ lists all the others, unlike Status, which keeps whole categories). A `statuses`
 `statuses`, and may carry `statusIds`, the same refinement as the flat `statusIds`. `is` means any of the values, `not`
 none of them; for `labels` and `subscribers` that is "includes any" and "includes none". `@me` in `assignees` or
 `subscribers` is whoever is looking (no login or handle can start with `@`).
+
+**Dates in the tree.** A date condition has a shape of its own, `{"field", "op", "amount"?, "unit"?, "date"?}`
+(`src/data/dateFilters.ts`, `dateConditionSchema`):
+
+| Key | Values |
+| --- | --- |
+| `field` | `created` (`created_at`), `updated` (`updated_at`), `completed` (`completed_at`), `due` (`due_date`) |
+| `op` | `within` (in the last `amount` `unit`s), `ago` (more than that long ago), `next` (in the next: due dates), `overdue` (due before today), `before` / `after` (a day: before it starts, after it ends), `empty`, `set` |
+| `amount`, `unit` | for `within`, `ago`, `next`: a whole number from 1, and `hours`, `days`, `weeks` or `months` |
+| `date` | for `before`, `after`: a day, `"2026-10-31"` |
+
+```json
+{ "statuses": ["done"],
+  "tree": { "join": "and", "items": [
+    { "field": "statuses", "op": "is", "values": ["done"] },
+    { "field": "completed", "op": "within", "amount": 1, "unit": "days" } ] } }
+```
+
+Times are worked out when a list is shown, against that moment; days are the browser's days (a due date is a plain
+day, the same for everyone). An issue with no completed time or due date never matches a time or a day, only
+`empty`. These fields are not flat keys and have no `values`, so a version before dates (2.14) reads such a condition
+as one from a newer version: it leaves it out (showing more issues, never breaking) and keeps it. The flat copy
+leaves them out too. A condition with an `op` or `unit` this version doesn't know counts as one from a newer version.
 
 ```json
 { "statuses": ["in_progress", "in_review"],
