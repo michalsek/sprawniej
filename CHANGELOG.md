@@ -4,6 +4,14 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.19.0: A side panel for lists and boards
+*2026-10-21*
+
+- A side panel on team issues, views, projects and My issues: what the page is about, and quick filters by assignee, label, priority and project, each with how many issues it has
+- Click a name in the side panel to show only those issues, click it again to show all; pick several to combine them
+- Quick filters are just for you and stay while this browser tab is open, even after opening an issue; on a view, Add to view saves them for everyone
+- Press ] to show or hide the side panel; on smaller screens it slides in from the right
+
 ## 2.18.0: Choose what issues show
 *2026-10-21*
 

@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.18.0'
+export const APP_VERSION = '2.19.0'
 
 export interface Release {
   version: string
@@ -18,6 +18,17 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.19.0',
+    date: '2026-10-21',
+    title: 'A side panel for lists and boards',
+    notes: [
+      'A side panel on team issues, views, projects and My issues: what the page is about, and quick filters by assignee, label, priority and project, each with how many issues it has',
+      'Click a name in the side panel to show only those issues, click it again to show all; pick several to combine them',
+      'Quick filters are just for you and stay while this browser tab is open, even after opening an issue; on a view, Add to view saves them for everyone',
+      'Press ] to show or hide the side panel; on smaller screens it slides in from the right',
+    ],
+  },
   {
     version: '2.18.0',
     date: '2026-10-21',
