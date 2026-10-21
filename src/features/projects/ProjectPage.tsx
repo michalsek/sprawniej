@@ -14,6 +14,7 @@ import { projectProgress } from '@/data/select'
 import { useData } from '@/data/store'
 import { openComposer } from '@/features/issues/composer'
 import { IssuesView } from '@/features/issues/IssuesView'
+import { ProjectDetails } from '@/features/issues/PageDetails'
 import { Button } from '@/ui/button'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/ui/dropdown-menu'
 import { ProjectProperties } from './ProjectProperties'
@@ -39,6 +40,7 @@ export function ProjectPage() {
         page={`project:${project.id}`}
         filters={{ projects: [project.id] }}
         hideFilters={['projects', 'projectStatuses']}
+        details={<ProjectDetails project={project} done={done} total={total} />}
         viewScope={null}
         empty={
           <EmptyState

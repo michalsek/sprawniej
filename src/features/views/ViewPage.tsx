@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { deleteView, updateView } from '@/data/actions'
 import { useData } from '@/data/store'
 import { IssuesView } from '@/features/issues/IssuesView'
+import { ViewDetails } from '@/features/issues/PageDetails'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/ui/dropdown-menu'
 
 export function ViewPage() {
@@ -38,6 +39,7 @@ export function ViewPage() {
         page={`view:${view.id}`}
         filters={view.team ? { teams: [view.team] } : {}}
         hideFilters={view.team ? ['teams'] : undefined}
+        details={<ViewDetails view={view} />}
         saved={{
           filters: view.filters,
           display: view.display,

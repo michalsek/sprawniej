@@ -26,9 +26,9 @@ export function Shell({ children }: { children: ReactNode }) {
   // in Settings, its own menu takes the sidebar's place
   const inSettings = isSettingsPath(location)
   useShortcuts()
-  // a phone's menu closes once you've picked where to go
+  // a phone's menu (and the side panel's sheet) closes once you've picked where to go
   useEffect(() => {
-    useChrome.setState({ menuOpen: false })
+    useChrome.setState({ menuOpen: false, panelSheetOpen: false })
     if (!inSettings) useChrome.setState({ lastAppPath: location })
     clearSelection()
   }, [location, inSettings])

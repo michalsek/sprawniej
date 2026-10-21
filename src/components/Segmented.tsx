@@ -11,7 +11,8 @@ export interface SegmentedOption<T extends string> {
 }
 
 /**
- * `fill`: as wide as its box, with equal buttons (a choice in a form, which has to fit a phone). One Tab stop, the
+ * `fill`: as wide as its box, with equal buttons (a choice in a form, which has to fit a phone). `compact`: shorter,
+ * with smaller words and less room around them (tabs in the side panel, four in a narrow column). One Tab stop, the
  * chosen button; ← and → move to the next one and choose it, as in a group of radio buttons. ↑ and ↓ stay the issue
  * list's.
  */
@@ -22,6 +23,7 @@ export function Segmented<T extends string>({
   label,
   tour,
   fill,
+  compact,
 }: {
   value: T
   options: SegmentedOption<T>[]
@@ -29,6 +31,7 @@ export function Segmented<T extends string>({
   label: string
   tour?: string
   fill?: boolean
+  compact?: boolean
 }) {
   const chosen = Math.max(0, options.findIndex((o) => o.value === value))
 
@@ -47,7 +50,7 @@ export function Segmented<T extends string>({
   }
 
   return (
-    <div role="radiogroup" aria-label={label} className={cn('h-10 rounded-lg border', fill ? 'flex w-full' : 'inline-flex')} data-tour={tour}>
+    <div role="radiogroup" aria-label={label} className={cn('rounded-lg border', compact ? 'h-8' : 'h-10', fill ? 'flex w-full' : 'inline-flex')} data-tour={tour}>
       {options.map((o, i) => (
         <button
           key={o.value}
@@ -61,6 +64,7 @@ export function Segmented<T extends string>({
           className={cn(
             '-m-px flex items-center gap-2 rounded-lg border border-transparent px-3 text-ui whitespace-nowrap sm:px-4 text-foreground/90 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4',
             fill && 'min-w-0 flex-1 justify-center px-2 sm:px-3',
+            compact && 'flex-auto gap-1.5 px-1.5 text-sm sm:px-1.5',
             o.value === value && 'border-foreground/80 bg-accent',
           )}
         >

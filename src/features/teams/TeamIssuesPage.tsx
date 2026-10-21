@@ -6,6 +6,7 @@ import { useCrumbs } from '@/app/chrome'
 import { EmptyState } from '@/components/EmptyState'
 import { LinkTabs } from '@/components/Tabs'
 import { IssuesView } from '@/features/issues/IssuesView'
+import { TeamDetails } from '@/features/issues/PageDetails'
 import { ArchiveList } from './ArchiveList'
 import { NotFound } from '@/app/NotFound'
 import { useData } from '@/data/store'
@@ -35,6 +36,7 @@ export function TeamIssuesPage() {
       tab={current}
       baseDisplay={{ showCompleted: current === 'all' }}
       left={<LinkTabs current={`${base}/${current}`} tabs={tabs} />}
+      details={<TeamDetails team={team} />}
       empty={
         <EmptyState
           icon={<SquareStack />}

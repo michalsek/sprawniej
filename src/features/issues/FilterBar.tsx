@@ -107,13 +107,21 @@ interface SummaryProps {
   ref?: Ref<HTMLButtonElement>
   /** at the right end of the band, e.g. "Save as view" */
   extra?: ReactNode
+  /**
+   * another kind of filter (the side panel's quick filters): its name goes quietly before the sentence and into what
+   * a screen reader says, with what clicking does and what × clears
+   */
+  kind?: { name: string; open: string; clear: string }
+  /** clicking opens a dialog (the builder, or the side panel's sheet); false when it shows something on the page */
+  popup?: boolean
 }
 
 /** the whole filter as one chip: click it to change the filter, × to clear it */
-export function FilterSummary({ tree, onOpen, onClear, open, ref, extra }: SummaryProps) {
+export function FilterSummary({ tree, onOpen, onClear, open, ref, extra, kind, popup = true }: SummaryProps) {
   const items = useFilterItems()
   const statuses = useData((s) => s.statuses)
   const words = upperFirst(describeTree(tree, (c) => sayCondition(c, items, statuses)))
+  const name = kind?.name ?? 'Filters'
   return (
     <div className="flex items-start gap-2">
       <div className="flex min-w-0 items-stretch rounded-lg border text-sm">
@@ -122,13 +130,14 @@ export function FilterSummary({ tree, onOpen, onClear, open, ref, extra }: Summa
           type="button"
           onClick={onOpen}
           title={words}
-          aria-label={`Filters: ${words}. Change`}
-          aria-haspopup="dialog"
-          aria-expanded={open}
+          aria-label={`${name}: ${words}. ${kind?.open ?? 'Change'}`}
+          aria-haspopup={popup ? 'dialog' : undefined}
+          aria-expanded={popup ? open : undefined}
           data-state={open ? 'open' : 'closed'}
           className="min-w-0 rounded-l-lg px-2.5 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/60"
         >
           <span className="line-clamp-2 break-words md:line-clamp-1">
+            {kind && <span className="text-muted-foreground">{kind.name}: </span>}
             <Sentence tree={tree} items={items} statuses={statuses} first />
           </span>
         </button>
@@ -136,7 +145,7 @@ export function FilterSummary({ tree, onOpen, onClear, open, ref, extra }: Summa
           type="button"
           onClick={onClear}
           className="flex shrink-0 items-center rounded-r-lg border-l px-2 text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Clear filters"
+          aria-label={kind?.clear ?? 'Clear filters'}
         >
           <X className="size-3.5" />
         </button>

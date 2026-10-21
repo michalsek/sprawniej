@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { useLocation } from 'wouter'
 import { openComposer } from '@/features/issues/composer'
 import { clearSelection, toggleSelected, useSelection } from '@/features/issues/selection'
+import { togglePanel, useChrome } from './chrome'
 import { openPalette, targetIssue, usePalette, type QuickField } from './palette'
 
 /** typing in a field, or a dialog/menu is open: leave the key alone */
@@ -87,6 +88,9 @@ export function useShortcuts() {
       } else if (key === '/') {
         e.preventDefault()
         openPalette()
+      } else if (key === ']' && useChrome.getState().panelHere) {
+        e.preventDefault()
+        togglePanel()
       }
     }
     window.addEventListener('keydown', onKey)

@@ -1,10 +1,14 @@
-/** The bar above every page: sidebar toggle, where you are, whether your changes are saved, and search. */
+/**
+ * The bar above every page: sidebar toggle, where you are, whether your changes are saved, search, and on lists and
+ * boards the side panel's toggle.
+ */
 import { Fragment } from 'react'
 import { Link } from 'wouter'
-import { PanelLeft, Search } from 'lucide-react'
+import { PanelLeft, PanelRight, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useNarrow } from '@/lib/useNarrow'
-import { useChrome } from './chrome'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
+import { togglePanel, useChrome, usePanelBeside } from './chrome'
 import { openPalette } from './palette'
 import { SaveStatus } from './SaveStatus'
 import { UpdateButton } from './UpdateButton'
@@ -13,6 +17,9 @@ export function TopBar() {
   const crumbs = useChrome((s) => s.crumbs)
   const toggle = useChrome((s) => s.toggleSidebar)
   const narrow = useNarrow()
+  const panelHere = useChrome((s) => s.panelHere)
+  const beside = usePanelBeside()
+  const panelShown = useChrome((s) => (beside ? s.panelOpen : s.panelSheetOpen))
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b px-3 md:h-16 md:gap-4 md:px-6">
       <button type="button" onClick={() => (narrow ? useChrome.setState({ menuOpen: true }) : toggle())} className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground" aria-label="Show or hide the sidebar">
@@ -50,6 +57,24 @@ export function TopBar() {
           <span className="hidden md:inline">Search or jump to…</span>
           <kbd className="ml-auto hidden rounded-md border px-1.5 py-0.5 font-sans text-xs md:inline">⌘K</kbd>
         </button>
+        {panelHere && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={togglePanel}
+                className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-expanded:text-foreground"
+                aria-label="Show or hide the side panel"
+                aria-expanded={panelShown}
+              >
+                <PanelRight className="size-5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>
+              Side panel <kbd className="ml-1 rounded border px-1 font-sans">]</kbd>
+            </TooltipContent>
+          </Tooltip>
+        )}
       </div>
     </header>
   )
