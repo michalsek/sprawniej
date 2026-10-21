@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { generateKeyBetween } from 'fractional-indexing'
 import { projectStatusIdOf, sampleData, sampleProjectStatuses, statusIdOf } from './fixtures/sample'
-import { childIndex, compareIssues, dueForArchive, myTeamKeys, groupIssues, inTab, isUnread, monthsBefore, nestChildren, projectColumns, projectProgress } from '@/data/select'
+import { childIndex, compareIssues, dueForArchive, myTeamKeys, groupIssues, inTab, isUnread, monthsBefore, nestChildren, projectColumns, projectProgress, projectCountsIndex, progressOf, progressPercent, issuesIn, NO_ISSUES } from '@/data/select'
 import { findByRef, issueRef } from '@/data/store'
 import { matcher, treeOf, type MatchContext } from '@/data/filterTree'
 import { DEFAULT_DISPLAY } from '@/data/displays'
@@ -174,6 +174,59 @@ describe('sub-issues', () => {
     const p = projectProgress('p-insights', issues)
     expect(p.total).toBe(6)
     expect(p.done).toBe(1)
+  })
+})
+
+describe('project counts', () => {
+  const mk = (id: string, status: string, project: string | null = 'p') => ({ ...issues[0], id, status, project }) as Issue
+  const record = (list: Issue[]) => Object.fromEntries(list.map((i) => [i.id, i]))
+
+  test('one table for every project agrees with project progress', () => {
+    const index = projectCountsIndex(data.issues, {})
+    for (const id of Object.keys(data.projects)) {
+      const { done, total } = progressOf(index.get(id) ?? NO_ISSUES)
+      expect({ done, total }).toEqual(projectProgress(id, issues))
+    }
+  })
+
+  test('each category counts on its own; canceled and duplicate ones are left out of progress, not of the issues', () => {
+    const active = record([mk('a', 'done'), mk('b', 'done'), mk('c', 'in_progress'), mk('d', 'todo'), mk('e', 'canceled'), mk('f', 'duplicate'), mk('g', 'backlog', null)])
+    const c = projectCountsIndex(active, {}).get('p')!
+    expect(c).toMatchObject({ done: 2, in_progress: 1, todo: 1, canceled: 1, duplicate: 1, backlog: 0, archived: 0 })
+    expect(progressOf(c)).toEqual({ done: 2, total: 4, canceled: 2 })
+    expect(issuesIn(c)).toBe(6)
+    // an issue without a project counts nowhere
+    expect(projectCountsIndex(active, {}).size).toBe(1)
+  })
+
+  test('archived issues count too, once, and a category this app does not know counts as Backlog', () => {
+    const active = record([mk('a', 'done'), mk('b', 'someday')])
+    const archive = record([mk('a', 'done'), mk('x', 'done'), mk('y', 'done'), mk('z', 'canceled')])
+    const c = projectCountsIndex(active, archive).get('p')!
+    expect(c).toMatchObject({ done: 3, backlog: 1, canceled: 1, archived: 2 })
+    expect(progressOf(c)).toEqual({ done: 3, total: 4, canceled: 1 })
+  })
+
+  test('built once per version of the issues and the archive', () => {
+    const archive = {}
+    expect(projectCountsIndex(data.issues, archive)).toBe(projectCountsIndex(data.issues, archive))
+    expect(projectCountsIndex(data.issues, {})).not.toBe(projectCountsIndex(data.issues, archive))
+    expect(projectCountsIndex({ ...data.issues }, archive)).not.toBe(projectCountsIndex(data.issues, archive))
+  })
+
+  test('a project with no issues has none in any category', () => {
+    expect(progressOf(NO_ISSUES)).toEqual({ done: 0, total: 0, canceled: 0 })
+  })
+
+  test('percent rounds down, but never to 0% once something is done or 100% before everything is', () => {
+    expect(progressPercent(0, 0)).toBe(0)
+    expect(progressPercent(0, 5)).toBe(0)
+    expect(progressPercent(1, 200)).toBe(1)
+    expect(progressPercent(199, 200)).toBe(99)
+    expect(progressPercent(8, 12)).toBe(66)
+    expect(progressPercent(2, 3)).toBe(66)
+    expect(progressPercent(1, 2)).toBe(50)
+    expect(progressPercent(12, 12)).toBe(100)
   })
 })
 

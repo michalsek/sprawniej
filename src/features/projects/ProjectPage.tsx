@@ -10,27 +10,28 @@ import { EmptyState } from '@/components/EmptyState'
 import { FavouriteButton } from '@/components/FavouriteButton'
 import { PageHeader } from '@/components/PageHeader'
 import { deleteProject, updateProject } from '@/data/actions'
-import { projectProgress } from '@/data/select'
+import { issuesIn, progressOf } from '@/data/select'
 import { useData } from '@/data/store'
 import { openComposer } from '@/features/issues/composer'
 import { IssuesView } from '@/features/issues/IssuesView'
 import { Button } from '@/ui/button'
 import { DropdownMenuItem, DropdownMenuSeparator } from '@/ui/dropdown-menu'
 import { ProjectProperties } from './ProjectProperties'
-import { useProgressIssues } from './useProjectIssues'
+import { ProjectRing } from './ProjectRing'
+import { useArchiveForProgress, useProjectCounts } from './useProjectCounts'
 
 export function ProjectPage() {
   const { id = '' } = useParams<{ id: string }>()
   const [, navigate] = useLocation()
   const project = useData((s) => s.projects[id])
-  const issues = useProgressIssues(id)
+  const counts = useProjectCounts(id)
+  useArchiveForProgress()
   const [confirmDelete, setConfirmDelete] = useState(false)
   useCrumbs(project ? [{ label: 'Projects', href: '/projects' }, { label: `${project.emoji} ${project.name}` }] : [])
   if (!project) return <NotFound />
-  const { done, total } = projectProgress(project.id, issues)
+  const { done, total } = progressOf(counts)
   // every issue in it, canceled ones too (progress leaves those out)
-  const inProject = Object.values(issues).filter((i) => i.project === project.id).length
-  const pct = total ? Math.round((done / total) * 100) : 0
+  const inProject = issuesIn(counts)
 
   return (
     <>
@@ -77,11 +78,11 @@ export function ProjectPage() {
           >
             <div className="flex flex-wrap items-center gap-4">
               <ProjectProperties value={project} onChange={(patch) => updateProject(project.id, patch)} />
-              <span className="flex items-center gap-2 text-sm text-muted-foreground" aria-label={`${pct}% done`}>
-                <span className="h-1.5 w-32 overflow-hidden rounded-full bg-muted">
-                  <span className="block h-full rounded-full bg-status-done" style={{ width: `${pct}%` }} />
+              <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                <ProjectRing counts={counts} focusable />
+                <span aria-hidden>
+                  {done} of {total} done
                 </span>
-                {done} of {total} done
               </span>
             </div>
           </PageHeader>

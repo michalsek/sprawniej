@@ -1,6 +1,7 @@
 /**
- * Projects, as a list (name with emoji, status, lead, target date and how much is done, by name) or as a board (a
- * column per status). List or Board is remembered per page in this browser. "New project" starts one.
+ * Projects, as a list (name with emoji, status, progress ring and lead, target date and how many issues count, by
+ * name) or as a board (a column per status). List or Board is remembered per page in this browser. "New project"
+ * starts one.
  */
 import { useState } from 'react'
 import { Link, useParams } from 'wouter'
@@ -13,10 +14,11 @@ import { EmojiPicker } from '@/components/EmojiPicker'
 import { FavouriteButton } from '@/components/FavouriteButton'
 import { EmptyState } from '@/components/EmptyState'
 import { InlineText } from '@/components/InlineText'
+import { useRingTip } from '@/components/ringTip'
 import { Segmented } from '@/components/Segmented'
 import { deleteProject, updateProject } from '@/data/actions'
 import { useDisplay } from '@/data/displays'
-import { projectProgress } from '@/data/select'
+import { progressOf } from '@/data/select'
 import { statusOfProject } from '@/data/statuses'
 import { useData } from '@/data/store'
 import { shortDate } from '@/features/issues/format'
@@ -26,44 +28,51 @@ import { cn } from '@/lib/utils'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { NewProjectDialog } from './NewProjectDialog'
 import { ProjectBoard } from './ProjectBoard'
+import { progressWords } from './progressText'
+import { ProjectRing } from './ProjectRing'
 import { StatusDot } from './StatusDot'
-import { useProgressIssues } from './useProjectIssues'
+import { useArchiveForProgress, useProjectCounts } from './useProjectCounts'
+
+// on a phone the status and lead columns shrink to their dot, ring and picture (the words stay for screen readers),
+// so the name keeps the room
+const STATUS = 'w-4 shrink-0 sm:w-32'
+const LEAD = 'w-11 shrink-0 sm:w-44'
 
 /** one project in the list: its emoji changes in place, the star keeps it in your sidebar, and ⋯ renames or deletes it */
-function ProjectRow({ project: p, pct, lead }: { project: Project; pct: number; lead?: Person }) {
+function ProjectRow({ project: p, lead }: { project: Project; lead?: Person }) {
   const status = useData((s) => statusOfProject(p, s.statuses))
+  const counts = useProjectCounts(p.id)
+  const { total } = progressOf(counts)
+  const tip = useRingTip()
   const [renaming, setRenaming] = useState(false)
   const [confirm, setConfirm] = useState(false)
   return (
-    <div className="group flex items-center gap-4 rounded-md px-4 py-1.5 text-ui hover:bg-accent/60">
+    <div className="group flex items-center gap-2 rounded-md px-2 py-1.5 sm:gap-4 sm:px-4 text-ui hover:bg-accent/60">
       <EmojiPicker value={p.emoji} onChange={(emoji) => updateProject(p.id, { emoji })} label={`Change the emoji of ${p.name}`} className="size-9 border-transparent text-emoji hover:border-border" />
       {renaming ? (
         <span className="min-w-0 flex-1">
           <InlineText value={p.name} onSave={(name) => updateProject(p.id, { name })} label="Project name" required autoFocus onDone={() => setRenaming(false)} className="text-field font-medium" />
         </span>
       ) : (
-        <Link href={`/project/${p.id}`} className="flex min-w-0 flex-1 items-center gap-4 py-1.5">
+        <Link href={`/project/${p.id}`} {...tip.focusProps} className="flex min-w-0 flex-1 items-center gap-3 py-1.5 sm:gap-4">
           <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
-          <span className="flex w-32 items-center gap-2 text-muted-foreground">
-            <StatusDot status={status} /> <span className="truncate">{status.name}</span>
+          <span className={cn(STATUS, 'flex items-center gap-2 text-muted-foreground')}>
+            <StatusDot status={status} /> <span className="truncate max-sm:sr-only">{status.name}</span>
           </span>
-          <span className="flex w-44 items-center gap-2 truncate">
+          <span className={cn(LEAD, 'flex items-center gap-2')}>
+            <ProjectRing counts={counts} tip={tip} />
+            <span className="sr-only">{progressWords(counts)[0]}</span>
             {p.lead ? (
               <>
                 <PersonAvatar person={lead} login={p.lead} />
-                <span className="truncate">{lead?.name ?? p.lead}</span>
+                <span className="truncate max-sm:sr-only">{lead?.name ?? p.lead}</span>
               </>
             ) : (
-              <span className="text-muted-foreground">No lead</span>
+              <span className="truncate text-muted-foreground max-sm:sr-only">No lead</span>
             )}
           </span>
-          <span className="w-28 text-muted-foreground">{p.targetDate ? shortDate(p.targetDate) : '–'}</span>
-          <span className="flex w-40 items-center gap-2">
-            <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-              <span className="block h-full rounded-full bg-status-done" style={{ width: `${pct}%` }} />
-            </span>
-            <span className="w-10 text-right text-sm text-muted-foreground tabular-nums">{pct}%</span>
-          </span>
+          <span className="hidden w-28 text-muted-foreground md:block">{p.targetDate ? shortDate(p.targetDate) : '–'}</span>
+          <span className="hidden w-20 text-right text-muted-foreground tabular-nums md:block">{total || '–'}</span>
         </Link>
       )}
       <span className="flex items-center">
@@ -97,7 +106,7 @@ export function ProjectsPage() {
   const { key } = useParams<{ key?: string }>()
   const team = useData((s) => (key ? s.teams[key] : undefined))
   const projects = useData(useShallow((s) => Object.values(s.projects).filter((p) => (key ? p.teams.includes(key) : true))))
-  const issues = useProgressIssues()
+  useArchiveForProgress()
   const people = useData((s) => s.people)
   const { display, setDisplay } = useDisplay(key ? `projects:${key}` : 'projects')
   useCrumbs(team ? [{ label: `${team.emoji} ${team.name}` }, { label: 'Projects' }] : [{ label: 'Projects' }])
@@ -137,23 +146,21 @@ export function ProjectsPage() {
       </div>
       {board ? (
         <div className="min-h-0 flex-1">
-          <ProjectBoard projects={projects} issues={issues} onAdd={(statusId) => setCreating(statusId)} />
+          <ProjectBoard projects={projects} onAdd={(statusId) => setCreating(statusId)} />
         </div>
       ) : (
         <>
-          <div className="flex h-10 items-center gap-4 border-b px-4 text-sm text-muted-foreground">
-            <span className="flex-1 pl-12">Name</span>
-            <span className="w-32">Status</span>
-            <span className="w-44">Lead</span>
-            <span className="w-28">Target date</span>
-            <span className="w-40">Progress</span>
+          <div className="flex h-10 items-center gap-4 border-b px-2 text-sm text-muted-foreground sm:px-4">
+            <span className="flex-1 pl-11 sm:pl-12">Name</span>
+            <span className="hidden w-32 sm:block">Status</span>
+            <span className="hidden w-44 sm:block">Lead</span>
+            <span className="hidden w-28 md:block">Target date</span>
+            <span className="hidden w-20 text-right md:block">Issues</span>
             <span className="w-16" />
           </div>
-          {sorted.map((p) => {
-            const { done, total } = projectProgress(p.id, issues)
-            const pct = total ? Math.round((done / total) * 100) : 0
-            return <ProjectRow key={p.id} project={p} pct={pct} lead={p.lead ? people[p.lead] : undefined} />
-          })}
+          {sorted.map((p) => (
+            <ProjectRow key={p.id} project={p} lead={p.lead ? people[p.lead] : undefined} />
+          ))}
         </>
       )}
       {dialog}

@@ -4,7 +4,7 @@
  */
 import type { Display, InboxItem, Issue, Member, Ordering, Person, Project, ReadState, Status, Team } from '@/model/schema'
 import { issueStatuses, projectStatuses, statusOfIssue, statusOfProject } from './statuses'
-import { PRIORITY_NAMES, PRIORITY_ORDER, TAB_GROUPS, categoryOf, type IssueTab, type Priority } from '@/model/status'
+import { ISSUE_CATEGORIES, PRIORITY_NAMES, PRIORITY_ORDER, TAB_GROUPS, categoryOf, type IssueCategory, type IssueTab, type Priority } from '@/model/status'
 
 export function inTab(issue: Issue, tab: IssueTab): boolean {
   return TAB_GROUPS[tab].includes(categoryOf(issue.status).group)
@@ -200,10 +200,69 @@ export function childIndex(issues: Record<string, Issue>): Map<string, ChildCoun
   return index
 }
 
-/** share of a project's issues that are done, 0..1 (canceled ones don't count either way) */
+/** how many of a project's issues are in each category, and how many of the counted ones are archived */
+export type ProjectCounts = Record<IssueCategory, number> & {
+  /** archived issues among the counted ones (canceled and duplicate ones left out) */
+  archived: number
+}
+
+const zeroCounts = (): ProjectCounts => ({ ...(Object.fromEntries(ISSUE_CATEGORIES.map((c) => [c, 0])) as Record<IssueCategory, number>), archived: 0 })
+
+/** what a project with no issues has */
+export const NO_ISSUES: Readonly<ProjectCounts> = Object.freeze(zeroCounts())
+
+/** one issue into its project's counts (an issue without a project counts nowhere) */
+function countInto(index: Map<string, ProjectCounts>, i: Issue, archived: boolean) {
+  if (!i.project) return
+  let c = index.get(i.project)
+  if (!c) index.set(i.project, (c = zeroCounts()))
+  const cat = categoryOf(i.status)
+  c[cat.id]++
+  if (archived && cat.group !== 'canceled') c.archived++
+}
+
+const countsCache = new WeakMap<Record<string, Issue>, { archive: Record<string, Issue>; index: Map<string, ProjectCounts> }>()
+
+/**
+ * Every project's issue counts at once, by project id: open and archived issues both count (an archived one that is
+ * active again counts once). Built once per version of the two records (the store replaces them on every change), so
+ * a page of cards costs one pass over the issues, not one per card. A category this app doesn't know counts as Backlog.
+ */
+export function projectCountsIndex(issues: Record<string, Issue>, archive: Record<string, Issue>): Map<string, ProjectCounts> {
+  const cached = countsCache.get(issues)
+  if (cached && cached.archive === archive) return cached.index
+  const index = new Map<string, ProjectCounts>()
+  for (const i of Object.values(issues)) countInto(index, i, false)
+  for (const a of Object.values(archive)) if (!issues[a.id]) countInto(index, a, true)
+  countsCache.set(issues, { archive, index })
+  return index
+}
+
+/** every issue in a project, canceled and duplicate ones too */
+export const issuesIn = (c: Readonly<ProjectCounts>): number => ISSUE_CATEGORIES.reduce((sum, id) => sum + c[id], 0)
+
+/** what progress counts: the done ones out of all but the canceled and duplicate ones (`canceled`: those left out) */
+export function progressOf(c: Readonly<ProjectCounts>): { done: number; total: number; canceled: number } {
+  const canceled = c.canceled + c.duplicate
+  return { done: c.done, total: issuesIn(c) - canceled, canceled }
+}
+
+/**
+ * Done as a whole percent, rounded down, but never 0% once something is done and never 100% until everything is
+ * (1 of 200 is 1%, 199 of 200 is 99%). Nothing to count is 0%.
+ */
+export function progressPercent(done: number, total: number): number {
+  if (total <= 0 || done <= 0) return 0
+  if (done >= total) return 100
+  return Math.min(99, Math.max(1, Math.floor((done * 100) / total)))
+}
+
+/** share of a project's issues that are done (canceled ones don't count either way): progressOf for a list of issues */
 export function projectProgress(projectId: string, issues: Issue[]): { done: number; total: number } {
-  const mine = issues.filter((i) => i.project === projectId && categoryOf(i.status).group !== 'canceled')
-  return { done: mine.filter((i) => categoryOf(i.status).group === 'completed').length, total: mine.length }
+  const index = new Map<string, ProjectCounts>()
+  for (const i of issues) if (i.project === projectId) countInto(index, i, false)
+  const { done, total } = progressOf(index.get(projectId) ?? NO_ISSUES)
+  return { done, total }
 }
 
 /**

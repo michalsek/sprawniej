@@ -88,6 +88,10 @@ for (const [name, t] of Object.entries(themes)) {
       expect(failing(t, ['ring'], ['background', 'accent', 'sidebar', 'sidebar-accent', 'popover', 'muted'], 3)).toEqual([])
     })
 
+    test("a progress ring's done arc shows on its track, and on the page", () => {
+      expect(failing(t, ['status-done'], ['progress-track', 'background', 'popover'], 3)).toEqual([])
+    })
+
     test('the marks inside status and urgent icons show', () => {
       expect(failing(t, ['status-mark'], ['status-done', 'status-canceled'], 3)).toEqual([])
       expect(failing(t, ['urgent-mark'], ['urgent'], 3)).toEqual([])
