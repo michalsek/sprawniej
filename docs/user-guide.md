@@ -394,7 +394,7 @@ Below that are **quick filters**, in four tabs: **Assignees**, **Labels**, **Pri
 leaves out what it already is, like Assignees on My issues). Each line shows a person, label, priority or project and
 how many issues it would show. Click one to show only those issues, and click it again to let go. Each tab has one
 pick at a time: clicking another person (or label, priority or project) switches to it. Picks in different tabs go
-together ("Ana, and Bug"). What you picked stays at the top of its tab. The numbers follow what you pick in the other tabs. A tab with a long list has a box to find
+together ("Ana, and Bug"). Picking keeps the lines where they are. The numbers follow what you pick in the other tabs. A tab with a long list has a box to find
 a name.
 
 Quick filters are just for you, even on a view: your teammates' view stays as it is. Each page keeps its own (every

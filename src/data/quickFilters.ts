@@ -164,7 +164,8 @@ export function panelLines<I extends PanelItem>(field: PanelField, items: readon
   const lines = all.map((i) => ({ ...i, count: m.get(valueKey(i.value)) ?? 0, picked: isPicked(picks, field, i.value) })).filter((l) => l.count > 0 || l.picked)
   const rank = (l: PanelLine<I>) => PRIORITY_RANK.get(l.value) ?? PRIORITY_RANK.size
   return lines.sort(
-    (a, b) => Number(b.picked) - Number(a.picked) || (field === 'priorities' ? rank(a) - rank(b) : b.count - a.count || a.label.localeCompare(b.label)),
+    // picking doesn't move a line: a tab's own counts don't follow its own pick, so the order stays put
+    (a, b) => (field === 'priorities' ? rank(a) - rank(b) : b.count - a.count || a.label.localeCompare(b.label)),
   )
 }
 

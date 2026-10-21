@@ -212,19 +212,21 @@ describe('panelLines', () => {
     const lines = panelLines('assignees', items, counts({ ania: 2, ben: 5, null: 2 }), {}, unknown)
     expect(lines.map((l) => [l.label, l.count])).toEqual([['Ben', 5], ['Ania', 2], ['No assignee', 2]])
   })
-  test('picked ones come first, even at 0', () => {
-    const lines = panelLines('assignees', items, counts({ ania: 2, ben: 5 }), { assignees: ['cleo', 'ania'] }, unknown)
-    expect(lines.map((l) => [l.label, l.count, l.picked])).toEqual([['Ania', 2, true], ['Cleo', 0, true], ['Ben', 5, false]])
+  test('a pick keeps its place; one at 0 stays, at the end', () => {
+    const lines = panelLines('assignees', items, counts({ ania: 2, ben: 5 }), { assignees: ['ania'] }, unknown)
+    expect(lines.map((l) => [l.label, l.count, l.picked])).toEqual([['Ben', 5, false], ['Ania', 2, true]])
+    const gone = panelLines('assignees', items, counts({ ania: 2, ben: 5 }), { assignees: ['cleo'] }, unknown)
+    expect(gone.map((l) => [l.label, l.count, l.picked])).toEqual([['Ben', 5, false], ['Ania', 2, false], ['Cleo', 0, true]])
   })
   test('someone assigned who is not among the people gets a line', () => {
     const lines = panelLines('assignees', items, counts({ ghost: 1 }), { assignees: ['gone'] }, unknown)
     expect(lines.map((l) => l.label).sort()).toEqual(['ghost', 'gone'])
   })
-  test('Priority keeps its own order, after the picked', () => {
+  test('Priority keeps its own order, picked or not', () => {
     const c = { ...counts({}), priorities: new Map([0, 1, 2, 3, 4].map((p) => [valueKey(p), 10 - p])) }
     const prio: PanelItem[] = [0, 1, 2, 3, 4].map((p) => ({ value: p, label: `P${p}` }))
     expect(panelLines('priorities', prio, c, {}, unknown).map((l) => l.value)).toEqual([1, 2, 3, 4, 0])
-    expect(panelLines('priorities', prio, c, { priorities: [3] }, unknown).map((l) => l.value)).toEqual([3, 1, 2, 4, 0])
+    expect(panelLines('priorities', prio, c, { priorities: [3] }, unknown).map((l) => l.value)).toEqual([1, 2, 3, 4, 0])
   })
 })
 
