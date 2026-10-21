@@ -4,6 +4,14 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.14.1: Easier to see and to use with the keyboard
+*2026-10-21*
+
+- The outline round what you reach with Tab is clearer, in light and dark
+- In a switch like List / Board or Appearance, the left and right arrows choose the option next to it
+- Initials on people's colours are easier to read
+- Pictures with a see-through background get a light backdrop, so dark logos and drawings show in the dark look
+
 ## 2.14.0: Combine filters with and / or
 *2026-10-21*
 

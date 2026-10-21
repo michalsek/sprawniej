@@ -5,7 +5,7 @@
  * Numbering (see CLAUDE.md): MAJOR.MINOR.PATCH. Major = the database changes in a way older versions can't live with, or the way you work changes,
  * minor = a new feature, patch = fixes and polish. Notes are written for the people using Sprawniej.
  */
-export const APP_VERSION = '2.14.0'
+export const APP_VERSION = '2.14.1'
 
 export interface Release {
   version: string
@@ -18,6 +18,17 @@ export interface Release {
 }
 
 export const CHANGELOG: Release[] = [
+  {
+    version: '2.14.1',
+    date: '2026-10-21',
+    title: 'Easier to see and to use with the keyboard',
+    notes: [
+      'The outline round what you reach with Tab is clearer, in light and dark',
+      'In a switch like List / Board or Appearance, the left and right arrows choose the option next to it',
+      'Initials on people\'s colours are easier to read',
+      'Pictures with a see-through background get a light backdrop, so dark logos and drawings show in the dark look',
+    ],
+  },
   {
     version: '2.14.0',
     date: '2026-10-21',
