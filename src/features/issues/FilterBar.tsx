@@ -113,7 +113,7 @@ export function FilterSummary({ tree, onOpen, onClear, open, ref, extra }: Summa
           aria-haspopup="dialog"
           aria-expanded={open}
           data-state={open ? 'open' : 'closed'}
-          className="min-w-0 rounded-l-lg px-2.5 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60"
+          className="min-w-0 rounded-l-lg px-2.5 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/60"
         >
           <span className="line-clamp-2 break-words md:line-clamp-1">
             <Sentence tree={tree} items={items} statuses={statuses} first />
@@ -122,7 +122,7 @@ export function FilterSummary({ tree, onOpen, onClear, open, ref, extra }: Summa
         <button
           type="button"
           onClick={onClear}
-          className="flex shrink-0 items-center rounded-r-lg border-l px-2 text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+          className="flex shrink-0 items-center rounded-r-lg border-l px-2 text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Clear filters"
         >
           <X className="size-3.5" />

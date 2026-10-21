@@ -25,7 +25,7 @@ import { dayName, estimateName } from './format'
 import { estimateItems, priorityItems, useLabelItems, useStatusItems, useParentItems, usePeopleItems, useProjectItems } from './pickers'
 
 const chip =
-  'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm text-foreground/90 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60'
+  'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm text-foreground/90 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/60'
 
 type Draft = Required<Omit<NewIssue, 'description' | 'status' | 'statusId'>> & { description: string; statusId: string }
 

@@ -107,7 +107,7 @@ export function PickWorkspace() {
               key={w.id}
               type="button"
               onClick={() => pick(w)}
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none"
+              className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
               <Logo className="size-5" />
               <span className="min-w-0 flex-1 truncate font-medium">{w.name}</span>

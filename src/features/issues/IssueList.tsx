@@ -54,9 +54,9 @@ export function IssueRow({ issue, depth = 0, dragRef, dragProps, style, ghost, l
       // capture: the link itself leaves ⌘/Shift-clicks to the browser (new tab), before an onClick would run
       onClickCapture={(e) => selectionClick(e, issue.id)}
       className={cn(
-        'group flex h-11 items-center gap-2 rounded-md px-2 text-[15px] sm:gap-3 sm:px-4 hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none touch-manipulation select-none [-webkit-touch-callout:none]',
+        'group flex h-11 items-center gap-2 rounded-md px-2 text-[15px] sm:gap-3 sm:px-4 hover:bg-accent/60 focus-visible:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring touch-manipulation select-none [-webkit-touch-callout:none]',
         (ghost || carried) && 'opacity-30',
-        picked && !lifted && 'bg-accent ring-1 ring-inset ring-ring/50',
+        picked && !lifted && 'bg-accent ring-1 ring-inset ring-ring',
         lifted && 'cursor-grabbing border bg-popover shadow-lg',
       )}
       style={{ paddingLeft: `${1 + depth * 2}rem`, ...style }}
@@ -108,7 +108,7 @@ function GroupSection({ group, ids, issueOf, onAdd }: SectionProps) {
   // how deep each row sits (sub-issues under their parent); an issue dragged in from elsewhere sits at the top level
   const depths = useMemo(() => new Map(nestChildren(group.issues).map((r) => [r.issue.id, r.depth])), [group.issues])
   return (
-    <section ref={setNodeRef} className={cn('rounded-lg', isOver && !open && 'ring-1 ring-ring/50')}>
+    <section ref={setNodeRef} className={cn('rounded-lg', isOver && !open && 'ring-1 ring-ring')}>
       <div className="sticky top-0 z-10 flex h-11 items-center gap-3 rounded-lg bg-accent/70 px-4 backdrop-blur">
         <button type="button" onClick={() => setOpen((o) => !o)} className="flex items-center gap-3 text-[15px] font-medium" aria-expanded={open}>
           <ChevronDown className={cn('size-4 text-muted-foreground transition-transform', !open && '-rotate-90')} />

@@ -29,7 +29,7 @@
   --destructive: #b91c1c;
   --border: #e4e4e7;
   --input: #d4d4d8;
-  --ring: #52525b;
+  --ring: #71717a;
   --sidebar: #f2f2f4;
   --sidebar-foreground: #27272a;
   --sidebar-accent: #e6e6e9;
@@ -54,6 +54,8 @@
   --urgent-mark: #18181b;
   /* a thin edge round label dots, so pale colours (yellow, pink, white) still show on a light page */
   --dot-edge: rgb(0 0 0 / 0.12);
+  /* behind pictures in descriptions and comments, so a see-through logo or diagram drawn in black still shows */
+  --picture-backdrop: #ffffff;
 
   /* code in descriptions and comments */
   --code-comment: #6b6b73;
@@ -83,7 +85,7 @@
   --destructive: #ef4444;
   --border: #2e2e33;
   --input: #34343a;
-  --ring: #71717a;
+  --ring: #8b8b93;
   --sidebar: #161618;
   --sidebar-foreground: #e4e4e7;
   --sidebar-accent: #27272a;
@@ -103,6 +105,7 @@
   --status-mark: #18181b;
   --urgent-mark: #18181b;
   --dot-edge: transparent;
+  --picture-backdrop: #e4e4e7;
 
   --code-comment: #8b8b93;
   --code-keyword: #c4b5fd;
@@ -161,7 +164,7 @@
 
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
   html,
   body,
@@ -179,7 +182,7 @@
   .prose-sprawniej {
     @apply text-[15px] leading-relaxed text-foreground/90;
     & h1 { @apply mb-4 text-3xl font-semibold text-foreground; }
-    & img { @apply my-3 max-h-[32rem] max-w-full rounded-lg border; }
+    & img { @apply my-3 max-h-[32rem] max-w-full rounded-lg border; background: var(--picture-backdrop); }
     & img.ProseMirror-selectednode, & .ProseMirror-selectednode > img { outline: 2px solid var(--ring); }
     /* a picture whose address hasn't arrived yet: a grey space where it will be */
     & img:not([src]) { @apply inline-block h-24 w-40 bg-muted; }

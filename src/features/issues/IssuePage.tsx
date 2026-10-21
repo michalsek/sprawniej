@@ -46,7 +46,7 @@ function Property({ label, children }: { label: string; children: ReactNode }) {
 }
 
 const pick =
-  'flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[15px] hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60'
+  'flex min-h-8 w-full items-center gap-2 rounded-md px-2 py-1 text-left text-[15px] hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/60'
 
 export function IssuePage() {
   const { ref = '' } = useParams<{ ref: string }>()

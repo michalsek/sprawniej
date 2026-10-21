@@ -65,9 +65,9 @@ function thenFocus(e: Event, next: RefObject<(() => void) | null>) {
 }
 
 const segment =
-  'flex h-8 min-w-0 items-center gap-1 px-1.5 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:ring-inset data-[state=open]:bg-accent/60 md:gap-1.5 md:px-2 [&_svg]:size-3.5 [&_svg]:shrink-0'
+  'flex h-8 min-w-0 items-center gap-1 px-1.5 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset data-[state=open]:bg-accent/60 md:gap-1.5 md:px-2 [&_svg]:size-3.5 [&_svg]:shrink-0'
 const quiet =
-  'flex h-8 items-center rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60'
+  'flex h-8 items-center rounded-md text-sm text-muted-foreground hover:bg-accent/60 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/60'
 
 interface Props {
   filters: Filters

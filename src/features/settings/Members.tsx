@@ -51,7 +51,7 @@ function LockedRole({ role, why }: { role: Role; why?: string }) {
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <button type="button" className={`${badge} hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none`} title={why} data-role-locked>
+        <button type="button" className={`${badge} hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none`} title={why} data-role-locked>
           {ROLE_NAMES[role]}
           <span className="sr-only">. {why}</span>
         </button>

@@ -17,6 +17,8 @@ export default defineConfig({
         name: 'Sprawniej',
         short_name: 'Sprawniej',
         description: 'Plan and track your team’s work: issues, projects and views, on a list or a board.',
+        // one colour for both looks: no browser lets a manifest give Dark its own yet (docs/design.md). The browser
+        // bar follows the look through index.html's theme-color metas.
         theme_color: '#18181b',
         background_color: '#18181b',
         display: 'standalone',

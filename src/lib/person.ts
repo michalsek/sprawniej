@@ -12,7 +12,9 @@ export function initials(name: string): string {
 export function personColor(login: string): string {
   let h = 0
   for (const ch of login.toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0
-  return `hsl(${h % 360} 50% 42%)`
+  // one lightness and a gentle chroma for every hue: inside what a screen shows, and white initials read on all of
+  // them (4.5:1, tests/person.test.ts)
+  return `oklch(54% 0.09 ${h % 360})`
 }
 
 /** probably the same person: the same name, or an @handle that is their name */

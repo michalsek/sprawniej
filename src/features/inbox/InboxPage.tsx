@@ -65,7 +65,7 @@ function Note({ n, unread }: { n: InboxItem; unread: boolean }) {
       <button
         type="button"
         onClick={open}
-        className="flex w-full items-center gap-4 rounded-md px-4 py-3 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+        className="flex w-full items-center gap-4 rounded-md px-4 py-3 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <span className={cn('size-2 shrink-0 rounded-full', unread && 'bg-status-done')} aria-label={unread ? 'Unread' : undefined} />
         {notion ? <NotionMark className="size-8" /> : <PersonAvatar person={actor} login={n.actor} className="size-8 text-xs" />}

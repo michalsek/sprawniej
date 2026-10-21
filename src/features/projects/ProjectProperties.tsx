@@ -12,7 +12,7 @@ import type { Project } from '@/model/schema'
 import { StatusDot } from './StatusDot'
 
 export const chip =
-  'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm text-foreground/90 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60 [&_svg]:size-3.5'
+  'inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-sm text-foreground/90 hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent/60 [&_svg]:size-3.5'
 
 
 type Value = Pick<Project, 'status' | 'statusId' | 'lead' | 'targetDate' | 'teams'>

@@ -93,7 +93,7 @@ function StatusRow({ status, statuses, uses, text, isDefault, fresh, above, belo
           {...listeners}
           aria-label={`Move ${status.name}`}
           aria-roledescription="handle to reorder"
-          className="flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none active:cursor-grabbing"
+          className="flex size-8 shrink-0 cursor-grab touch-none items-center justify-center rounded-md text-muted-foreground hover:bg-accent/60 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:cursor-grabbing"
         >
           <GripVertical className="size-4" />
         </button>
@@ -184,7 +184,7 @@ function Hint({ text, children }: { text: string; children: string }) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span tabIndex={0} className="shrink-0 rounded-sm text-sm text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+        <span tabIndex={0} className="shrink-0 rounded-sm text-sm text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
           {children}
         </span>
       </TooltipTrigger>

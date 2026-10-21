@@ -9,7 +9,7 @@ export function EmojiPicker({ value, onChange, label = 'Choose an emoji', classN
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        className={cn('flex size-10 shrink-0 items-center justify-center rounded-lg border text-xl hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50', className)}
+        className={cn('flex size-10 shrink-0 items-center justify-center rounded-lg border text-xl hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring', className)}
         aria-label={label}
       >
         {value}
@@ -23,7 +23,7 @@ export function EmojiPicker({ value, onChange, label = 'Choose an emoji', classN
             setOpen(false)
           }}
         >
-          <Picker.Search className="z-10 mx-2 mt-2 h-9 appearance-none rounded-md border bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/50" placeholder="Search emoji" />
+          <Picker.Search className="z-10 mx-2 mt-2 h-9 appearance-none rounded-md border bg-transparent px-2.5 text-sm outline-none placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring" placeholder="Search emoji" />
           <Picker.Viewport className="relative flex-1 outline-hidden">
             <Picker.Loading className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">Loading…</Picker.Loading>
             <Picker.Empty className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">No emoji found</Picker.Empty>

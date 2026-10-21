@@ -31,7 +31,7 @@ function Joined({ uses }: { uses: Invite['uses'] }) {
   if (!uses.length) return null
   return (
     <Popover>
-      <PopoverTrigger className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+      <PopoverTrigger className="rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
         {uses.length} joined
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-3">
@@ -124,7 +124,7 @@ export function InviteLinks({ invites: { invites, state, reload }, onCreate }: {
                       {working ? (
                         <Tooltip>
                           <TooltipTrigger asChild>
-                            <span tabIndex={0} className="rounded-sm focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-none">
+                            <span tabIndex={0} className="rounded-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
                               {expiresText(i.expiresAt, now)}
                             </span>
                           </TooltipTrigger>
