@@ -302,7 +302,8 @@ any value matches; different filters must all match. `grouping`: `status`, `assi
 field twice) is kept in `tree`: a group `{"join": "and" | "or", "items": [...]}` whose items are conditions
 `{"field", "op": "is" | "not", "values": [...]}` or more groups, three levels deep at most (the app's limit; deeper
 ones still work). Fields are the seven flat keys plus `projectStatuses` (the workspace's project status ids, the one
-a project shows; an issue with no project never "is" one). A `statuses` condition holds categories, like the flat
+a project shows; an issue with no project never "is" one; a project status added later is not in a condition that
+lists all the others, unlike Status, which keeps whole categories). A `statuses` condition holds categories, like the flat
 `statuses`, and may carry `statusIds`, the same refinement as the flat `statusIds`. `is` means any of the values, `not`
 none of them; for `labels` and `subscribers` that is "includes any" and "includes none". `@me` in `assignees` or
 `subscribers` is whoever is looking (no login or handle can start with `@`).

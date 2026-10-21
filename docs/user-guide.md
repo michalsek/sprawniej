@@ -408,8 +408,9 @@ filter on My issues and no Project or Project status filter on a project's page.
 Each filter is a line like **Status | is | 2 statuses | ×**:
 
 - Click the first part to look at something else, and the values part to change the values. Any of the chosen
-  values counts: "Status is Todo or In Progress". In the Status filter, ticking every status of a group keeps the
-  whole group, so a status added to it later is in too; ticking only some keeps just those.
+  values counts: "Status is Todo or In Progress". In the Status filter, ticking every status of one of the status
+  groups (Todo, In Progress and so on) keeps that whole status group, so a status added to it later is in too;
+  ticking only some keeps just those.
 - Click **is** to switch it to **is not** (for labels and subscribers: **include** and **don’t include**).
   "Assignee is not Ana" also shows issues nobody is assigned to, and "Labels don’t include Bug" also shows issues with
   no labels.

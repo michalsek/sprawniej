@@ -17,10 +17,12 @@ import {
   treeOf,
   treeWithout,
   viewFilters,
+  withField,
   type MatchContext,
 } from '@/data/filterTree'
 import { followers } from '@/data/notify'
-import { ME, type FilterCondition, type FilterGroup, type FilterNode, type Filters, type Issue } from '@/model/schema'
+import { matchesStatus } from '@/data/statuses'
+import { ME, type FilterCondition, type FilterGroup, type FilterNode, type Filters, type Issue, type Status } from '@/model/schema'
 import { ISSUE_CATEGORIES } from '@/model/status'
 
 const data = sampleData()
@@ -37,10 +39,10 @@ const where = (fits: (i: Issue) => boolean) => issues.filter(fits).map((i) => i.
 /** from a newer version: a field this one doesn't know */
 const cycle = { field: 'cycle', op: 'is', values: ['c1'] } as FilterCondition
 
-/** matching as it was before trees (2.3.0), to check the flat filters still mean the same */
+/** matching as it was before trees (2.13.0), to check the flat filters still mean the same */
 function oldMatches(issue: Issue, f: Filters, c?: MatchContext): boolean {
   if (f.teams?.length && !f.teams.includes(issue.team)) return false
-  if (f.statuses?.length && !f.statuses.includes(issue.status)) return false
+  if (!matchesStatus(issue, f, c?.statuses ?? {})) return false
   if (f.assignees?.length && !f.assignees.includes(issue.assignee)) return false
   if (f.subscribers?.length && c) {
     const following = followers(issue, c.comments[issue.id] ?? [], c.people)
@@ -84,6 +86,12 @@ describe('flat filters', () => {
   })
 
   test('match the same issues as before trees, for many flat filters', () => {
+    // a second In Progress status, which one issue has, so picking some statuses of a category means something
+    const testing: Status = { id: 'testing', kind: 'issue', category: 'in_progress', name: 'Testing', color: '#fff', position: 'b0', hidden: false }
+    const statuses = { ...data.statuses, testing }
+    const one = issues.find((i) => i.status === 'in_progress')!
+    const all = issues.map((i) => (i === one ? { ...i, statusId: 'testing' } : i))
+    const statusIds = Object.values(statuses).filter((st) => st.kind === 'issue').map((st) => st.id)
     // a small fixed-seed random, so a failure can be replayed
     let seed = 7
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
@@ -99,7 +107,11 @@ describe('flat filters', () => {
     }
     for (let n = 0; n < 300; n++) {
       const f = Object.fromEntries(FLAT_FIELDS.filter(() => rand() < 0.4).map((k) => [k, some(choices[k] as readonly unknown[])])) as Filters
-      for (const c of [ctx, null]) expect(ids(treeOf(f), c)).toEqual(where((i) => oldMatches(i, f, c ?? undefined)))
+      if (f.statuses?.length && rand() < 0.5) f.statusIds = some(statusIds)
+      for (const c of [{ ...ctx, statuses }, null]) {
+        const test = matcher(treeOf(f), c ?? undefined)
+        expect(all.filter(test).map((i) => i.id)).toEqual(all.filter((i) => oldMatches(i, f, c ?? undefined)).map((i) => i.id))
+      }
     }
   })
 })
@@ -164,6 +176,14 @@ describe('matcher', () => {
     expect(treeOf(flat)).toEqual(only)
   })
 
+  test('a Status line this version can’t fully read fails safely', () => {
+    // only categories it doesn't know: nothing matches, as in the flat filters
+    expect(ids(and(is('statuses', 'blocked')))).toEqual([])
+    // a refinement that isn't a list of ids: from a newer version, left out of matching
+    const odd = { ...is('statuses', 'todo'), statusIds: { only: 'x' } } as unknown as FilterCondition
+    expect(ids(and(odd, is('labels', 'bug')))).toEqual(where((i) => i.labels.includes('bug')))
+  })
+
   test('three levels: Team is ENG and (Priority is Urgent or (Status is Todo and Labels include Bug))', () => {
     const tree = and(is('teams', 'ENG'), or(is('priorities', 1), and(is('statuses', 'todo'), is('labels', 'bug'))))
     expect(ids(tree)).toEqual(where((i) => i.team === 'ENG' && (i.priority === 1 || (i.status === 'todo' && i.labels.includes('bug')))))
@@ -211,6 +231,11 @@ describe('storing', () => {
 })
 
 describe('normalise', () => {
+  test('repeated statuses in a Status line go too', () => {
+    const line = { ...is('statuses', 'in_progress', 'in_progress'), statusIds: ['testing', 'testing'] }
+    expect(normalise(and(line))).toEqual(and({ ...is('statuses', 'in_progress'), statusIds: ['testing'] }))
+  })
+
   test('drops empty conditions and groups and repeated values, keeps what it can’t read', () => {
     const tree = and(is('statuses'), is('labels', 'bug', 'bug'), or(), or(and()), cycle)
     expect(normalise(tree)).toEqual(and(is('labels', 'bug'), cycle))
@@ -242,6 +267,11 @@ describe('edits', () => {
     const tree = and(is('labels', 'bug'), or(is('labels', 'bug', 'feature'), not('labels', 'bug', 'insights')))
     expect(treeWithout(tree, 'labels', 'bug')).toEqual(and(is('labels', 'bug'), or(is('labels', 'feature'), not('labels', 'insights'))))
     expect(treeWithout(tree, 'labels', 'performance')).toBe(tree)
+  })
+
+  test('a Status line moved to another field leaves its statuses behind, so it can be stored simply again', () => {
+    const moved = { ...withField({ ...is('statuses', 'in_progress'), statusIds: ['testing'] }, 'priorities'), values: [1] }
+    expect(storedFilters({}, and(moved))).toEqual({ priorities: [1] })
   })
 
   test('Save as view from a tab: its statuses join the filter', () => {

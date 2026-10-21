@@ -252,7 +252,7 @@ export const filterConditionSchema = z
   })
   .loose()
 export type FilterCondition = z.infer<typeof filterConditionSchema>
-/** a status category or status id, a login, a priority, a label or project id, null (no one, no project), or ME */
+/** a status category, a project status id, a login, a priority, a label or project id, null (no one, no project), or ME */
 export type FilterValue = FilterCondition['values'][number]
 
 /** conditions and groups joined by "and" (all must match) or "or" (one is enough) */

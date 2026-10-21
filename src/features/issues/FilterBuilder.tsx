@@ -10,7 +10,7 @@
 import { createContext, useContext, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Brackets, Check, Plus, X } from 'lucide-react'
 import { Picker } from '@/components/Picker'
-import { MAX_DEPTH, NEWER_FILTER, alignDraft, isCondition, isGroup, normalise, storedFilters, treeOf } from '@/data/filterTree'
+import { MAX_DEPTH, NEWER_FILTER, alignDraft, isCondition, isGroup, normalise, storedFilters, treeOf, withField } from '@/data/filterTree'
 import { useData } from '@/data/store'
 import { equal } from '@/lib/equal'
 import { useNarrow } from '@/lib/useNarrow'
@@ -332,7 +332,7 @@ function ConditionPill({ condition: c, onChange, onRemove }: { condition: Filter
   const next = useRef<(() => void) | null>(null)
   const setField = (field: FilterField) => {
     if (field === c.field) return
-    onChange(replacing(c, { ...c, field, values: [] }))
+    onChange(replacing(c, withField(c, field)))
     // a new field starts with no values: its picker opens next
     next.current = () => setPickerFor(key)
   }

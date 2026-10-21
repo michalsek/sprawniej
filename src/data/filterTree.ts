@@ -11,7 +11,7 @@
 import type { Comment, FilterCondition, FilterField, FilterGroup, FilterNode, FilterValue, Filters, Issue, Person, Project, Status } from '@/model/schema'
 import { ME, isFilterField } from '@/model/schema'
 import { equal } from '@/lib/equal'
-import { CATEGORIES, TAB_GROUPS, isIssueCategory, type IssueTab } from '@/model/status'
+import { CATEGORIES, TAB_GROUPS, type IssueCategory, type IssueTab } from '@/model/status'
 import { followers } from './notify'
 import { matchesStatus, statusOfProject } from './statuses'
 
@@ -38,10 +38,14 @@ export function isGroup(n: unknown): n is FilterGroup {
   return isObject(n) && (n.join === 'and' || n.join === 'or') && Array.isArray(n.items)
 }
 
-/** a condition this version understands */
+/** a condition this version understands (a Status refinement that isn't a list of ids makes it one it doesn't) */
 export function isCondition(n: unknown): n is FilterCondition & { field: FilterField } {
-  return isObject(n) && isFilterField(n.field) && (n.op === 'is' || n.op === 'not') && Array.isArray(n.values)
+  if (!isObject(n) || !isFilterField(n.field) || (n.op !== 'is' && n.op !== 'not') || !Array.isArray(n.values)) return false
+  return n.statusIds === undefined || (Array.isArray(n.statusIds) && n.statusIds.every((x) => typeof x === 'string'))
 }
+
+/** the condition looking at another field: no values yet, and no Status refinement */
+export const withField = (c: FilterCondition, field: FilterField): FilterCondition => ({ ...c, field, values: [], statusIds: undefined })
 
 /** fields a newer version put on a node: such a node can't be rewritten in another shape without losing them */
 const hasMore = (n: Record<string, unknown>, known: readonly string[]) => Object.keys(n).some((k) => !known.includes(k) && n[k] !== undefined)
@@ -145,7 +149,10 @@ function tidy(g: FilterGroup): FilterGroup {
       else add(inner)
     } else if (isCondition(n)) {
       const values = unique(n.values)
-      if (values.length) items.push(values.length === n.values.length ? n : { ...n, values })
+      const statusIds = n.statusIds && [...new Set(n.statusIds)]
+      if (!values.length) continue
+      const same = values.length === n.values.length && statusIds?.length === n.statusIds?.length
+      items.push(same ? n : { ...n, values, ...(statusIds && { statusIds }) })
     } else items.push(n)
   }
   return { ...g, items }
@@ -196,8 +203,9 @@ function compile(n: unknown, ctx?: MatchContext): Test | null {
 function fieldTest(field: FilterField, set: ReadonlySet<unknown>, ctx?: MatchContext, statusIds?: string[]): Test | null {
   switch (field) {
     case 'statuses': {
-      // one of these categories, and of these statuses where `statusIds` names any of that category's
-      const f = { statuses: [...set].filter(isIssueCategory), statusIds }
+      // one of these categories, and of these statuses where `statusIds` names any of that category's; a category
+      // this version doesn't know matches nothing, as in the flat filters
+      const f = { statuses: [...set].filter((v): v is IssueCategory => typeof v === 'string'), statusIds }
       const statuses = ctx?.statuses ?? {}
       return (i) => matchesStatus(i, f, statuses)
     }
