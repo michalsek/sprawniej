@@ -24,6 +24,7 @@ scrollbars, the date picker) are light in Light and dark in Dark.
 | Main button | `primary` | near-black with white text | white with dark text |
 | Focus ring | `ring` | `#71717a` | `#8b8b93` |
 | Behind pictures | `picture-backdrop` | `#ffffff` | `#e4e4e7` |
+| A progress ring's track | `progress-track` | `#e4e4e7` | `#2a2a2e` |
 
 The light page colour is also in `src/lib/theme.ts` (`THEME_COLORS`) and index.html's `theme-color`; change all three
 together (`tests/themeScript.test.ts` checks). `tests/contrast.test.ts` checks every text pair is 4.5:1 (Dark's red in
@@ -161,7 +162,22 @@ Two groups follow their box, not the text, so they stay when the text gets small
 - **Tabs that are pages** (Active / Backlog / All issues): separate outlined buttons (`src/components/Tabs.tsx`).
 - **Issue row**: priority, ID, status, title (with `code` in backticks), sub-issue counter, labels, assignee, date.
 - **Board card**: ID and assignee, then status and title, then priority, counter and labels. A project card: emoji,
-  name and lead, then the target date and the progress bar. An empty column says "Drop a project here".
+  name, progress ring and lead; the start of its description in quiet grey (two lines at most, cut with an ellipsis,
+  none when it has none); then the target date and how many issues count ("12 issues", "1 issue", "No issues"). An
+  empty column says "Drop a project here".
+- **Progress ring** (`src/components/ProgressRing.tsx`, a project's in `src/features/projects/ProjectRing.tsx`): how
+  much of a project is done, 16 px, just left of the lead's picture on cards and list rows (at the end of the row when
+  there is no lead), and after the property chips on the project's page, next to "8 of 12 done". A `progress-track`
+  ring with a `status-done` arc that starts at the top; all done is a closed circle, nothing to count is the track
+  alone. No fill and no check (those are the Done status), never a dashed ring (that is Backlog). A little done still
+  shows a small arc, nearly done still leaves a gap. Its tooltip says it in words, a line each (text only, as status
+  icons don't read on the tooltip's dark surface): "66% done: 8 of 12 issues" (rounded down, never 0% once something
+  is done, never 100% until all is), what is still open by group, what is left out (canceled and duplicate issues)
+  and how many archived issues count. It opens on hover, when the card or row is reached with the keyboard (the ring
+  is not a Tab stop of its own there), and on a tap on the ring (which doesn't open the project); Esc closes it. A
+  screen reader hears the first line as part of the card or row. The words are in
+  `src/features/projects/progressText.ts`; the numbers come from one table for every project (`projectCountsIndex`,
+  read with `useProjectCounts`), so one issue changing redraws only the cards it touches.
 - **Filters**: each condition is a pill of joined segments (field, is / is not, values, ×), 32 px tall, like the
   chips. Several values show their icons and a count ("4 statuses"). Rows after the first start with a quiet "and" /
   "or" that switches its group (on a phone, on a short line of its own above the row, so pills keep the width); a

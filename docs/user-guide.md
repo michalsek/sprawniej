@@ -462,14 +462,21 @@ Favourites).
 
 A **project** is a bigger goal made of several issues, like "New onboarding". **New project** on the Projects page
 starts one; a new project starts in Planned. On its page you can change its emoji, name and description in place, and
-set its status, who leads it, a target date and which teams work on it. The bar shows how many of its issues are done.
+set its status, who leads it, a target date and which teams work on it.
+
+A small ring next to the lead's picture shows how much of the project is done: it fills up as its issues are done and
+closes when they all are. Point at it (or tap it on a phone, or move to the project with the keyboard) to see the
+numbers: how many are done, which are still open, and which are left out. Canceled and duplicate issues don't count,
+and archived ones do. A project's page shows the same ring, with "8 of 12 done" next to it.
 
 The Projects page (for the whole workspace, and for each team) shows projects as a **List** or a **Board**; switch
 with the buttons next to New project. Sprawniej remembers your choice for each page, in this browser.
 
-- **List**: every project by name, with its status, lead, target date and progress. Click an emoji to change it, or
-  use **⋯** to rename or delete a project.
-- **Board**: a column for each project status (Backlog, Planned, In progress, Paused, Completed, Canceled, and any
+- **List**: every project by name, with its status, progress ring and lead, target date and how many issues count.
+  Click an emoji to change it, or use **⋯** to rename or delete a project.
+- **Board**: each card shows the project's name, its progress ring and lead, the start of its description, the target
+  date and how many issues count.
+- The board has a column for each project status (Backlog, Planned, In progress, Paused, Completed, Canceled, and any
   your workspace adds in Settings › Statuses), with how many projects are in it. Drag a card to another column to change its status, or up
   and down to put it in order; the order is the same for everyone. **+** at the top of a column starts a project in
   that status. On a phone, press and hold a card to pick it up. With the keyboard, move to a card, press Space to pick
