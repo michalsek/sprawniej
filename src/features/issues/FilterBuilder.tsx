@@ -572,7 +572,14 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" loop className="w-40">
               {unitsFor(c.field).map((u) => (
-                <DropdownMenuItem key={u} role="menuitemradio" aria-checked={u === unit} onSelect={() => set({ ...c, unit: u, amount: c.amount === undefined ? undefined : Math.min(c.amount, mostOf(u)) })}>
+                <DropdownMenuItem key={u} role="menuitemradio" aria-checked={u === unit} onSelect={() => {
+                    // a number still waiting to be saved goes with the new unit, capped like the saved one
+                    const pending = waiting.current
+                    if (pending) clearTimeout(pending.timer)
+                    waiting.current = null
+                    const amount = pending?.amount ?? c.amount
+                    set({ ...c, unit: u, amount: amount === undefined ? undefined : Math.min(amount, mostOf(u)) })
+                  }}>
                   {unitWord(u, c.amount, c.op === 'ago')}
                   <Check className={cn('ml-auto', u !== unit && 'invisible')} />
                 </DropdownMenuItem>
