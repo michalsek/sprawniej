@@ -230,7 +230,9 @@ export type Ordering = (typeof ORDERINGS)[number]
 
 /**
  * What a filter condition can look at. The first seven are also the keys of the simple, flat filters (see
- * src/data/filterTree.ts). Status values are status ids from src/model/status.ts, never a list of our own.
+ * src/data/filterTree.ts). Status values are as in the flat filters: categories (ISSUE_CATEGORIES), refined by
+ * `statusIds`; project status values are the workspace's project status ids (src/data/statuses.ts). Never a list of
+ * our own.
  */
 export const FILTER_FIELDS = ['statuses', 'assignees', 'subscribers', 'priorities', 'labels', 'projects', 'teams', 'projectStatuses'] as const
 export type FilterField = (typeof FILTER_FIELDS)[number]
@@ -245,10 +247,12 @@ export const filterConditionSchema = z
     field: z.string(),
     op: z.enum(['is', 'not']),
     values: z.array(z.union([z.string(), z.number(), z.null()])),
+    /** Status only: within its categories, only these statuses (as the flat filters' `statusIds`) */
+    statusIds: z.array(z.string()).optional(),
   })
   .loose()
 export type FilterCondition = z.infer<typeof filterConditionSchema>
-/** a status id, a login, a priority, a label or project id, null (no one, no project), or ME */
+/** a status category or status id, a login, a priority, a label or project id, null (no one, no project), or ME */
 export type FilterValue = FilterCondition['values'][number]
 
 /** conditions and groups joined by "and" (all must match) or "or" (one is enough) */

@@ -6,9 +6,10 @@
 import { Fragment, type ReactNode, type Ref } from 'react'
 import { ListFilter, X } from 'lucide-react'
 import { NEWER_FILTER, describeTree, isCondition, isGroup } from '@/data/filterTree'
-import type { FilterField, FilterGroup, FilterValue } from '@/model/schema'
+import { useData } from '@/data/store'
+import type { FilterField, FilterGroup, FilterValue, Status } from '@/model/schema'
 import { Button } from '@/ui/button'
-import { itemFor, kindOf, sayCondition, upperFirst, useFilterItems, type FilterItems } from './filterKinds'
+import { itemFor, kindOf, pickedOf, sayCondition, upperFirst, useFilterItems, type FilterItems } from './filterKinds'
 
 /** a condition's values, short: one shows its icon and name, several show their icons and "4 statuses" */
 export function ValuesLabel({ field, values, items }: { field: FilterField; values: FilterValue[]; items: FilterItems }) {
@@ -59,14 +60,14 @@ export function FilterButton({ count, open, onClick, ref }: { count: number; ope
 }
 
 /** the filter as words and values, for the summary chip; `first`: it starts the sentence */
-function Sentence({ tree, items, first }: { tree: FilterGroup; items: FilterItems; first?: boolean }) {
+function Sentence({ tree, items, statuses, first }: { tree: FilterGroup; items: FilterItems; statuses: Record<string, Status>; first?: boolean }) {
   return tree.items.map((n, k) => (
     <Fragment key={k}>
       {k > 0 && <span className="text-muted-foreground"> {tree.join} </span>}
       {isGroup(n) ? (
         <>
           <span className="text-muted-foreground">(</span>
-          <Sentence tree={n} items={items} />
+          <Sentence tree={n} items={items} statuses={statuses} />
           <span className="text-muted-foreground">)</span>
         </>
       ) : isCondition(n) ? (
@@ -75,7 +76,7 @@ function Sentence({ tree, items, first }: { tree: FilterGroup; items: FilterItem
             {kindOf(n.field).name} {n.op === 'not' ? kindOf(n.field).not : kindOf(n.field).is}{' '}
           </span>
           <span className="inline-flex max-w-56 items-center align-bottom [&_svg]:size-3.5">
-            <ValuesLabel field={n.field} values={n.values} items={items} />
+            <ValuesLabel field={n.field} values={pickedOf(n, statuses)} items={items} />
           </span>
         </>
       ) : (
@@ -98,7 +99,8 @@ interface SummaryProps {
 /** the whole filter as one chip: click it to change the filter, × to clear it */
 export function FilterSummary({ tree, onOpen, onClear, open, ref, extra }: SummaryProps) {
   const items = useFilterItems()
-  const words = upperFirst(describeTree(tree, (c) => sayCondition(c, items)))
+  const statuses = useData((s) => s.statuses)
+  const words = upperFirst(describeTree(tree, (c) => sayCondition(c, items, statuses)))
   return (
     <div className="flex items-start gap-2">
       <div className="flex min-w-0 items-stretch rounded-lg border text-sm">
@@ -114,7 +116,7 @@ export function FilterSummary({ tree, onOpen, onClear, open, ref, extra }: Summa
           className="min-w-0 rounded-l-lg px-2.5 py-1.5 text-left hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-accent/60"
         >
           <span className="line-clamp-2 break-words md:line-clamp-1">
-            <Sentence tree={tree} items={items} first />
+            <Sentence tree={tree} items={items} statuses={statuses} first />
           </span>
         </button>
         <button

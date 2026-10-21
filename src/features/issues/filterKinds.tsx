@@ -8,8 +8,10 @@ import { useShallow } from 'zustand/react/shallow'
 import type { PickerItem } from '@/components/Picker'
 import { useData } from '@/data/store'
 import { valueKey } from '@/data/filterTree'
-import type { FilterCondition, FilterField, FilterValue } from '@/model/schema'
-import { priorityItems, projectStatusItems, statusItems, useFilterPeopleItems, useLabelItems, useProjectItems } from './pickers'
+import { pickedStatusIds, statusFilter } from '@/data/statuses'
+import type { FilterCondition, FilterField, FilterValue, Status } from '@/model/schema'
+import { isIssueCategory } from '@/model/status'
+import { priorityItems, useFilterPeopleItems, useLabelItems, useProjectItems, useProjectStatusItems, useStatusItems } from './pickers'
 
 export interface Kind {
   key: FilterField
@@ -44,23 +46,26 @@ export type FilterItems = Record<FilterField, PickerItem<FilterValue>[]>
 
 /** the values each field offers */
 export function useFilterItems(): FilterItems {
+  // every status, hidden ones too, so a filter can still pick one
+  const statuses = useStatusItems({ all: true })
+  const projectStatuses = useProjectStatusItems()
   const people = useFilterPeopleItems()
   const labels = useLabelItems()
   const projects = useProjectItems()
   const teams = useData(useShallow((s) => Object.values(s.teams)))
   return useMemo(
     () => ({
-      statuses: statusItems,
+      statuses,
       assignees: people,
       // anyone following the issue: who made it, is assigned, commented, was mentioned or subscribed
       subscribers: people.filter((p) => p.value !== null),
       priorities: priorityItems,
       labels,
       projects,
-      projectStatuses: projectStatusItems,
+      projectStatuses,
       teams: teams.map((t) => ({ value: t.key, label: t.name, icon: <span className="w-4 text-center leading-none">{t.emoji}</span> })),
     }),
-    [people, labels, projects, teams],
+    [statuses, projectStatuses, people, labels, projects, teams],
   )
 }
 
@@ -70,9 +75,27 @@ export const itemFor = (items: PickerItem<FilterValue>[], v: FilterValue) => ite
 /** a sentence starts with a capital: "A filter from a newer version" */
 export const upperFirst = (s: string) => s.charAt(0).toUpperCase() + s.slice(1)
 
+type Statuses = Record<string, Status>
+
+/**
+ * A condition's values as its picker shows them. Status keeps categories and, where only some of one's statuses are
+ * picked, those statuses (as the flat filters do, src/data/statuses.ts); its picker shows the statuses themselves.
+ */
+export function pickedOf(c: FilterCondition & { field: FilterField }, statuses: Statuses): FilterValue[] {
+  if (c.field !== 'statuses') return c.values
+  return pickedStatusIds({ statuses: c.values.filter(isIssueCategory), statusIds: c.statusIds }, statuses)
+}
+
+/** the condition with these values picked (see pickedOf); a category with all its statuses picked is kept whole */
+export function withPicked(c: FilterCondition, values: FilterValue[], statuses: Statuses): FilterCondition {
+  if (c.field !== 'statuses') return { ...c, values }
+  const f = statusFilter(values.filter((v) => typeof v === 'string'), statuses)
+  return { ...c, values: f.statuses ?? [], statusIds: f.statusIds }
+}
+
 /** a condition in words, all values named: "Status is Todo or In Progress" */
-export function sayCondition(c: FilterCondition & { field: FilterField }, items: FilterItems): string {
+export function sayCondition(c: FilterCondition & { field: FilterField }, items: FilterItems, statuses: Statuses): string {
   const kind = kindOf(c.field)
-  const names = c.values.map((v) => itemFor(items[c.field], v)?.label ?? `a deleted ${kind.one}`)
+  const names = pickedOf(c, statuses).map((v) => itemFor(items[c.field], v)?.label ?? `a deleted ${kind.one}`)
   return `${kind.name} ${c.op === 'not' ? kind.not : kind.is} ${names.length ? names.join(' or ') : 'anything'}`
 }

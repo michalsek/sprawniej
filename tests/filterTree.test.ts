@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { sampleData } from './fixtures/sample'
+import { projectStatusIdOf, sampleData, statusIdOf } from './fixtures/sample'
 import {
   FLAT_FIELDS,
   alignDraft,
@@ -21,11 +21,11 @@ import {
 } from '@/data/filterTree'
 import { followers } from '@/data/notify'
 import { ME, type FilterCondition, type FilterGroup, type FilterNode, type Filters, type Issue } from '@/model/schema'
-import { STATUS_IDS } from '@/model/status'
+import { ISSUE_CATEGORIES } from '@/model/status'
 
 const data = sampleData()
 const issues = Object.values(data.issues)
-const ctx: MatchContext = { comments: data.comments, people: data.people, projects: data.projects, me: 'ania-k' }
+const ctx: MatchContext = { comments: data.comments, people: data.people, projects: data.projects, statuses: data.statuses, me: 'ania-k' }
 
 const is = (field: string, ...values: FilterCondition['values']): FilterCondition => ({ field, op: 'is', values })
 const not = (field: string, ...values: FilterCondition['values']): FilterCondition => ({ field, op: 'not', values })
@@ -89,7 +89,7 @@ describe('flat filters', () => {
     const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647)
     const some = <T,>(xs: readonly T[]) => xs.filter(() => rand() < 0.35)
     const choices = {
-      statuses: STATUS_IDS,
+      statuses: ISSUE_CATEGORIES,
       assignees: [...Object.keys(data.people), null],
       subscribers: Object.keys(data.people),
       priorities: [0, 1, 2, 3, 4],
@@ -134,10 +134,11 @@ describe('matcher', () => {
   })
 
   test('Project status: an issue with no project never "is" one, and always "is not"', () => {
-    expect(ids(and(is('projectStatuses', 'in_progress')))).toEqual(where((i) => i.project === 'p-insights'))
-    expect(ids(and(not('projectStatuses', 'in_progress')))).toEqual(where((i) => i.project !== 'p-insights'))
-    expect(ids(and(not('projectStatuses', 'in_progress'))).some((id) => data.issues[id].project === null)).toBe(true)
-    expect(ids(and(is('projectStatuses', 'in_progress')), { ...ctx, projects: undefined })).toEqual(where(() => true))
+    const inProgress = projectStatusIdOf('in_progress')
+    expect(ids(and(is('projectStatuses', inProgress)))).toEqual(where((i) => i.project === 'p-insights'))
+    expect(ids(and(not('projectStatuses', inProgress)))).toEqual(where((i) => i.project !== 'p-insights'))
+    expect(ids(and(not('projectStatuses', inProgress))).some((id) => data.issues[id].project === null)).toBe(true)
+    expect(ids(and(is('projectStatuses', inProgress)), { ...ctx, projects: undefined })).toEqual(where(() => true))
   })
 
   test('empty conditions and groups, and ones from a newer version, are left out of their group', () => {
@@ -147,6 +148,20 @@ describe('matcher', () => {
     // in an "or", a condition that's left out doesn't let everything through
     expect(ids(or(is('labels', 'bug'), cycle))).toEqual(bugs)
     expect(ids(or(cycle, { join: 'xor', items: [] } as unknown as FilterGroup))).toEqual(where(() => true))
+  })
+
+  test('Status keeps categories, refined by the statuses it names, as the flat filters do', () => {
+    const statuses = { ...data.statuses, testing: { id: 'testing', kind: 'issue' as const, category: 'in_progress', name: 'Testing', color: '#fff', position: 'b0', hidden: false } }
+    const c = { ...ctx, statuses }
+    const testing = { ...issues.find((i) => i.status === 'in_progress')!, statusId: 'testing' }
+    const only = and({ ...is('statuses', 'in_progress'), statusIds: [statusIdOf('in_progress')] })
+    expect(matcher(only, c)(testing)).toBe(false)
+    expect(matcher(and(is('statuses', 'in_progress')), c)(testing)).toBe(true)
+    expect(matcher({ ...only, items: [{ ...only.items[0], op: 'not' }] }, c)(testing)).toBe(true)
+    // stored flat, the refinement goes with it, and comes back
+    const flat = storedFilters({}, only)
+    expect(flat).toEqual({ statuses: ['in_progress'], statusIds: [statusIdOf('in_progress')] })
+    expect(treeOf(flat)).toEqual(only)
   })
 
   test('three levels: Team is ENG and (Priority is Urgent or (Status is Todo and Labels include Bug))', () => {

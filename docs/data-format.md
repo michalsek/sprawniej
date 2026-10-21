@@ -301,9 +301,11 @@ any value matches; different filters must all match. `grouping`: `status`, `assi
 **Groups (`filters.tree`).** What the flat keys can't say (an "or", groups, "is not", Me, project status, the same
 field twice) is kept in `tree`: a group `{"join": "and" | "or", "items": [...]}` whose items are conditions
 `{"field", "op": "is" | "not", "values": [...]}` or more groups, three levels deep at most (the app's limit; deeper
-ones still work). Fields are the seven flat keys plus `projectStatuses` (project status ids; an issue with no project
-never "is" one). `is` means any of the values, `not` none of them; for `labels` and `subscribers` that is "includes any"
-and "includes none". `@me` in `assignees` or `subscribers` is whoever is looking (no handle can start with `@`).
+ones still work). Fields are the seven flat keys plus `projectStatuses` (the workspace's project status ids, the one
+a project shows; an issue with no project never "is" one). A `statuses` condition holds categories, like the flat
+`statuses`, and may carry `statusIds`, the same refinement as the flat `statusIds`. `is` means any of the values, `not`
+none of them; for `labels` and `subscribers` that is "includes any" and "includes none". `@me` in `assignees` or
+`subscribers` is whoever is looking (no login or handle can start with `@`).
 
 ```json
 { "statuses": ["in_progress", "in_review"],
@@ -319,8 +321,9 @@ The app writes the simplest shape that says the filter (`src/data/filterTree.ts`
 - One "and" group with at most one `is` condition per flat field, and no `@me`: only the flat keys, no `tree`. Older
   versions read it as they always did.
 - Anything else: `tree`, plus the flat keys as a rougher copy for older versions, which may show more issues but
-  never fewer: the `is` conditions right in a top "and" group, without ones that name `@me`. Two conditions on one
-  field keep the values they share (for `labels` and `subscribers`, the first one's). A top "or" has no copy.
+  never fewer: the `is` conditions right in a top "and" group, without ones that name `@me`, and without `statusIds`.
+  Two conditions on one field keep the values they share (for `labels` and `subscribers`, the first one's). A top
+  "or" has no copy.
 
 When `tree` is there it wins and the flat keys are ignored. A condition or group the app can't read (a field or `op`
 from a newer version) is left out of matching and kept as it is when the filter changes. Other keys inside `filters`

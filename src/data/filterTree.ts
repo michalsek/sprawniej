@@ -8,11 +8,12 @@
  *
  * A condition or group this version can't read (a newer one wrote it) is left out of matching, and kept as it is.
  */
-import type { Comment, FilterCondition, FilterField, FilterGroup, FilterNode, FilterValue, Filters, Issue, Person, Project } from '@/model/schema'
+import type { Comment, FilterCondition, FilterField, FilterGroup, FilterNode, FilterValue, Filters, Issue, Person, Project, Status } from '@/model/schema'
 import { ME, isFilterField } from '@/model/schema'
 import { equal } from '@/lib/equal'
-import { STATUSES, TAB_GROUPS, type IssueTab } from '@/model/status'
+import { CATEGORIES, TAB_GROUPS, isIssueCategory, type IssueTab } from '@/model/status'
 import { followers } from './notify'
+import { matchesStatus, statusOfProject } from './statuses'
 
 /** groups go this deep: the whole filter, a group in it, and a group in that */
 export const MAX_DEPTH = 3
@@ -45,7 +46,7 @@ export function isCondition(n: unknown): n is FilterCondition & { field: FilterF
 /** fields a newer version put on a node: such a node can't be rewritten in another shape without losing them */
 const hasMore = (n: Record<string, unknown>, known: readonly string[]) => Object.keys(n).some((k) => !known.includes(k) && n[k] !== undefined)
 const GROUP_KEYS = ['join', 'items']
-const CONDITION_KEYS = ['field', 'op', 'values']
+const CONDITION_KEYS = ['field', 'op', 'values', 'statusIds']
 
 /** "or" with a single item means the same as "and" */
 const allMustMatch = (g: FilterGroup) => g.join === 'and' || g.items.length <= 1
@@ -60,13 +61,15 @@ function unique(values: FilterValue[]): FilterValue[] {
   })
 }
 
-/** the flat filters as a tree: one "and" group, one "is" condition per field */
+/** the flat filters as a tree: one "and" group, one "is" condition per field (Status with its `statusIds`) */
 export function fromFlat(f: Filters): FilterGroup {
   return {
     join: 'and',
     items: FLAT_FIELDS.flatMap((field) => {
       const values = f[field]
-      return Array.isArray(values) && values.length ? [{ field, op: 'is' as const, values: [...values] }] : []
+      if (!Array.isArray(values) || !values.length) return []
+      const only = field === 'statuses' && f.statusIds?.length ? { statusIds: [...f.statusIds] } : {}
+      return [{ field, op: 'is' as const, values: [...values], ...only }]
     }),
   }
 }
@@ -78,7 +81,9 @@ export function toFlat(tree: FilterGroup): Filters | undefined {
   for (const n of tree.items) {
     if (!isCondition(n) || hasMore(n, CONDITION_KEYS) || n.op !== 'is' || !isFlatField(n.field)) return undefined
     if (!n.values.length || n.field in out || n.values.includes(ME)) return undefined
+    if (n.statusIds && (n.field !== 'statuses' || !Array.isArray(n.statusIds))) return undefined
     out[n.field] = [...n.values]
+    if (n.statusIds?.length) out.statusIds = [...n.statusIds]
   }
   return out
 }
@@ -111,7 +116,7 @@ export function mirrorOf(tree: FilterGroup): Filters {
  * otherwise the tree plus its flat mirror. Other keys already in `prev` (from a newer version) are kept.
  */
 export function storedFilters(prev: Filters, tree: FilterGroup): Filters {
-  const rest = Object.fromEntries(Object.entries(prev).filter(([k]) => !isFlatField(k) && k !== 'tree'))
+  const rest = Object.fromEntries(Object.entries(prev).filter(([k]) => !isFlatField(k) && k !== 'statusIds' && k !== 'tree'))
   const flat = toFlat(tree)
   return flat ? { ...rest, ...flat } : { ...rest, ...mirrorOf(tree), tree }
 }
@@ -158,7 +163,9 @@ export interface MatchContext {
   people: Record<string, Person>
   /** for Project status */
   projects?: Record<string, Project>
-  /** your handle, for Me */
+  /** the workspace's statuses: for Status, which category each belongs to; for Project status, which a project shows */
+  statuses?: Record<string, Status>
+  /** your login, for Me */
   me?: string
 }
 
@@ -180,16 +187,20 @@ function compile(n: unknown, ctx?: MatchContext): Test | null {
   }
   if (!isCondition(n)) return null
   const values = n.values.flatMap((v) => (v !== ME ? [v] : ctx?.me ? [ctx.me] : []))
-  const test = values.length ? fieldTest(n.field, new Set<unknown>(values), ctx) : null
+  const test = values.length ? fieldTest(n.field, new Set<unknown>(values), ctx, n.statusIds) : null
   if (!test) return null
   return n.op === 'not' ? (i) => !test(i) : test
 }
 
-/** "is any of these" for one field */
-function fieldTest(field: FilterField, set: ReadonlySet<unknown>, ctx?: MatchContext): Test | null {
+/** "is any of these" for one field; `statusIds` refines Status, as in the flat filters */
+function fieldTest(field: FilterField, set: ReadonlySet<unknown>, ctx?: MatchContext, statusIds?: string[]): Test | null {
   switch (field) {
-    case 'statuses':
-      return (i) => set.has(i.status)
+    case 'statuses': {
+      // one of these categories, and of these statuses where `statusIds` names any of that category's
+      const f = { statuses: [...set].filter(isIssueCategory), statusIds }
+      const statuses = ctx?.statuses ?? {}
+      return (i) => matchesStatus(i, f, statuses)
+    }
     case 'assignees':
       return (i) => set.has(i.assignee)
     case 'priorities':
@@ -208,8 +219,12 @@ function fieldTest(field: FilterField, set: ReadonlySet<unknown>, ctx?: MatchCon
     case 'projectStatuses': {
       const projects = ctx?.projects
       if (!projects) return null
+      const statuses = ctx?.statuses ?? {}
       // no project, no project status: such an issue never "is" one, and always "is not"
-      return (i) => !!i.project && set.has(projects[i.project]?.status)
+      return (i) => {
+        const p = i.project ? projects[i.project] : undefined
+        return !!p && set.has(statusOfProject(p, statuses).id)
+      }
     }
   }
 }
@@ -259,7 +274,7 @@ export function andStatuses(tree: FilterGroup, ids: readonly string[]): FilterGr
 export function viewFilters(page: Filters, own: Filters, tab: IssueTab): Filters {
   const both = normalise({ join: 'and', items: [...fromFlat({ ...page, teams: undefined }).items, treeOf(own)] })
   if (tab === 'all') return storedFilters(own, both)
-  const inTab = STATUSES.filter((st) => TAB_GROUPS[tab].includes(st.group)).map((st) => st.id)
+  const inTab = CATEGORIES.filter((c) => TAB_GROUPS[tab].includes(c.group)).map((c) => c.id)
   return storedFilters(own, normalise(andStatuses(both, inTab)))
 }
 
@@ -300,7 +315,7 @@ function meaningOf(v: unknown): string {
   if (!isObject(v)) return JSON.stringify(v) ?? 'null'
   // with one line or none, and / or makes no difference
   if (isGroup(v) && v.join === 'or' && v.items.length <= 1) return meaningOf({ ...v, join: 'and' })
-  const unordered = (k: string) => (k === 'items' && isGroup(v)) || (k === 'values' && isCondition(v))
+  const unordered = (k: string) => (k === 'items' && isGroup(v)) || ((k === 'values' || k === 'statusIds') && isCondition(v))
   const fields = Object.keys(v)
     .filter((k) => v[k] !== undefined)
     .sort()

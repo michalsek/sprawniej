@@ -11,15 +11,16 @@ import { createContext, useContext, useRef, useState, type ReactNode, type RefOb
 import { Brackets, Check, Plus, X } from 'lucide-react'
 import { Picker } from '@/components/Picker'
 import { MAX_DEPTH, NEWER_FILTER, alignDraft, isCondition, isGroup, normalise, storedFilters, treeOf } from '@/data/filterTree'
+import { useData } from '@/data/store'
 import { equal } from '@/lib/equal'
 import { useNarrow } from '@/lib/useNarrow'
 import { cn } from '@/lib/utils'
-import type { FilterCondition, FilterField, FilterGroup, FilterNode, Filters } from '@/model/schema'
+import type { FilterCondition, FilterField, FilterGroup, FilterNode, Filters, Status } from '@/model/schema'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { Popover, PopoverAnchor, PopoverContent } from '@/ui/popover'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/ui/sheet'
 import { ValuesLabel } from './FilterBar'
-import { KINDS, kindOf, sayCondition, upperFirst, useFilterItems, type FilterItems } from './filterKinds'
+import { KINDS, kindOf, pickedOf, sayCondition, upperFirst, useFilterItems, withPicked, type FilterItems } from './filterKinds'
 
 // Draft nodes are plain data; React keys come from here. An edit makes a new node, which takes over the old one's key.
 const keys = new WeakMap<object, string>()
@@ -36,6 +37,8 @@ function replacing<T extends object>(old: object, next: T): T {
 
 interface Shared {
   items: FilterItems
+  /** the workspace's statuses: the Status picker shows them, the filter keeps categories (filterKinds.tsx, pickedOf) */
+  statuses: Record<string, Status>
   /** fields the page decides already */
   hide: FilterField[]
   /** the condition whose values picker is open */
@@ -86,6 +89,7 @@ interface Props {
 export function FilterBuilder({ filters, onChange, hide = [], open, setOpen, anchor, align, triggers, shown, startWithMenu }: Props) {
   const narrow = useNarrow()
   const items = useFilterItems()
+  const statuses = useData((s) => s.statuses)
   const saved = treeOf(filters)
   const [draft, setDraft] = useState(saved)
   const [pickerFor, setPickerFor] = useState<string | null>(null)
@@ -117,6 +121,7 @@ export function FilterBuilder({ filters, onChange, hide = [], open, setOpen, anc
 
   const shared: Shared = {
     items,
+    statuses,
     hide,
     pickerFor,
     setPickerFor,
@@ -320,7 +325,7 @@ function AddMenu({ group, depth, onGroup }: { group: FilterGroup; depth: number;
 
 /** one condition as four joined segments: the field, is / is not, the values, × */
 function ConditionPill({ condition: c, onChange, onRemove }: { condition: FilterCondition & { field: FilterField }; onChange: (c: FilterCondition) => void; onRemove: () => void }) {
-  const { items, hide, pickerFor, setPickerFor } = useBuilder()
+  const { items, statuses, hide, pickerFor, setPickerFor } = useBuilder()
   const key = keyOf(c)
   const kind = kindOf(c.field)
   const [word, other] = c.op === 'is' ? [kind.is, kind.not] : [kind.not, kind.is]
@@ -376,15 +381,15 @@ function ConditionPill({ condition: c, onChange, onRemove }: { condition: Filter
         multiple
         placeholder={`${kind.name}…`}
         items={items[c.field]}
-        value={c.values}
-        onSelect={(values) => onChange(replacing(c, { ...c, values }))}
+        value={pickedOf(c, statuses)}
+        onSelect={(values) => onChange(replacing(c, withPicked(c, values, statuses)))}
         open={pickerFor === key}
         onOpenChange={(o) => setPickerFor(o ? key : null)}
       >
-        <button type="button" className={cn(segment, 'max-w-60 border-l')} aria-label={`${sayCondition(c, items)}. Change the values`}>
+        <button type="button" className={cn(segment, 'max-w-60 border-l')} aria-label={`${sayCondition(c, items, statuses)}. Change the values`}>
           {/* the whole of it on hover, when it's cut short (on the inside, so a screen reader doesn't hear it twice) */}
-          <span className="flex min-w-0" title={sayCondition(c, items)}>
-            <ValuesLabel field={c.field} values={c.values} items={items} />
+          <span className="flex min-w-0" title={sayCondition(c, items, statuses)}>
+            <ValuesLabel field={c.field} values={pickedOf(c, statuses)} items={items} />
           </span>
         </button>
       </Picker>
