@@ -4,6 +4,13 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.16.0: Calmer text
+*2026-10-21*
+
+- Text is a little smaller everywhere, so more fits on the screen
+- Issue titles and IDs in lists and on boards are quieter, and a heading in a description no longer outshines the issue title
+- On phones, typing in a box no longer zooms the page in
+
 ## 2.15.0: Filter by dates
 *2026-10-21*
 
