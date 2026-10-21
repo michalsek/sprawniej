@@ -12,7 +12,6 @@ import {
   KeyboardSensor,
   MouseSensor,
   pointerWithin,
-  rectIntersection,
   TouchSensor,
   useSensor,
   useSensors,
@@ -71,6 +70,30 @@ export function arrowTarget(o: {
   if (to !== undefined) return to
   if (o.side < 0 && o.columns.some((c) => c.left > from.left + 1)) return 'stay'
   return undefined
+}
+
+interface Box {
+  left: number
+  top: number
+  width: number
+  height: number
+}
+
+/**
+ * The column a dragged card covers the most of (by area, not by share: a long column isn't worse than a short one),
+ * undefined when it covers none. Only columns count, never cards, so moving the card between columns can't change
+ * the answer: the columns stay where they are, or (stacked groups in a list) grow around the card.
+ */
+export function mostCovered<Id>(columns: readonly { id: Id; rect: Box }[], card: Box): Id | undefined {
+  let best: Id | undefined
+  let most = 0
+  for (const { id, rect } of columns) {
+    const w = Math.min(rect.left + rect.width, card.left + card.width) - Math.max(rect.left, card.left)
+    const h = Math.min(rect.top + rect.height, card.top + card.height) - Math.max(rect.top, card.top)
+    const area = w > 0 && h > 0 ? w * h : 0
+    if (area > most) [best, most] = [id, area]
+  }
+  return best
 }
 
 /** the card nearest in height to `top` (a card moved sideways lands next to it), undefined in an empty column */
@@ -156,11 +179,22 @@ export function useColumnsDrag(base: ColumnOrder, closed: ReadonlySet<string>) {
   )
   const sensors = useBoardSensors(coordinateGetter)
 
-  /** the pointer's column, then the closest card in it (dnd-kit's multiple-containers recipe) */
+  /**
+   * The pointer's column, then the closest card in it (dnd-kit's multiple-containers recipe). Without a pointer in
+   * one (the keyboard, or the pointer in a gap), the column the dragged card covers most. Never the card it overlaps
+   * most: moving the card to another column moves the cards in both, and with cards of different heights the best
+   * overlap could then be back in the first column, and so on forever (the board froze with "Maximum update depth").
+   * A column keeps its place when a card moves.
+   */
   const collisionDetection: CollisionDetection = useCallback((args) => {
-    const within = pointerWithin(args)
-    const hits = within.length ? within : rectIntersection(args)
-    let overId = getFirstCollision(hits, 'id')
+    let overId = getFirstCollision(pointerWithin(args), 'id')
+    if (overId == null && args.collisionRect) {
+      const columns = args.droppableContainers.flatMap((c) => {
+        const rect = isColumnId(c.id) ? args.droppableRects.get(c.id) : undefined
+        return rect ? [{ id: c.id, rect }] : []
+      })
+      overId = mostCovered(columns, args.collisionRect) ?? null
+    }
     if (overId != null) {
       if (isColumnId(overId)) {
         const ids = orderRef.current[columnKey(overId)] ?? []
