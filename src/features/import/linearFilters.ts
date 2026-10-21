@@ -17,7 +17,8 @@
  *           { labels: { and: [{ or: [{ name: { eq: 'AI' } }, { parent: { name: { eq: 'AI' } } }] }] } },
  *           { state: { type: { nin: ['completed', 'canceled'] } } }, { completedAt: { gt: '-P1D' } }] }
  */
-import { addDays } from '@/data/dateFilters'
+import { dateReady, dayPlus, isDateCondition } from '@/data/dateFilters'
+import { toDay } from '@/lib/days'
 import { MAX_DEPTH, isCondition, isGroup, normalise, storedFilters, valueKey } from '@/data/filterTree'
 import { ME, type DateCondition, type DateField, type DateUnit, type FilterCondition, type FilterField, type FilterGroup, type FilterNode, type FilterValue, type Filters } from '@/model/schema'
 import { CATEGORIES, type IssueCategory, type StatusGroup } from '@/model/status'
@@ -105,6 +106,17 @@ function either(a: Sel, b: Sel): Sel {
   const [p, n] = a.op === 'is' ? [a, b] : [b, a]
   return not(minus(n.values, p.values))
 }
+/**
+ * Whether working out two choices needs to know who Me is: one names Me, the two name someone else too, and they
+ * aren't simply added up (an "or" of two "is", an "and" of two "is not")
+ */
+function meMatters(how: 'and' | 'or', a: Sel, b: Sel): boolean {
+  if (a === 'any' || a === 'lost' || b === 'any' || b === 'lost') return false
+  if ((how === 'or' && a.op === 'is' && b.op === 'is') || (how === 'and' && a.op === 'not' && b.op === 'not')) return false
+  const values = [...a.values, ...b.values]
+  return values.includes(ME) && values.some((v) => typeof v === 'string' && v !== ME)
+}
+
 const flip = (s: Sel): Sel => (s === 'any' || s === 'lost' ? 'lost' : s.op === 'is' ? not(s.values) : is(s.values))
 
 /** a relative time, "-P1D" (a day ago), "P2W" (in two weeks), "-PT12H"; `sign` 0 is now */
@@ -137,12 +149,22 @@ export function duration(v: unknown): Rel | null {
   return at(seconds / 86400, 'days')
 }
 
-/** a day Linear names: "2026-10-01", or a time on it (`midnight` false: the time counts, and the day is near enough) */
-function dayIn(v: unknown): { day: string; midnight: boolean } | null {
+/**
+ * A day Linear names. A plain day ("2026-10-01") is that day. A time is the day it falls on here (in the time zone of
+ * whoever imports): an import in Warsaw reads 2026-09-30T22:00:00Z as the start of Oct 1. `start`: it's the very
+ * start of that day, so "before" and "after" say it exactly. A due date is a day wherever it is: its day is the one
+ * written, and a time on it other than midnight makes it near enough, not exact.
+ */
+export function dayIn(v: unknown, due: boolean): { day: string; start: boolean } | null {
   if (typeof v !== 'string') return null
-  const m = /^(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?)(Z|[+-]\d{2}:?\d{2})?)?$/.exec(v.trim())
+  const text = v.trim()
+  const m = /^(\d{4}-\d{2}-\d{2})(T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$/.exec(text)
   if (!m) return null
-  return { day: m[1], midnight: !m[2] || /^00:00(:00(\.0+)?)?$/.test(m[2]) }
+  if (!m[2]) return { day: m[1], start: true }
+  if (due) return { day: m[1], start: /^T00:00(:00(\.0+)?)?/.test(m[2]) }
+  const t = new Date(text)
+  if (Number.isNaN(t.getTime())) return null
+  return { day: toDay(t), start: t.getHours() === 0 && t.getMinutes() === 0 && t.getSeconds() === 0 && t.getMilliseconds() === 0 }
 }
 
 const LINEAR_DATES: Record<string, DateField> = { createdAt: 'created', updatedAt: 'updated', completedAt: 'completed', dueDate: 'due' }
@@ -217,6 +239,15 @@ export function mapViewFilter(filterData: unknown, ctx: FilterContext, options: 
     return known || !Object.keys(cmp).length ? out : 'lost'
   }
 
+  /**
+   * Two choices on one field together. Me may be one of the people named, which nobody knows until someone looks:
+   * "Me and not Ana" can't be worked out to one line, so it's worked out as if they were different, and not exact.
+   */
+  const join = (how: 'and' | 'or', a: Sel, b: Sel): Sel => {
+    if (meMatters(how, a, b)) lose()
+    return how === 'and' ? both(a, b) : either(a, b)
+  }
+
   /** a filter on one thing (a user, a state, a label…): its properties, and "and" / "or" of such filters */
   type Props = Record<string, (v: unknown) => Sel>
   const select = (f: unknown, props: Props): Sel => {
@@ -227,12 +258,12 @@ export function mapViewFilter(filterData: unknown, ctx: FilterContext, options: 
       let s: Sel
       if ((k === 'and' || k === 'or') && Array.isArray(v)) {
         const parts = v.map((x) => select(x, props))
-        const known = parts.filter((p) => p !== 'lost')
-        if (known.length < parts.length) lose()
-        s = !known.length ? (parts.length ? 'lost' : 'any') : known.slice(1).reduce<Sel>(k === 'and' ? both : either, known[0])
+        const kept = parts.filter((p) => p !== 'lost')
+        if (kept.length < parts.length) lose()
+        s = !kept.length ? (parts.length ? 'lost' : 'any') : kept.slice(1).reduce<Sel>((a, b) => join(k, a, b), kept[0])
       } else s = props[k] ? props[k](v) : 'lost'
       if (s === 'lost') lose()
-      else [out, known] = [both(out, s), true]
+      else [out, known] = [join('and', out, s), true]
     }
     return known || !Object.keys(f).length ? out : 'lost'
   }
@@ -251,7 +282,10 @@ export function mapViewFilter(filterData: unknown, ctx: FilterContext, options: 
   const nullProp = (v: unknown): Sel => (v === true ? is([null]) : v === false ? not([null]) : 'lost')
 
   const stateTurn = {
-    id: (v: unknown) => (typeof v === 'string' && ctx.states.get(v) ? mapStatus(ctx.states.get(v)!) : undefined),
+    id: (v: unknown) => {
+      const state = typeof v === 'string' ? ctx.states.get(v) : undefined
+      return state ? mapStatus(state) : undefined
+    },
     name: (v: unknown) => {
       if (typeof v !== 'string') return undefined
       const state = [...ctx.states.values()].find((s) => s.name.toLowerCase() === v.toLowerCase())
@@ -302,50 +336,88 @@ export function mapViewFilter(filterData: unknown, ctx: FilterContext, options: 
     return group('and', outs)
   }
 
-  /** a date: from now ("-P1D") or a day ("2026-10-01"), each comparison its own condition, all of them together */
+  /**
+   * A date: from now ("-P1D") or a day ("2026-10-01"), each comparison its own line, all of them together. Only lines
+   * the builder can show come over; "before" and "after" are to the day, and "in the next 7 days" takes in the 7th.
+   */
   const dates = (field: DateField, cmp: unknown): Out => {
     if (!isObj(cmp)) return 'lost'
     const due = field === 'due'
-    const c = (op: DateCondition['op'], more: Partial<DateCondition> = {}): DateCondition => ({ field, op, ...more })
+    /** a line, if it's one the builder can show */
+    const c = (op: DateCondition['op'], more: Partial<DateCondition> = {}): Out => {
+      const line: DateCondition = { field, op, ...more }
+      return isDateCondition(line) && dateReady(line) ? line : 'lost'
+    }
+    const anyOf = (...items: Out[]): Out => group('or', items)
     const outs = Object.entries(cmp).map(([k, v]): Out => {
       if (k === 'null') return v === true ? c('empty') : v === false ? c('set') : 'lost'
       if (!['gt', 'gte', 'lt', 'lte', 'eq'].includes(k)) return 'lost'
       const later = k === 'gt' || k === 'gte'
       const rel = duration(v)
       if (rel) {
-        const span = { amount: rel.amount, unit: rel.unit }
         if (k === 'eq') return 'lost'
+        const span = { amount: rel.amount, unit: rel.unit }
         if (!due) {
-          // a time is never in the future: "before in a week" is any time at all
           if (later) return rel.sign < 0 ? c('within', span) : 'lost'
-          return rel.sign < 0 ? c('ago', span) : c('set')
+          if (rel.sign < 0) return c('ago', span)
+          // a time is never in the future: "earlier than in a week" is any time at all
+          return field === 'completed' ? c('set') : 'any'
         }
+        // a due date is a day: hours only as whole days
+        const days = rel.unit === 'hours' ? (rel.amount % 24 ? null : rel.amount / 24) : rel.unit === 'days' ? rel.amount : rel.unit === 'weeks' ? rel.amount * 7 : null
         if (later) {
-          // later than a week ago also takes in what's due from today on, which a condition here can't say
-          if (rel.sign < 0) {
-            lose()
-            return c('within', span)
-          }
-          return 'lost'
+          // later than a week ago also takes in what's due from today on, which a line here can't say
+          if (rel.sign >= 0) return 'lost'
+          lose()
+          return c('within', rel.unit === 'hours' && days ? { amount: days, unit: 'days' } : span)
         }
-        if (rel.sign < 0) return c('ago', span)
-        if (rel.sign === 0) return c('overdue')
-        return { join: 'or', items: [c('overdue'), c('next', span)] }
+        // "earlier than" is "up to the day before"; "up to" (lte) is that day too
+        const upTo = k === 'lte'
+        if (rel.sign === 0) {
+          if (!upTo) return c('overdue')
+          // overdue or due today: this says tomorrow too
+          lose()
+          return anyOf(c('overdue'), c('next', { amount: 1, unit: 'days' }))
+        }
+        if (rel.sign > 0) {
+          if (days === null) {
+            // a month on: "in the next month" takes in its last day too, which "earlier than" doesn't
+            if (!upTo) lose()
+            return anyOf(c('overdue'), c('next', span))
+          }
+          const n = upTo ? days : days - 1
+          if (n < 1) {
+            lose()
+            return anyOf(c('overdue'), c('next', { amount: 1, unit: 'days' }))
+          }
+          return anyOf(c('overdue'), c('next', upTo && rel.unit === 'weeks' ? span : { amount: n, unit: 'days' }))
+        }
+        // in the past: "earlier than 3 days ago"; "up to 3 days ago" is "earlier than 2 days ago"
+        if (!upTo) return c('ago', rel.unit === 'hours' && days ? { amount: days, unit: 'days' } : span)
+        if (days === null) {
+          lose()
+          return c('ago', span)
+        }
+        return days - 1 < 1 ? c('overdue') : c('ago', { amount: days - 1, unit: 'days' })
       }
-      const at = dayIn(v)
+      const at = dayIn(v, due)
       if (!at) return 'lost'
-      if (!at.midnight) lose()
+      if (!at.start) lose()
       const day = at.day
-      // a due date is a day ("later than Oct 1" starts on Oct 2); a time "later than Oct 1" starts on Oct 1
-      const on = { join: 'and' as const, items: [c('after', { date: addDays(day, -1) }), c('before', { date: addDays(day, 1) })] }
-      if (k === 'eq') return on
       if (due) {
+        if (k === 'eq') return group('and', [c('after', { date: dayPlus(day, -1) }), c('before', { date: dayPlus(day, 1) })])
         if (k === 'gt') return c('after', { date: day })
-        if (k === 'gte') return c('after', { date: addDays(day, -1) })
+        if (k === 'gte') return c('after', { date: dayPlus(day, -1) })
         if (k === 'lt') return c('before', { date: day })
-        return c('before', { date: addDays(day, 1) })
+        return c('before', { date: dayPlus(day, 1) })
       }
-      return later ? c('after', { date: addDays(day, -1) }) : c('before', { date: day })
+      // a time: "on Oct 1" is near enough for one moment of it
+      if (k === 'eq') {
+        lose()
+        return group('and', [c('after', { date: dayPlus(day, -1) }), c('before', { date: dayPlus(day, 1) })])
+      }
+      // from the start of the day it falls on, or up to the start of it (the end, when it's later in that day)
+      return later ? c('after', { date: dayPlus(day, -1) }) : c('before', { date: at.start ? day : dayPlus(day, 1) })
     })
     return group('and', outs)
   }
@@ -392,8 +464,10 @@ export function mapViewFilter(filterData: unknown, ctx: FilterContext, options: 
    */
   const personOr = (items: unknown[], outs: Out[]): Out | undefined => {
     const only = items.every((x) => isObj(x) && Object.keys(x).length === 1 && ('assignee' in x || 'subscribers' in x))
+    // an assignee side and a subscribers side; two assignee lines are an ordinary "or"
+    const sides = items.some((x) => isObj(x) && 'assignee' in x) && items.some((x) => isObj(x) && 'subscribers' in x)
     const conds = outs.filter((o): o is FilterCondition => isCondition(o) && o.op === 'is' && (o.field === 'assignees' || o.field === 'subscribers'))
-    if (!only || outs.length < 2 || conds.length !== outs.length || conds.some((x) => has(x.values, null))) return undefined
+    if (!only || !sides || conds.length !== outs.length || conds.some((x) => has(x.values, null))) return undefined
     const first = conds[0].values
     if (!conds.every((x) => x.values.length === first.length && meet(x.values, first).length === first.length)) return undefined
     return { field: 'subscribers', op: 'is', values: first }
@@ -448,7 +522,13 @@ function simplify(g: FilterGroup): FilterGroup {
       out.push(n)
       continue
     }
-    const sel = same.map((x): Sel => ({ op: x.op, values: x.values })).reduce(g.join === 'and' ? both : either)
+    const sels = same.map((x): Sel => ({ op: x.op, values: x.values }))
+    // Me may be one of the people named: such lines stay as they are
+    if (sels.some((a) => sels.some((b) => meMatters(g.join, a, b)))) {
+      out.push(n)
+      continue
+    }
+    const sel = sels.reduce(g.join === 'and' ? both : either)
     if (sel === 'any' || sel === 'lost' || !sel.values.length) {
       out.push(n)
       continue

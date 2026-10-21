@@ -6,27 +6,23 @@
  * The times (created, updated, completed) are moments; a due date is a plain day, the same for everyone. Days are
  * this browser's days: "before Oct 1" is before the start of Oct 1 here. The relative ones ("in the last 7 days") are
  * worked out against `now`, when the list is made.
+ *
+ * Only what the builder can show is a date condition here: a field, an op that field offers, and for that op exactly
+ * a whole amount and a unit (in range), or a day. Anything else (another op, unit or key, an amount of 0 or 1.5, a time
+ * where a day should be) was written by a newer version: it's left out of matching and kept as it is. A line that
+ * only misses its amount, unit or day is one being filled in.
  */
-import { DATE_FIELDS, DATE_OPS, DATE_UNITS, type DateCondition, type DateField, type DateOp, type DateUnit, type Issue } from '@/model/schema'
-
-const DAY = /^\d{4}-\d{2}-\d{2}$/
+import { DAY, fromDay, plusMonths, toDay } from '@/lib/days'
+import { DATE_UNITS, isDateField, type DateCondition, type DateField, type DateOp, type DateUnit, type Issue } from '@/model/schema'
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)
 
-/** a date condition this version understands (another op or unit comes from a newer version) */
-export function isDateCondition(n: unknown): n is DateCondition {
-  if (!isObject(n) || !(DATE_FIELDS as readonly unknown[]).includes(n.field) || !(DATE_OPS as readonly unknown[]).includes(n.op)) return false
-  return (
-    (n.amount === undefined || typeof n.amount === 'number') &&
-    (n.unit === undefined || (DATE_UNITS as readonly unknown[]).includes(n.unit)) &&
-    (n.date === undefined || typeof n.date === 'string')
-  )
-}
-
-
 /** ops that count from now */
-export const RELATIVE: readonly DateOp[] = ['within', 'ago', 'next']
+const RELATIVE: readonly DateOp[] = ['within', 'ago', 'next']
 export const isRelative = (op: DateOp) => RELATIVE.includes(op)
+
+/** the most of each unit an amount can be: ten years */
+const MOST: Record<DateUnit, number> = { hours: 8760, days: 3650, weeks: 520, months: 120 }
 
 /** what each field offers, in the order the menu shows them (created and updated are always set) */
 export function opsFor(field: DateField): DateOp[] {
@@ -38,12 +34,37 @@ export function opsFor(field: DateField): DateOp[] {
 /** units a field offers: a due date is a day, so no hours */
 export const unitsFor = (field: DateField): DateUnit[] => (field === 'due' ? ['days', 'weeks', 'months'] : [...DATE_UNITS])
 
-/** a condition with all it needs: an amount of 1 or more and a unit, or a day */
+/** an amount the builder can show: a whole number from 1, at most ten years of the unit */
+export const isAmount = (n: unknown, unit: DateUnit = 'hours'): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= MOST[unit]
+
+const KEYS = ['field', 'op', 'amount', 'unit', 'date']
+
+/** a date condition this version can show (see above); a line still being filled in counts */
+export function isDateCondition(n: unknown): n is DateCondition {
+  if (!isObject(n) || !isDateField(n.field)) return false
+  const field = n.field
+  const op = n.op as DateOp
+  if (!opsFor(field).includes(op) || Object.keys(n).some((k) => !KEYS.includes(k) && n[k] !== undefined)) return false
+  const { amount, unit, date } = n
+  if (isRelative(op)) {
+    if (date !== undefined) return false
+    if (unit !== undefined && !unitsFor(field).includes(unit as DateUnit)) return false
+    return amount === undefined || isAmount(amount, unit as DateUnit | undefined)
+  }
+  if (amount !== undefined || unit !== undefined) return false
+  if (op === 'before' || op === 'after') return date === undefined || (typeof date === 'string' && DAY.test(date))
+  return date === undefined
+}
+
+/** a condition with all it needs (an amount and a unit, or a day); one that isn't is being filled in */
 export function dateReady(c: DateCondition): boolean {
-  if (isRelative(c.op)) return typeof c.amount === 'number' && Number.isInteger(c.amount) && c.amount >= 1 && !!c.unit
-  if (c.op === 'before' || c.op === 'after') return typeof c.date === 'string' && DAY.test(c.date)
+  if (isRelative(c.op)) return c.amount !== undefined && c.unit !== undefined
+  if (c.op === 'before' || c.op === 'after') return c.date !== undefined
   return true
 }
+
+/** a condition whose meaning moves with the clock ("in the last hour", "overdue"), so an open list has to keep up */
+export const movesWithTime = (c: DateCondition) => isRelative(c.op) || c.op === 'overdue'
 
 /** a new condition on this field: the most useful thing to start from */
 export function newDateCondition(field: DateField): DateCondition {
@@ -55,7 +76,7 @@ export function withDateOp(c: DateCondition, op: DateOp): DateCondition {
   const base = { ...c, op, amount: undefined, unit: undefined, date: undefined }
   if (isRelative(op)) {
     const unit = c.unit && unitsFor(c.field).includes(c.unit) ? c.unit : 'days'
-    return { ...base, amount: c.amount ?? 7, unit }
+    return { ...base, amount: isAmount(c.amount, unit) ? c.amount : 7, unit }
   }
   if (op === 'before' || op === 'after') return { ...base, date: c.date }
   return base
@@ -67,29 +88,22 @@ export function withDateField(c: DateCondition, field: DateField): DateCondition
   return withDateOp({ ...c, field }, op)
 }
 
-/** a plain day in this browser's time zone */
-export function dayOf(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-const startOf = (day: string) => new Date(`${day}T00:00`)
-
 /** `now` moved by this much (back when `sign` is -1); days and months follow the calendar, so summer time is fine */
 function shift(now: Date, amount: number, unit: DateUnit, sign: 1 | -1): Date {
+  if (unit === 'months') return plusMonths(now, sign * amount)
   const d = new Date(now)
   if (unit === 'hours') d.setTime(d.getTime() + sign * amount * 3_600_000)
-  else if (unit === 'days') d.setDate(d.getDate() + sign * amount)
-  else if (unit === 'weeks') d.setDate(d.getDate() + sign * amount * 7)
-  else d.setMonth(d.getMonth() + sign * amount)
+  else d.setDate(d.getDate() + sign * amount * (unit === 'weeks' ? 7 : 1))
   return d
 }
 
 /** a day moved by this much (hours count as whole days, rounded up) */
 function shiftDay(day: string, amount: number, unit: DateUnit, sign: 1 | -1): string {
-  return unit === 'hours' ? dayOf(shift(startOf(day), Math.ceil(amount / 24), 'days', sign)) : dayOf(shift(startOf(day), amount, unit, sign))
+  return unit === 'hours' ? toDay(shift(fromDay(day), Math.ceil(amount / 24), 'days', sign)) : toDay(shift(fromDay(day), amount, unit, sign))
 }
 
-/** the day after */
-const nextDay = (day: string) => dayOf(shift(startOf(day), 1, 'days', 1))
+/** a day `n` days later (earlier when `n` is below 0): dayPlus('2026-10-31', 1) is '2026-11-01' */
+export const dayPlus = (day: string, n: number) => toDay(shift(fromDay(day), Math.abs(n), 'days', n < 0 ? -1 : 1))
 
 type Test = (issue: Issue) => boolean
 
@@ -98,62 +112,40 @@ export function dateTest(c: DateCondition, now: Date): Test | null {
   if (!dateReady(c)) return null
   const amount = c.amount ?? 0
   const unit = c.unit ?? 'days'
-  if (c.field === 'due') {
-    const today = dayOf(now)
-    const due = (i: Issue) => i.dueDate ?? null
-    switch (c.op) {
-      case 'within': {
-        const from = shiftDay(today, amount, unit, -1)
-        return (i) => ((d) => !!d && d >= from && d <= today)(due(i))
-      }
-      case 'ago': {
-        const before = shiftDay(today, amount, unit, -1)
-        return (i) => ((d) => !!d && d < before)(due(i))
-      }
-      case 'next': {
-        const to = shiftDay(today, amount, unit, 1)
-        return (i) => ((d) => !!d && d >= today && d <= to)(due(i))
-      }
-      case 'overdue':
-        return (i) => ((d) => !!d && d < today)(due(i))
-      case 'before':
-        return (i) => ((d) => !!d && d < c.date!)(due(i))
-      case 'after':
-        return (i) => ((d) => !!d && d > c.date!)(due(i))
-      case 'empty':
-        return (i) => !due(i)
-      case 'set':
-        return (i) => !!due(i)
-    }
-  }
+  const date = c.date ?? ''
+  if (c.field === 'due') return dueTest(c.op, amount, unit, date, toDay(now))
   const at = (i: Issue): number | null => {
     const v = c.field === 'created' ? i.createdAt : c.field === 'updated' ? i.updatedAt : i.completedAt
     const t = v ? Date.parse(v) : NaN
     return Number.isNaN(t) ? null : t
   }
-  const t0 = now.getTime()
+  /** a test on the time, for issues that have one */
+  const when = (fits: (t: number) => boolean): Test => (i) => {
+    const t = at(i)
+    return t !== null && fits(t)
+  }
   switch (c.op) {
     case 'within': {
       const from = shift(now, amount, unit, -1).getTime()
-      return (i) => ((t) => t !== null && t >= from)(at(i))
+      return when((t) => t >= from)
     }
     case 'ago': {
       const before = shift(now, amount, unit, -1).getTime()
-      return (i) => ((t) => t !== null && t < before)(at(i))
+      return when((t) => t < before)
     }
     case 'next': {
-      const to = shift(now, amount, unit, 1).getTime()
-      return (i) => ((t) => t !== null && t >= t0 && t <= to)(at(i))
+      const [from, to] = [now.getTime(), shift(now, amount, unit, 1).getTime()]
+      return when((t) => t >= from && t <= to)
     }
     case 'overdue':
       return null
     case 'before': {
-      const before = startOf(c.date!).getTime()
-      return (i) => ((t) => t !== null && t < before)(at(i))
+      const before = fromDay(date).getTime()
+      return when((t) => t < before)
     }
     case 'after': {
-      const from = startOf(nextDay(c.date!)).getTime()
-      return (i) => ((t) => t !== null && t >= from)(at(i))
+      const from = fromDay(dayPlus(date, 1)).getTime()
+      return when((t) => t >= from)
     }
     case 'empty':
       return (i) => at(i) === null
@@ -162,14 +154,45 @@ export function dateTest(c: DateCondition, now: Date): Test | null {
   }
 }
 
+/** the same for a due date, a plain day */
+function dueTest(op: DateOp, amount: number, unit: DateUnit, date: string, today: string): Test {
+  const on = (fits: (d: string) => boolean): Test => (i) => {
+    const d = i.dueDate
+    return !!d && fits(d)
+  }
+  switch (op) {
+    case 'within': {
+      const from = shiftDay(today, amount, unit, -1)
+      return on((d) => d >= from && d <= today)
+    }
+    case 'ago': {
+      const before = shiftDay(today, amount, unit, -1)
+      return on((d) => d < before)
+    }
+    case 'next': {
+      const to = shiftDay(today, amount, unit, 1)
+      return on((d) => d >= today && d <= to)
+    }
+    case 'overdue':
+      return on((d) => d < today)
+    case 'before':
+      return on((d) => d < date)
+    case 'after':
+      return on((d) => d > date)
+    case 'empty':
+      return (i) => !i.dueDate
+    case 'set':
+      return (i) => !!i.dueDate
+  }
+}
+
 /** what each date field is called */
 export const DATE_NAMES: Record<DateField, string> = { created: 'Created', updated: 'Updated', completed: 'Completed', due: 'Due date' }
 
 const UNIT_ONE: Record<DateUnit, string> = { hours: 'hour', days: 'day', weeks: 'week', months: 'month' }
 
-/** "7 days", "1 day" */
-export const amountWords = (amount: number | undefined, unit: DateUnit | undefined) =>
-  `${amount ?? '?'} ${amount === 1 ? UNIT_ONE[unit ?? 'days'] : (unit ?? 'days')}`
+/** the unit after an amount: "days", "day", "weeks ago" */
+export const unitWord = (unit: DateUnit, amount: number | undefined, ago: boolean) => `${amount === 1 ? UNIT_ONE[unit] : unit}${ago ? ' ago' : ''}`
 
 /** the op's words before the amount or day: "in the last", "more than", "before" */
 export const OP_WORDS: Record<DateOp, string> = {
@@ -195,13 +218,16 @@ export const OP_CHOICES: Record<DateOp, string> = {
   set: 'is set',
 }
 
-/** the condition in words: "Completed in the last 1 day", "Due date before Oct 31"; `day` writes a day */
-export function sayDate(c: DateCondition, day: (d: string) => string = (d) => d): string {
+/**
+ * A date condition in two parts, the quiet words and what was picked: ["Created in the last", "7 days"],
+ * ["Completed before", "Oct 1"], ["Due date", "is overdue"]. `day` writes a day.
+ */
+export function dateParts(c: DateCondition, day: (d: string) => string = (d) => d): [string, string] {
   const name = DATE_NAMES[c.field]
-  if (isRelative(c.op)) return `${name} ${OP_WORDS[c.op]} ${amountWords(c.amount, c.unit)}${c.op === 'ago' ? ' ago' : ''}`
-  if (c.op === 'before' || c.op === 'after') return `${name} ${OP_WORDS[c.op]} ${c.date ? day(c.date) : 'a day'}`
-  return `${name} ${OP_WORDS[c.op]}`
+  if (isRelative(c.op)) return [`${name} ${OP_WORDS[c.op]}`, `${c.amount ?? '?'} ${unitWord(c.unit ?? 'days', c.amount, c.op === 'ago')}`]
+  if (c.op === 'before' || c.op === 'after') return [`${name} ${OP_WORDS[c.op]}`, c.date ? day(c.date) : 'a day…']
+  return [name, OP_WORDS[c.op]]
 }
 
-/** a day moved by `n` days: addDays('2026-10-31', 1) is '2026-11-01' */
-export const addDays = (day: string, n: number) => dayOf(shift(startOf(day), Math.abs(n), 'days', n < 0 ? -1 : 1))
+/** the condition in words: "Completed in the last 1 day", "Due date before Oct 31" */
+export const sayDate = (c: DateCondition, day?: (d: string) => string): string => dateParts(c, day).join(' ')

@@ -9,7 +9,6 @@ import { prepareImport } from '@/features/import/prepareImport'
 import { projectStatusIdOf, sampleProjectStatuses } from './fixtures/sample'
 import { linearFixture as data } from './fixtures/linear'
 import { duration, mapViewFilter, type FilterContext } from '@/features/import/linearFilters'
-import { matcher } from '@/data/filterTree'
 import { ME, type DateCondition, type FilterCondition, type FilterGroup, type FilterNode } from '@/model/schema'
 
 const person = (login: string, name: string) => ({ login, githubId: 1, name, avatarUrl: '' })
@@ -815,13 +814,6 @@ describe('view filters as a tree', () => {
     const done = map({ and: [{ state: { type: { eq: 'completed' } } }, { completedAt: { gte: '-PT24H' } }] })
     expect(done).toMatchObject({ tree: and(is('statuses', 'done'), date('completed', 'within', { amount: 24, unit: 'hours' })), exact: true })
     expect(done.filters).toEqual({ statuses: ['done'], tree: done.tree })
-    // it finds what was finished yesterday, not last week
-    const now = new Date(2026, 9, 21, 12)
-    const fits = matcher(plain.tree, { comments: {}, people: {}, now })
-    const at = (completedAt: string | null) => ({ ...native(1), completedAt })
-    expect(fits(at(new Date(2026, 9, 20, 18).toISOString()))).toBe(true)
-    expect(fits(at(new Date(2026, 9, 14).toISOString()))).toBe(false)
-    expect(fits(at(null))).toBe(false)
   })
 
   test('“Active Tasks”: not finished, mine', () => {
@@ -911,6 +903,20 @@ describe('view filters as a tree', () => {
       tree: or(is('assignees', 'ana-n'), is('subscribers', 'bstone')),
       exact: true,
     })
+    // two assignee lines are an ordinary "or": one line, not "follows it"
+    expect(map({ or: [{ assignee: { id: { eq: 'u-ana' } } }, { assignee: { id: { eq: 'u-ana' } } }] })).toMatchObject({ tree: and(is('assignees', 'ana-n')), exact: true })
+  })
+
+  test('Me may be one of the people named: not worked out as if it weren’t', () => {
+    // "me and not Ana" isn't "me": inside one field it's not exact
+    expect(map({ assignee: { and: [{ isMe: { eq: true } }, { id: { neq: 'u-ana' } }] } })).toMatchObject({ exact: false })
+    // across lines, both stay
+    expect(map({ and: [{ assignee: { isMe: { eq: true } } }, { assignee: { id: { neq: 'u-ana' } } }] })).toMatchObject({
+      tree: and(is('assignees', ME), not('assignees', 'ana-n')),
+      exact: true,
+    })
+    // "me or Ana" is simply both
+    expect(map({ assignee: { or: [{ isMe: { eq: true } }, { id: { eq: 'u-ana' } }] } })).toMatchObject({ tree: and(is('assignees', ME, 'ana-n')), exact: true })
   })
 
   test('groups: across fields, flattened where it means the same, deeper ones left out', () => {
@@ -939,28 +945,66 @@ describe('view filters as a tree', () => {
     expect(map({ updatedAt: { gt: '-P1W', lt: '-P1D' } }).tree).toEqual(and(date('updated', 'within', { amount: 1, unit: 'weeks' }), date('updated', 'ago', { amount: 1, unit: 'days' })))
     expect(map({ completedAt: { null: true } }).tree).toEqual(and(date('completed', 'empty')))
     expect(map({ dueDate: { null: false } }).tree).toEqual(and(date('due', 'set')))
-    expect(map({ dueDate: { lt: 'P0D' } }).tree).toEqual(and(date('due', 'overdue')))
-    expect(map({ dueDate: { lte: 'P1W' } })).toMatchObject({ tree: or(date('due', 'overdue'), date('due', 'next', { amount: 1, unit: 'weeks' })), exact: true })
-    expect(map({ dueDate: { lt: '-P3D' } }).tree).toEqual(and(date('due', 'ago', { amount: 3, unit: 'days' })))
+    // a time is never in the future: earlier than tomorrow is any time (finished: finished at all)
+    expect(map({ createdAt: { lt: 'P1D' } })).toMatchObject({ tree: and(), exact: true, nothing: false })
+    expect(map({ completedAt: { lt: 'P1D' } }).tree).toEqual(and(date('completed', 'set')))
+    // due later than a day ago takes in the future too: kept, not exact
+    expect(map({ dueDate: { gt: '-P1D' } })).toMatchObject({ tree: and(date('due', 'within', { amount: 1, unit: 'days' })), exact: false })
+  })
+
+  test('due dates from now: “earlier than” and “up to” are a day apart', () => {
+    const next = (amount: number, unit: DateCondition['unit'] = 'days') => or(date('due', 'overdue'), date('due', 'next', { amount, unit }))
+    // earlier than today: overdue; up to today: overdue or today, which nothing here says without tomorrow
+    expect(map({ dueDate: { lt: 'P0D' } })).toMatchObject({ tree: and(date('due', 'overdue')), exact: true })
+    expect(map({ dueDate: { lte: 'P0D' } })).toMatchObject({ tree: next(1), exact: false })
+    // "in the next 7 days" takes in the 7th day
+    expect(map({ dueDate: { lte: 'P7D' } })).toMatchObject({ tree: next(7), exact: true })
+    expect(map({ dueDate: { lt: 'P7D' } })).toMatchObject({ tree: next(6), exact: true })
+    expect(map({ dueDate: { lte: 'P1W' } })).toMatchObject({ tree: next(1, 'weeks'), exact: true })
+    expect(map({ dueDate: { lt: 'P1W' } })).toMatchObject({ tree: next(6), exact: true })
+    expect(map({ dueDate: { lt: 'P1D' } })).toMatchObject({ tree: next(1), exact: false })
+    expect(map({ dueDate: { lte: 'P1M' } })).toMatchObject({ tree: next(1, 'months'), exact: true })
+    expect(map({ dueDate: { lt: 'P1M' } })).toMatchObject({ tree: next(1, 'months'), exact: false })
+    // in the past: up to 3 days ago is earlier than 2 days ago; up to yesterday is overdue
+    expect(map({ dueDate: { lt: '-P3D' } })).toMatchObject({ tree: and(date('due', 'ago', { amount: 3, unit: 'days' })), exact: true })
+    expect(map({ dueDate: { lte: '-P3D' } })).toMatchObject({ tree: and(date('due', 'ago', { amount: 2, unit: 'days' })), exact: true })
+    expect(map({ dueDate: { lte: '-P1D' } })).toMatchObject({ tree: and(date('due', 'overdue')), exact: true })
+    expect(map({ dueDate: { lte: '-P1W' } })).toMatchObject({ tree: and(date('due', 'ago', { amount: 6, unit: 'days' })), exact: true })
+    expect(map({ dueDate: { lte: '-P1M' } })).toMatchObject({ tree: and(date('due', 'ago', { amount: 1, unit: 'months' })), exact: false })
+    // hours only as whole days
+    expect(map({ dueDate: { lt: '-PT48H' } }).tree).toEqual(and(date('due', 'ago', { amount: 2, unit: 'days' })))
+    expect(map({ dueDate: { lt: '-PT12H' } })).toMatchObject({ exact: false, nothing: true })
+  })
+
+  test('days: a due date is the day written; a time is the day it falls on here', () => {
     // a due date is a day: later than Oct 1 starts on Oct 2
     expect(map({ dueDate: { gt: '2026-10-01' } }).tree).toEqual(and(date('due', 'after', { date: '2026-10-01' })))
     expect(map({ dueDate: { gte: '2026-10-01' } }).tree).toEqual(and(date('due', 'after', { date: '2026-09-30' })))
     expect(map({ dueDate: { lte: '2026-10-31' } }).tree).toEqual(and(date('due', 'before', { date: '2026-11-01' })))
-    // a time later than midnight on Oct 1 is on Oct 1 or after
-    expect(map({ createdAt: { gte: '2026-10-01T00:00:00.000Z', lt: '2026-11-01' } })).toMatchObject({
+    expect(map({ dueDate: { eq: '2026-10-31' } })).toMatchObject({ tree: and(date('due', 'after', { date: '2026-10-30' }), date('due', 'before', { date: '2026-11-01' })), exact: true })
+    // the start of Oct 1 here (in Warsaw 2026-09-30T22:00:00Z): exact
+    const startOfOct1 = new Date(2026, 9, 1).toISOString()
+    expect(map({ createdAt: { gte: startOfOct1, lt: new Date(2026, 10, 1).toISOString() } })).toMatchObject({
       tree: and(date('created', 'after', { date: '2026-09-30' }), date('created', 'before', { date: '2026-11-01' })),
       exact: true,
     })
-    expect(map({ createdAt: { eq: '2026-10-01' } }).tree).toEqual(and(date('created', 'after', { date: '2026-09-30' }), date('created', 'before', { date: '2026-10-02' })))
-    // a time in the middle of a day is near enough, but not exact
-    expect(map({ createdAt: { lt: '2026-10-01T15:30:00Z' } })).toMatchObject({ tree: and(date('created', 'before', { date: '2026-10-01' })), exact: false })
-    // due later than a day ago takes in the future too: kept, not exact
-    expect(map({ dueDate: { gt: '-P1D' } })).toMatchObject({ tree: and(date('due', 'within', { amount: 1, unit: 'days' })), exact: false })
-    // what can't be said
+    // a plain day is that day here
+    expect(map({ createdAt: { lt: '2026-11-01' } })).toMatchObject({ tree: and(date('created', 'before', { date: '2026-11-01' })), exact: true })
+    // a time in the middle of a day: the whole of that day, near enough
+    const afternoon = new Date(2026, 9, 1, 15, 30).toISOString()
+    expect(map({ createdAt: { lt: afternoon } })).toMatchObject({ tree: and(date('created', 'before', { date: '2026-10-02' })), exact: false })
+    expect(map({ createdAt: { gt: afternoon } })).toMatchObject({ tree: and(date('created', 'after', { date: '2026-09-30' })), exact: false })
+    // one moment is near enough "on that day"
+    expect(map({ createdAt: { eq: startOfOct1 } })).toMatchObject({ tree: and(date('created', 'after', { date: '2026-09-30' }), date('created', 'before', { date: '2026-10-02' })), exact: false })
+  })
+
+  test('dates the builder can’t show stay behind', () => {
     expect(map({ createdAt: { gt: 'P1D' } })).toMatchObject({ exact: false, nothing: true })
     expect(map({ createdAt: { gt: '-P1M2D' } })).toMatchObject({ exact: false, nothing: true })
     expect(map({ createdAt: { neq: '2026-10-01' } })).toMatchObject({ exact: false, nothing: true })
     expect(map({ canceledAt: { gt: '-P1D' } })).toMatchObject({ exact: false, nothing: true })
+    // more than ten years
+    expect(map({ createdAt: { gt: '-P11Y' } })).toMatchObject({ exact: false, nothing: true })
   })
 
   test('Linear’s durations', () => {

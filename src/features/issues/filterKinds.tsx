@@ -8,9 +8,9 @@ import { useShallow } from 'zustand/react/shallow'
 import type { PickerItem } from '@/components/Picker'
 import { useData } from '@/data/store'
 import { valueKey, type KnownCondition } from '@/data/filterTree'
-import { DATE_NAMES, OP_WORDS, amountWords, isDateCondition, isRelative, sayDate } from '@/data/dateFilters'
+import { DATE_NAMES, isDateCondition, sayDate } from '@/data/dateFilters'
 import { pickedStatusIds, statusFilter } from '@/data/statuses'
-import type { DateCondition, DateField, FilterCondition, FilterField, FilterValue, Status } from '@/model/schema'
+import type { DateField, FilterCondition, FilterField, FilterValue, Status } from '@/model/schema'
 import { isIssueCategory } from '@/model/status'
 import { shortDate } from './format'
 import { priorityItems, useFilterPeopleItems, useLabelItems, useProjectItems, useProjectStatusItems, useStatusItems } from './pickers'
@@ -52,13 +52,14 @@ export interface DateKind {
 }
 
 /** the date fields, in the order the menus show them (after the others) */
-export const DATE_KINDS: DateKind[] = [
-  { key: 'created', name: DATE_NAMES.created, icon: <CalendarPlus /> },
-  { key: 'updated', name: DATE_NAMES.updated, icon: <History /> },
-  { key: 'completed', name: DATE_NAMES.completed, icon: <CircleCheck /> },
-  { key: 'due', name: DATE_NAMES.due, icon: <CalendarClock /> },
-]
-export const dateKindOf = (field: DateField): DateKind => DATE_KINDS.find((k) => k.key === field)!
+const DATE_KIND: Record<DateField, DateKind> = {
+  created: { key: 'created', name: DATE_NAMES.created, icon: <CalendarPlus /> },
+  updated: { key: 'updated', name: DATE_NAMES.updated, icon: <History /> },
+  completed: { key: 'completed', name: DATE_NAMES.completed, icon: <CircleCheck /> },
+  due: { key: 'due', name: DATE_NAMES.due, icon: <CalendarClock /> },
+}
+export const DATE_KINDS: DateKind[] = Object.values(DATE_KIND)
+export const dateKindOf = (field: DateField): DateKind => DATE_KIND[field]
 
 export type FilterItems = Record<FilterField, PickerItem<FilterValue>[]>
 
@@ -111,20 +112,12 @@ export function withPicked(c: FilterCondition, values: FilterValue[], statuses: 
   return { ...c, values: f.statuses ?? [], statusIds: f.statusIds }
 }
 
-/**
- * A date condition in two parts, the quiet words and what was picked: ["Created in the last", "7 days"],
- * ["Completed before", "Oct 1"], ["Due date", "is overdue"].
- */
-export function dateParts(c: DateCondition): [string, string] {
-  const name = DATE_NAMES[c.field]
-  if (isRelative(c.op)) return [`${name} ${OP_WORDS[c.op]}`, `${amountWords(c.amount, c.unit)}${c.op === 'ago' ? ' ago' : ''}`]
-  if (c.op === 'before' || c.op === 'after') return [`${name} ${OP_WORDS[c.op]}`, c.date ? shortDate(c.date) : 'a day…']
-  return [name, OP_WORDS[c.op]]
-}
+/** a day as the filters show it: "Oct 1" */
+export const dayWords = (d: string) => shortDate(d)
 
 /** a condition in words, all values named: "Status is Todo or In Progress", "Created in the last 7 days" */
 export function sayCondition(c: KnownCondition, items: FilterItems, statuses: Statuses): string {
-  if (isDateCondition(c)) return sayDate(c, (d) => shortDate(d))
+  if (isDateCondition(c)) return sayDate(c, dayWords)
   const kind = kindOf(c.field)
   const names = pickedOf(c, statuses).map((v) => itemFor(items[c.field], v)?.label ?? `a deleted ${kind.one}`)
   return `${kind.name} ${c.op === 'not' ? kind.not : kind.is} ${names.length ? names.join(' or ') : 'anything'}`

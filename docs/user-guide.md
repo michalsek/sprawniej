@@ -426,7 +426,7 @@ A date filter reads like **Created | in the last | 7 | days | ×**. Click the se
 - For a due date also **in the next…** ("Due date in the next 7 days", today included) and **is overdue** (due before
   today, finished or not: add "Status is not Done" to leave finished ones out).
 
-"In the last 7 days" counts from when you open the list, so a view like that keeps up by itself.
+"In the last 7 days" and "is overdue" count from now: a list left open keeps up as the minutes and days go by.
 
 **Me** (at the top of the people) means whoever is looking. A view with "Assignee is Me" shows each teammate their own
 issues. **Subscribers** finds the issues someone follows: ones they made, are assigned to, commented on, were
@@ -452,7 +452,8 @@ sidebar to see them, and **New view** to make one. A view shows issues from the 
 A view belongs to everyone. Changing its name, emoji, description, filters, grouping or List / Board saves straight
 away, for everyone. Clearing a view's filters asks no questions, but shows **Undo** for a moment, in case it was a
 slip. A view keeps its groups, dates and "is not" filters. Someone still on an older version of Sprawniej sees a simpler
-version of them (sometimes a few more issues) until they update. In the list of views, click a view's emoji to change
+version of them until they update: their version leaves out the lines it doesn't know, so it may show a few more
+issues, or inside an "or" a few fewer. In the list of views, click a view's emoji to change
 it, or use **⋯** to rename or delete it. On the view's own page, click its name or description to change them.
 Deleting a view leaves its issues as they are. Press the star (☆) on a view to keep it in your sidebar (see
 Favourites).

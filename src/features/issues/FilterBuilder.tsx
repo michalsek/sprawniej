@@ -10,20 +10,21 @@
 import { createContext, useContext, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { Brackets, Check, ChevronDown, Plus, X } from 'lucide-react'
 import { Picker } from '@/components/Picker'
-import { MAX_DEPTH, NEWER_FILTER, alignDraft, isCondition, isDateCondition, isGroup, normalise, storedFilters, treeOf, withField } from '@/data/filterTree'
-import { OP_CHOICES, OP_WORDS, isRelative, newDateCondition, opsFor, unitsFor, withDateField, withDateOp } from '@/data/dateFilters'
+import { MAX_DEPTH, NEWER_FILTER, alignDraft, isCondition, isGroup, normalise, storedFilters, treeOf, withField } from '@/data/filterTree'
+import { OP_CHOICES, OP_WORDS, isAmount, isDateCondition, isRelative, newDateCondition, opsFor, unitWord, unitsFor, withDateField, withDateOp } from '@/data/dateFilters'
 import { useData } from '@/data/store'
 import { equal } from '@/lib/equal'
 import { useNarrow } from '@/lib/useNarrow'
 import { cn } from '@/lib/utils'
-import type { DateCondition, DateField, DateUnit, FilterCondition, FilterField, FilterGroup, FilterNode, Filters, Status } from '@/model/schema'
+import type { DateCondition, DateField, DateOp, FilterCondition, FilterField, FilterGroup, FilterNode, Filters, Status } from '@/model/schema'
 import { Calendar } from '@/ui/calendar'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/ui/dropdown-menu'
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from '@/ui/popover'
 import { Sheet, SheetClose, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/ui/sheet'
 import { ValuesLabel } from './FilterBar'
 import { DATE_KINDS, KINDS, dateKindOf, kindOf, pickedOf, sayCondition, upperFirst, useFilterItems, withPicked, type FilterItems } from './filterKinds'
-import { fromDay, shortDate, toDay } from './format'
+import { fromDay, toDay } from '@/lib/days'
+import { shortDate } from './format'
 
 // Draft nodes are plain data; React keys come from here. An edit makes a new node, which takes over the old one's key.
 const keys = new WeakMap<object, string>()
@@ -445,8 +446,6 @@ function FieldMenu({
   )
 }
 
-const UNIT_NAMES: Record<DateUnit, [one: string, many: string]> = { hours: ['hour', 'hours'], days: ['day', 'days'], weeks: ['week', 'weeks'], months: ['month', 'months'] }
-
 /**
  * A date condition as joined segments: the field, what it says ("in the last"), then how long ("7" and "days") or
  * which day, and ×. Every change saves at once; an amount being typed counts once it's a whole number from 1.
@@ -456,7 +455,22 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
   const kind = dateKindOf(c.field)
   const set = (next: DateCondition) => onChange(replacing(c, next))
   const [dayOpen, setDayOpen] = useState(false)
-  const unitWord = (u: DateUnit) => UNIT_NAMES[u][c.amount === 1 ? 0 : 1] + (c.op === 'ago' ? ' ago' : '')
+  const next = useRef<(() => void) | null>(null)
+  const unit = c.unit ?? 'days'
+  // what's typed in the amount: a half-typed one ("", "0") isn't saved, so it lives here until it's a number
+  const [typed, setTyped] = useState(c.amount === undefined ? '' : String(c.amount))
+  const [seen, setSeen] = useState(c.amount)
+  if (seen !== c.amount) {
+    setSeen(c.amount)
+    if (c.amount !== undefined) setTyped(String(c.amount))
+  }
+  const typedOk = isAmount(Number(typed), unit) && typed.trim() !== ''
+  const pickOp = (op: DateOp) => {
+    if (op === c.op) return
+    set(withDateOp(c, op))
+    // "before…" and "after…" need a day: the calendar opens once the menu has closed
+    if ((op === 'before' || op === 'after') && !c.date) next.current = () => setDayOpen(true)
+  }
   return (
     <Pill onRemove={onRemove} label={`the ${kind.name.toLowerCase()} filter`}>
       <FieldMenu
@@ -485,9 +499,9 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
             <ChevronDown />
           </button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="start" loop className="w-48">
+        <DropdownMenuContent align="start" loop className="w-48" onCloseAutoFocus={(e) => thenFocus(e, next)}>
           {opsFor(c.field).map((op) => (
-            <DropdownMenuItem key={op} role="menuitemradio" aria-checked={op === c.op} onSelect={() => op !== c.op && set(withDateOp(c, op))}>
+            <DropdownMenuItem key={op} role="menuitemradio" aria-checked={op === c.op} onSelect={() => pickOp(op)}>
               {OP_CHOICES[op]}
               <Check className={cn('ml-auto', op !== c.op && 'invisible')} />
             </DropdownMenuItem>
@@ -501,13 +515,15 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
             inputMode="numeric"
             min={1}
             step={1}
-            value={c.amount ?? ''}
+            value={typed}
             onChange={(e) => {
-              const n = e.target.value === '' ? undefined : Number(e.target.value)
-              set({ ...c, amount: n !== undefined && Number.isFinite(n) ? n : undefined })
+              const text = e.target.value
+              setTyped(text)
+              const n = Number(text)
+              set({ ...c, amount: text.trim() !== '' && isAmount(n, unit) ? n : undefined })
             }}
-            aria-label="How many"
-            aria-invalid={c.amount === undefined || !Number.isInteger(c.amount) || c.amount < 1 || undefined}
+            aria-label={`How many ${unit}`}
+            aria-invalid={!typedOk || undefined}
             className={cn(
               segment,
               'w-11 shrink-0 border-l bg-transparent text-center tabular-nums [appearance:textfield] aria-invalid:ring-2 aria-invalid:ring-destructive aria-invalid:ring-inset md:w-12 [&::-webkit-inner-spin-button]:appearance-none',
@@ -515,15 +531,15 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
           />
           <DropdownMenu modal={false}>
             <DropdownMenuTrigger asChild>
-              <button type="button" className={cn(segment, 'shrink-0 border-l whitespace-nowrap')} aria-label={`${unitWord(c.unit ?? 'days')}. Change the unit`}>
-                {unitWord(c.unit ?? 'days')}
+              <button type="button" className={cn(segment, 'shrink-0 border-l whitespace-nowrap')} aria-label={`${unitWord(unit, c.amount, c.op === 'ago')}. Change the unit`}>
+                {unitWord(unit, c.amount, c.op === 'ago')}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" loop className="w-40">
               {unitsFor(c.field).map((u) => (
-                <DropdownMenuItem key={u} role="menuitemradio" aria-checked={u === c.unit} onSelect={() => set({ ...c, unit: u })}>
-                  {unitWord(u)}
-                  <Check className={cn('ml-auto', u !== c.unit && 'invisible')} />
+                <DropdownMenuItem key={u} role="menuitemradio" aria-checked={u === unit} onSelect={() => set({ ...c, unit: u, amount: isAmount(Number(typed), u) ? Number(typed) : undefined })}>
+                  {unitWord(u, c.amount, c.op === 'ago')}
+                  <Check className={cn('ml-auto', u !== unit && 'invisible')} />
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>
@@ -535,6 +551,7 @@ function DatePill({ condition: c, onChange, onRemove }: { condition: DateConditi
           <PopoverTrigger asChild>
             <button
               type="button"
+              data-day
               className={cn(segment, 'shrink-0 border-l whitespace-nowrap', !c.date && 'text-muted-foreground')}
               aria-label={`${c.date ? shortDate(c.date) : 'No day yet'}. Pick a day`}
             >

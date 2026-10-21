@@ -314,9 +314,9 @@ none of them; for `labels` and `subscribers` that is "includes any" and "include
 | Key | Values |
 | --- | --- |
 | `field` | `created` (`created_at`), `updated` (`updated_at`), `completed` (`completed_at`), `due` (`due_date`) |
-| `op` | `within` (in the last `amount` `unit`s), `ago` (more than that long ago), `next` (in the next: due dates), `overdue` (due before today), `before` / `after` (a day: before it starts, after it ends), `empty`, `set` |
-| `amount`, `unit` | for `within`, `ago`, `next`: a whole number from 1, and `hours`, `days`, `weeks` or `months` |
-| `date` | for `before`, `after`: a day, `"2026-10-31"` |
+| `op` | `within` (in the last `amount` `unit`s), `ago` (more than that long ago), `next` (in the next, that day included: `due` only), `overdue` (due before today: `due` only), `before` / `after` (a day: before it starts, after it ends), `empty`, `set` (`completed` and `due` only) |
+| `amount`, `unit` | for `within`, `ago`, `next` only, and both: a whole number from 1 up to ten years of the unit (8760 hours, 3650 days, 520 weeks, 120 months), and `hours`, `days`, `weeks` or `months` (no `hours` on `due`) |
+| `date` | for `before`, `after` only: a day, `"2026-10-31"` |
 
 ```json
 { "statuses": ["done"],
@@ -325,11 +325,20 @@ none of them; for `labels` and `subscribers` that is "includes any" and "include
     { "field": "completed", "op": "within", "amount": 1, "unit": "days" } ] } }
 ```
 
-Times are worked out when a list is shown, against that moment; days are the browser's days (a due date is a plain
-day, the same for everyone). An issue with no completed time or due date never matches a time or a day, only
-`empty`. These fields are not flat keys and have no `values`, so a version before dates (2.14) reads such a condition
-as one from a newer version: it leaves it out (showing more issues, never breaking) and keeps it. The flat copy
-leaves them out too. A condition with an `op` or `unit` this version doesn't know counts as one from a newer version.
+Times are worked out when a list is shown, against that moment (an open list that says "in the last" or
+"overdue" is worked out again every minute); days are the browser's days (a due date is a plain day, the same for
+everyone). An issue with no completed time or due date never matches a time or a day, only `empty`.
+
+The app reads a date condition only when it is exactly one of these: the keys above and no others, an `op` its
+`field` offers, and for that `op` just the amount and unit (in range) or just a day. Anything else (another key, an
+`op` or `unit` it doesn't know, an amount of 0 or 1.5, `"2026-10-31T12:00"`) is from a newer version and is kept as
+it is. So a newer version can add a key, or a new `op`, without an older one misreading it. Only a condition missing
+its amount, unit or day is one still being filled in (the builder's draft; it isn't saved).
+
+These fields are not flat keys and have no `values`, so a version before dates (2.14) reads such a condition as one
+from a newer version, keeps it, and leaves that line out of its group: inside an "and" it shows more issues, inside
+an "or" it may show fewer. This version is stricter: a line it can't read inside an "or" makes the whole "or" let
+every issue through. The flat copy leaves date conditions out.
 
 ```json
 { "statuses": ["in_progress", "in_review"],
@@ -350,7 +359,8 @@ The app writes the simplest shape that says the filter (`src/data/filterTree.ts`
   "or" has no copy.
 
 When `tree` is there it wins and the flat keys are ignored. A condition or group the app can't read (a field or `op`
-from a newer version) is left out of matching and kept as it is when the filter changes. Other keys inside `filters`
+from a newer version) is kept as it is when the filter changes, and says nothing when matching: an "and" leaves it
+out, and an "or" with one lets every issue through (2.14 left it out of the "or" too, which could show fewer). Other keys inside `filters`
 are kept too. An older app that changes a chip changes only the flat keys and keeps `tree`; its "Clear all" removes
 both. Nothing checks the shape in SQL. `move_person` swaps logins inside `assignees`, `subscribers` and `tree` when a
 guest is linked (`swap_login`).

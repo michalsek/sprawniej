@@ -123,7 +123,9 @@ with: Backlog, Paused and Canceled grey, Planned light grey, In progress yellow,
   "or" that switches its group (on a phone, on a short line of its own above the row, so pills keep the width); a
   nested group is a bordered block with a slightly raised background. With filters set, one chip under the toolbar
   reads them as a sentence (names in quiet grey, values in normal text). The builder is a popover on wide screens and a
-  sheet from the bottom on phones.
+  sheet from the bottom on phones. A date filter's pill is field, what it says (a quiet menu with a chevron: "in the
+  last", "before", "is overdue"), then a narrow number box and a unit menu ("7" "days"), or a day that opens a
+  calendar, then ×. A number box that can't be saved yet (empty, 0, 1.5) gets the red ring.
 - **Empty states**: an icon, a short title, one sentence in plain words about what goes here, and one button
   (`src/components/EmptyState.tsx`).
 

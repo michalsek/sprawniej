@@ -5,11 +5,12 @@
  */
 import { Fragment, type ReactNode, type Ref } from 'react'
 import { ListFilter, X } from 'lucide-react'
-import { NEWER_FILTER, describeTree, isCondition, isDateCondition, isGroup } from '@/data/filterTree'
+import { NEWER_FILTER, describeTree, isCondition, isGroup } from '@/data/filterTree'
+import { dateParts, isDateCondition } from '@/data/dateFilters'
 import { useData } from '@/data/store'
 import type { FilterField, FilterGroup, FilterValue, Status } from '@/model/schema'
 import { Button } from '@/ui/button'
-import { dateParts, itemFor, kindOf, pickedOf, sayCondition, upperFirst, useFilterItems, type FilterItems } from './filterKinds'
+import { dayWords, itemFor, kindOf, pickedOf, sayCondition, upperFirst, useFilterItems, type FilterItems } from './filterKinds'
 
 /** a condition's values, short: one shows its icon and name, several show their icons and "4 statuses" */
 export function ValuesLabel({ field, values, items }: { field: FilterField; values: FilterValue[]; items: FilterItems }) {
@@ -80,15 +81,22 @@ function Sentence({ tree, items, statuses, first }: { tree: FilterGroup; items: 
           </span>
         </>
       ) : isDateCondition(n) ? (
-        <>
-          <span className="text-muted-foreground">{dateParts(n)[0]} </span>
-          <span>{dateParts(n)[1]}</span>
-        </>
+        <DateWords parts={dateParts(n, dayWords)} />
       ) : (
         <span className="text-muted-foreground">{first && k === 0 ? upperFirst(NEWER_FILTER) : NEWER_FILTER}</span>
       )}
     </Fragment>
   ))
+}
+
+/** a date line in the sentence: the words quiet, what was picked plain */
+function DateWords({ parts: [words, picked] }: { parts: [string, string] }) {
+  return (
+    <>
+      <span className="text-muted-foreground">{words} </span>
+      <span>{picked}</span>
+    </>
+  )
 }
 
 interface SummaryProps {

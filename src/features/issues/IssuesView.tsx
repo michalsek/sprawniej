@@ -10,7 +10,8 @@ import { toast } from 'sonner'
 import { EmptyState } from '@/components/EmptyState'
 import { Segmented } from '@/components/Segmented'
 import { useDisplay } from '@/data/displays'
-import { FLAT_FIELDS, countConditions, matcher, presetFrom, treeOf, viewFilters } from '@/data/filterTree'
+import { FLAT_FIELDS, countConditions, matcher, movesWithClock, presetFrom, treeOf, viewFilters } from '@/data/filterTree'
+import { useNow } from '@/lib/useNow'
 import { groupIssues, inTab } from '@/data/select'
 import { useData } from '@/data/store'
 import type { Display, FilterField, Filters } from '@/model/schema'
@@ -85,12 +86,17 @@ export function IssuesView({ page, filters, tab = 'all', baseDisplay, left, head
   const kept = useMemo(() => (keptOn.page === page && keptOn.tab === tab ? keptOn.ids : new Set<string>()), [keptOn, page, tab])
   const keep = (ids: string[]) => setKept({ page, tab, ids: new Set([...kept, ...ids]) })
   // (whatever the page's filters say: a dropped card lands in its new column, never vanishes)
+  const pageTree = useMemo(() => treeOf(filters), [filters])
+  // "in the last hour" and "overdue" move with the clock: while a filter says such a thing, the list is worked out
+  // again every minute
+  const minute = useNow(60_000, movesWithClock(pageTree) || movesWithClock(ownTree))
   const shown = useMemo(() => {
-    const ctx = { comments, people, projects, statuses, me }
-    const fits = matcher(treeOf(filters), ctx)
+    // one moment for the whole list
+    const ctx = { comments, people, projects, statuses, me, now: new Date(minute) }
+    const fits = matcher(pageTree, ctx)
     const own = matcher(ownTree, ctx)
     return all.filter((i) => kept.has(i.id) || (fits(i) && own(i) && inTab(i, tab)))
-  }, [all, filters, ownTree, tab, kept, comments, people, projects, statuses, me])
+  }, [all, pageTree, ownTree, tab, kept, comments, people, projects, statuses, me, minute])
   const board = display.layout === 'board'
   // on a team's page, a board offers only that team's projects as places to drop
   const team = filters.teams?.length === 1 ? filters.teams[0] : undefined

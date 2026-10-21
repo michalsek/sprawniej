@@ -6,17 +6,20 @@
  * older versions of the app read it as they always did. Anything else is stored as `tree`, plus the flat keys as a
  * rougher copy for older versions: it may show them more issues, never fewer (`storedFilters`).
  *
- * A condition or group this version can't read (a newer one wrote it) is left out of matching, and kept as it is.
+ * A condition or group this version can't read (a newer one wrote it) is kept as it is, and left out of matching: in
+ * an "and" it lets everything through, and in an "or" the whole group does (so a line from a newer version never
+ * makes a list show fewer issues here).
  *
  * Date conditions ("Created in the last 7 days", src/data/dateFilters.ts) have a shape of their own, with fields
- * older versions don't know: those read them as a filter from a newer version and leave them out, so they show more
- * issues, never fewer. The flat keys can't say them either, so `mirrorOf` leaves them out too.
+ * older versions don't know: those read them as a filter from a newer version and leave that line out. 2.14 leaves
+ * it out of its group, so in an "and" it shows more issues, and in an "or" it may show fewer. The flat keys can't
+ * say them either, so `mirrorOf` leaves them out too.
  */
 import type { Comment, DateCondition, FilterCondition, FilterField, FilterGroup, FilterNode, FilterValue, Filters, Issue, Person, Project, Status } from '@/model/schema'
 import { ME, isFilterField } from '@/model/schema'
 import { equal } from '@/lib/equal'
 import { CATEGORIES, TAB_GROUPS, type IssueCategory, type IssueTab } from '@/model/status'
-import { dateReady, dateTest, isDateCondition } from './dateFilters'
+import { dateReady, dateTest, isDateCondition, movesWithTime } from './dateFilters'
 import { followers } from './notify'
 import { matchesStatus, statusOfProject } from './statuses'
 
@@ -33,8 +36,6 @@ const MANY: ReadonlySet<FilterField> = new Set(['labels', 'subscribers'])
 
 /** one value as a string, to compare values of any kind ("1" and 1 are different) */
 export const valueKey = (v: unknown) => JSON.stringify(v)
-
-export { isDateCondition }
 
 /** a condition this version can read: on values ("Status is Todo") or on a date ("Created in the last 7 days") */
 export type KnownCondition = (FilterCondition & { field: FilterField }) | DateCondition
@@ -194,7 +195,8 @@ type Test = (issue: Issue) => boolean
 
 /**
  * The tree as a test for issues, built once for a whole list. A condition or group that's empty, can't be read, or
- * needs context that wasn't given is left out of its group; a group with nothing left is left out of its own.
+ * needs context that wasn't given says nothing: in an "and" it's left out, and an "or" with one says nothing either
+ * (one choice lets every issue through, so the group does). A group with nothing left is left out of its own.
  */
 export function matcher(tree: FilterGroup, ctx?: MatchContext): Test {
   return compile(tree, ctx, ctx?.now ?? new Date()) ?? (() => true)
@@ -202,7 +204,9 @@ export function matcher(tree: FilterGroup, ctx?: MatchContext): Test {
 
 function compile(n: unknown, ctx: MatchContext | undefined, now: Date): Test | null {
   if (isGroup(n)) {
-    const tests = n.items.map((i) => compile(i, ctx, now)).filter((t): t is Test => !!t)
+    const all = n.items.map((i) => compile(i, ctx, now))
+    if (n.join === 'or' && all.includes(null)) return null
+    const tests = all.filter((t): t is Test => !!t)
     if (tests.length <= 1) return tests[0] ?? null
     return n.join === 'and' ? (i) => tests.every((t) => t(i)) : (i) => tests.some((t) => t(i))
   }
@@ -316,6 +320,9 @@ export function presetFrom(tree: FilterGroup, me?: string): Filters {
   return out
 }
 
+/** the tree has a date line whose meaning moves with the clock ("in the last hour", "overdue") */
+export const movesWithClock = (tree: FilterGroup): boolean => linesOf(tree).some((n) => isDateCondition(n) && dateReady(n) && movesWithTime(n))
+
 /** the whole filter as a sentence ("Status is Todo and (Assignee is Me or Labels include Bug)") */
 export function describeTree(tree: FilterGroup, say: (c: KnownCondition) => string): string {
   return tree.items
@@ -387,9 +394,12 @@ export function alignDraft(draft: FilterGroup, saved: FilterGroup): Aligned {
     const s = savedLines.find((x) => !taken.has(x) && equal(x, d))
     if (s) pair(d, s)
   }
+  // a line's field ("Status", "Created"): value lines and date lines never share one
+  const fieldOf = (x: FilterNode) => (isCondition(x) || isDateCondition(x) ? x.field : undefined)
   for (const d of draftLines) {
-    if (same.has(d) || !isCondition(d)) continue
-    const onField = (x: FilterNode) => isCondition(x) && x.field === d.field
+    const field = fieldOf(d)
+    if (same.has(d) || !field) continue
+    const onField = (x: FilterNode) => fieldOf(x) === field
     const free = savedLines.filter((x) => !taken.has(x) && onField(x))
     if (free.length === 1 && draftLines.filter((x) => !same.has(x) && onField(x)).length === 1) pair(d, free[0])
   }

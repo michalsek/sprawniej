@@ -102,14 +102,26 @@ one, in groups up to three levels deep. These fields come over:
 Linear's app saves each filter as a list of choices inside the field (`assignee: { or: [{ id: { in: [...] } }] }`), and
 a label filter also matches the label's sub-labels (`{ or: [{ name: … }, { parent: { name: … } }] }`); both are read.
 Choices on one field are joined into one line where that means the same ("is Ana" or "is Bob" is "is Ana or Bob").
+Me may be one of the people named, so "me and not Ana" stays two lines (or, inside one field, comes over not exact).
 
 **Dates.** Linear counts from now with ISO-8601 durations (`-P1D` a day ago, `-P2W`, `P1M` in a month, `-PT12H`) or
-names a day. `createdAt`, `updatedAt` and `completedAt` later than `-P1D` become "in the last 1 day", earlier than
-`-P1M` "more than 1 month ago", and `null` "is empty" or "is set". `dueDate` earlier than now is "overdue", earlier
-than `P1W` "overdue, or in the next 1 week". A day becomes "before" or "after" (to the day: "later than Oct 1"
-starts on Oct 2 for a due date, on Oct 1 for a time), and "on" a day becomes "after the day before and before the day
-after". A duration mixing months and days, minutes, a time in the future for created, updated or completed, and a due
-date later than a day in the past (which takes in the future too, kept as "in the last" but not exact) don't fit.
+names a day. Only lines the builder can show come over (see docs/data-format.md, dates in the tree).
+
+- `createdAt`, `updatedAt` and `completedAt` later than `-P1D` become "in the last 1 day", earlier than `-P1M`
+  "more than 1 month ago", and `null` "is empty" or "is set". Earlier than a time to come is any time at all (for
+  `completedAt`: "is set").
+- `dueDate` is a day, and "in the next 7 days" takes in the 7th, so "earlier than" and "up to" differ by a day:
+  earlier than now is "overdue", up to `P7D` "overdue, or in the next 7 days", earlier than `P7D` "overdue, or in the
+  next 6 days"; earlier than `-P3D` is "more than 3 days ago", up to `-P3D` "more than 2 days ago". Where no line says
+  it to the day (up to today: "overdue, or in the next 1 day" takes in tomorrow; earlier than `P1M`), it comes over
+  near enough and not exact. Hours count only as whole days.
+- A day becomes "before" or "after". A due date is the day written ("later than Oct 1" starts on Oct 2). A time is
+  the day it falls on in your time zone when you import: 2026-09-30T22:00:00Z imported in Warsaw is the start of
+  Oct 1, so "from then on" is "after Sep 30", exactly. A time in the middle of a day takes in that whole day, and one
+  moment ("on" a time) becomes that whole day; both are near enough, not exact.
+- A duration mixing months and days, minutes, more than ten years, a time in the future for created, updated or
+  completed, and a due date later than a day in the past (which takes in the future too, kept as "in the last" but
+  not exact) don't fit.
 
 **What can't come over** is left out: cycles, estimates, text search, who made it, `canceledAt` and other dates,
 "has a label that isn't Bug", groups deeper than three levels, and a person set to "No one" ("assigned to Bob" can't

@@ -258,7 +258,7 @@ export type FilterValue = FilterCondition['values'][number]
 /**
  * What a date condition can look at: when an issue was created, last changed or finished, and its due day. These
  * are not FILTER_FIELDS on purpose: a version from before date filters (2.14) reads such a condition as one from a
- * newer version and leaves it out, so it shows more issues, never breaks.
+ * newer version and leaves that line out. In an "and" that shows more issues; in an "or" it may show fewer.
  */
 export const DATE_FIELDS = ['created', 'updated', 'completed', 'due'] as const
 export type DateField = (typeof DATE_FIELDS)[number]

@@ -7,7 +7,8 @@ import { CalendarClock, Triangle, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Calendar } from '@/ui/calendar'
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover'
-import { addDays, dayName, dueTone, estimateName, fromDay, shortDate, toDay } from './format'
+import { fromDay, toDay } from '@/lib/days'
+import { addDays, dayName, dueTone, estimateName, shortDate } from './format'
 
 /** the next Monday, or the one after if today is Monday */
 function nextMonday(): string {
