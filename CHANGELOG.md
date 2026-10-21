@@ -4,6 +4,11 @@ Versions are `MAJOR.MINOR.PATCH`: major = the database changes in a way older ve
 you work changes; minor = a new feature; patch = fixes and polish. Written from `src/version.ts` by
 `bun scripts/changelog.ts`.
 
+## 2.19.3: No empty space under long boards
+*2026-10-21*
+
+- A board with a long column no longer leaves a big empty space below it
+
 ## 2.19.2: Steady side panel
 *2026-10-21*
 
