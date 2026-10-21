@@ -8,6 +8,9 @@ import { ImportProblem } from '@/backend/importRows'
 import { prepareImport } from '@/features/import/prepareImport'
 import { projectStatusIdOf, sampleProjectStatuses } from './fixtures/sample'
 import { linearFixture as data } from './fixtures/linear'
+import { duration, mapViewFilter, type FilterContext } from '@/features/import/linearFilters'
+import { matcher } from '@/data/filterTree'
+import { ME, type DateCondition, type FilterCondition, type FilterGroup, type FilterNode } from '@/model/schema'
 
 const person = (login: string, name: string) => ({ login, githubId: 1, name, avatarUrl: '' })
 const people = [person('ana-n', 'Ana Nowak'), person('bstone', 'Robert'), person('mikolaj', 'Mikołaj Pocheć')]
@@ -238,7 +241,18 @@ describe('building the import', () => {
     expect(byName('Open bugs')).toMatchObject({ team: 'ENG', emoji: '🐞', owner: 'ana-n', description: 'Bugs still to fix', filters: { statuses: ['todo', 'in_progress', 'in_review'], labels: [bug] } })
     expect(byName('Bob’s urgent work')).toMatchObject({ team: null, owner: 'bstone', filters: { assignees: ['bstone'], priorities: [1, 2], teams: ['ENG'], statuses: ['in_review'] } })
     expect(byName('Nobody’s').filters).toEqual({ assignees: [null] })
-    expect(byName('Recent launch work').filters).toEqual({ projects: [r.projects[0].id] })
+    // not done, made in the last two weeks, in Launch: older versions read only the project; the estimate stays behind
+    expect(byName('Recent launch work').filters).toEqual({
+      projects: [r.projects[0].id],
+      tree: {
+        join: 'and',
+        items: [
+          { field: 'statuses', op: 'not', values: ['done'] },
+          { field: 'created', op: 'within', amount: 2, unit: 'weeks' },
+          { field: 'projects', op: 'is', values: [r.projects[0].id] },
+        ],
+      },
+    })
     expect(byName('Recent launch work').owner).toBe('mikolaj') // matched to no one: you
     expect(r.inexactViews).toEqual(['Recent launch work'])
   })
@@ -767,5 +781,230 @@ describe('project statuses', () => {
     const r = run(data, choices, { ...empty(), statuses, projects: { mine } })
     expect(r.projects[0]).toMatchObject({ name: 'Launch', status: 'in_progress', statusId: projectStatusIdOf('in_progress') })
     expect(r.projects[0].sortOrder! > mine.sortOrder!).toBe(true)
+  })
+})
+
+describe('view filters as a tree', () => {
+  // Cat is matched to no one
+  const fctx: FilterContext = {
+    states: new Map([
+      ['s-todo', { id: 's-todo', name: 'Todo', type: 'unstarted' }],
+      ['s-review', { id: 's-review', name: 'In Review', type: 'started' }],
+    ]),
+    person: (id) => ({ 'u-ana': 'ana-n', 'u-bob': 'bstone' })[id],
+    labels: data.labels,
+    label: (l) => `id-${l.id}`,
+    labelHere: () => undefined,
+    project: (id) => (id === 'p-launch' ? 'launch' : undefined),
+    team: (x) => (x === 't-eng' || x === 'ENG' ? 'ENG' : undefined),
+  }
+  const map = (f: unknown, teamView = false) => mapViewFilter(f, fctx, { teamView })
+  const is = (field: string, ...values: FilterCondition['values']): FilterCondition => ({ field, op: 'is', values })
+  const not = (field: string, ...values: FilterCondition['values']): FilterCondition => ({ field, op: 'not', values })
+  const date = (field: DateCondition['field'], op: DateCondition['op'], more: Partial<DateCondition> = {}): DateCondition => ({ field, op, ...more })
+  const and = (...items: FilterNode[]): FilterGroup => ({ join: 'and', items })
+  const or = (...items: FilterNode[]): FilterGroup => ({ join: 'or', items })
+  const open = ['done', 'canceled', 'duplicate']
+  const bugs = ['id-l-bug', 'id-l-bug2']
+
+  test('“Completed (1D)”: finished in the last day', () => {
+    const plain = map({ completedAt: { gt: '-P1D' } })
+    expect(plain).toMatchObject({ tree: and(date('completed', 'within', { amount: 1, unit: 'days' })), exact: true, nothing: false })
+    // older versions can't say it: they get no flat keys, and show every issue
+    expect(plain.filters).toEqual({ tree: plain.tree })
+    const done = map({ and: [{ state: { type: { eq: 'completed' } } }, { completedAt: { gte: '-PT24H' } }] })
+    expect(done).toMatchObject({ tree: and(is('statuses', 'done'), date('completed', 'within', { amount: 24, unit: 'hours' })), exact: true })
+    expect(done.filters).toEqual({ statuses: ['done'], tree: done.tree })
+    // it finds what was finished yesterday, not last week
+    const now = new Date(2026, 9, 21, 12)
+    const fits = matcher(plain.tree, { comments: {}, people: {}, now })
+    const at = (completedAt: string | null) => ({ ...native(1), completedAt })
+    expect(fits(at(new Date(2026, 9, 20, 18).toISOString()))).toBe(true)
+    expect(fits(at(new Date(2026, 9, 14).toISOString()))).toBe(false)
+    expect(fits(at(null))).toBe(false)
+  })
+
+  test('“Active Tasks”: not finished, mine', () => {
+    const r = map({ and: [{ state: { type: { nin: ['completed', 'canceled'] } } }, { assignee: { isMe: { eq: true } } }] })
+    expect(r).toMatchObject({ tree: and(not('statuses', ...open), is('assignees', ME)), exact: true, nothing: false })
+    expect(r.filters).toEqual({ tree: r.tree })
+    // the way Linear's app lists choices inside the field
+    const app = map({ and: [{ state: { or: [{ type: { in: ['unstarted', 'started'] } }] } }, { assignee: { or: [{ isMe: { eq: true } }] } }] })
+    expect(app.tree).toEqual(and(is('statuses', 'todo', 'in_progress', 'in_review'), is('assignees', ME)))
+    expect(app.filters).toEqual({ statuses: ['todo', 'in_progress', 'in_review'], tree: app.tree })
+    expect(map({ assignee: { isMe: { eq: false } } }).tree).toEqual(and(not('assignees', ME)))
+  })
+
+  test('“Pickables”: nobody’s, not finished, urgent or a bug', () => {
+    const r = map({
+      and: [
+        { state: { type: { nin: ['completed', 'canceled'] } } },
+        { assignee: { null: true } },
+        { or: [{ priority: { lte: 2, neq: 0 } }, { labels: { some: { name: { eq: 'Bug' } } } }] },
+      ],
+    })
+    expect(r).toMatchObject({ tree: and(not('statuses', ...open), is('assignees', null), or(is('priorities', 1, 2), is('labels', ...bugs))), exact: true })
+    expect(r.filters).toEqual({ assignees: [null], tree: r.tree })
+    // the example from Linear's filters, all of it
+    const all = map({
+      and: [
+        { state: { type: { nin: ['completed', 'canceled'] } } },
+        { completedAt: { gt: '-P1D' } },
+        { assignee: { null: true } },
+        { assignee: { isMe: { eq: true } } },
+        { or: [{ priority: { eq: 1 } }, { labels: { some: { name: { eq: 'Bug' } } } }] },
+      ],
+    })
+    // nobody's and mine can't both be true: said as two conditions, so it shows nothing, as in Linear
+    expect(all.tree).toEqual(
+      and(not('statuses', ...open), date('completed', 'within', { amount: 1, unit: 'days' }), is('assignees', null), is('assignees', ME), or(is('priorities', 1), is('labels', ...bugs))),
+    )
+    expect(all.exact).toBe(true)
+  })
+
+  test('“is not”, “is set” and “is empty”', () => {
+    expect(map({ assignee: { id: { neq: 'u-bob' } } }).tree).toEqual(and(not('assignees', 'bstone')))
+    expect(map({ assignee: { null: false } }).tree).toEqual(and(not('assignees', null)))
+    expect(map({ project: { null: false } }).tree).toEqual(and(not('projects', null)))
+    expect(map({ project: { id: { nin: ['p-launch'] } } }).tree).toEqual(and(not('projects', 'launch')))
+    expect(map({ priority: { nin: [0] } }).tree).toEqual(and(not('priorities', 0)))
+    expect(map({ team: { key: { neq: 'ENG' } } }).tree).toEqual(and(not('teams', 'ENG')))
+    expect(map({ labels: { none: { id: { in: ['l-bug'] } } } }).tree).toEqual(and(not('labels', 'id-l-bug')))
+    expect(map({ labels: { every: { name: { neq: 'Bug' } } } }).tree).toEqual(and(not('labels', ...bugs)))
+    expect(map({ subscribers: { none: { id: { eq: 'u-ana' } } } }).tree).toEqual(and(not('subscribers', 'ana-n')))
+    // "has a label that isn't Bug" isn't "doesn't have Bug"
+    expect(map({ labels: { some: { name: { neq: 'Bug' } } } })).toMatchObject({ exact: false, nothing: true })
+    // a status and a person, "is not" both
+    const r = map({ state: { id: { neq: 's-review' } }, assignee: { id: { nin: ['u-ana', 'u-bob'] } } })
+    expect(r).toMatchObject({ tree: and(not('statuses', 'in_review'), not('assignees', 'ana-n', 'bstone')), exact: true })
+  })
+
+  test('labels: from a group, both of two, and a group’s own name', () => {
+    expect(map({ labels: { parent: { name: { eq: 'Area' } } } }).tree).toEqual(and(is('labels', 'id-l-charts')))
+    // one label from each: two conditions (an issue can have both)
+    const two = map({ labels: { and: [{ name: { eq: 'Bug' } }, { name: { eq: 'Charts' } }] } })
+    expect(two).toMatchObject({ tree: and(is('labels', ...bugs), is('labels', 'id-l-charts')), exact: true })
+    // either: one condition
+    expect(map({ labels: { or: [{ name: { eq: 'Bug' } }, { name: { eq: 'Charts' } }] } }).tree).toEqual(and(is('labels', ...bugs, 'id-l-charts')))
+    // a group's own name is on no issue; with its sub-labels it's those
+    expect(map({ labels: { or: [{ name: { eq: 'Area' } }, { parent: { name: { eq: 'Area' } } }] } })).toMatchObject({ tree: and(is('labels', 'id-l-charts')), exact: true })
+  })
+
+  test('people matched to no one', () => {
+    // "assigned to Cat" can't be "assigned to nobody": it goes, and with nothing else the view stays in Linear
+    expect(map({ assignee: { id: { eq: 'u-cat' } } })).toMatchObject({ exact: false, nothing: true })
+    expect(map({ and: [{ assignee: { id: { eq: 'u-cat' } } }, { priority: { eq: 1 } }] })).toMatchObject({ tree: and(is('priorities', 1)), exact: false, nothing: false })
+    // "not Cat" goes too (it shows more issues)
+    expect(map({ assignee: { id: { neq: 'u-cat' } } })).toMatchObject({ exact: false, nothing: true })
+    expect(map({ and: [{ assignee: { id: { neq: 'u-cat' } } }, { priority: { eq: 1 } }] })).toMatchObject({ tree: and(is('priorities', 1)), exact: false })
+    // one of several: the others stay
+    expect(map({ assignee: { id: { in: ['u-cat', 'u-bob'] } } })).toMatchObject({ tree: and(is('assignees', 'bstone')), exact: false })
+    expect(map({ assignee: { id: { nin: ['u-cat', 'u-bob'] } } })).toMatchObject({ tree: and(not('assignees', 'bstone')), exact: false })
+    // in an "or" leaving it out shows fewer issues; still reported
+    expect(map({ or: [{ assignee: { id: { eq: 'u-cat' } } }, { priority: { eq: 1 } }] })).toMatchObject({ tree: and(is('priorities', 1)), exact: false, nothing: false })
+    expect(map({ subscribers: { some: { id: { eq: 'u-cat' } } } })).toMatchObject({ exact: false, nothing: true })
+  })
+
+  test('assigned or subscribed is “follows it”; with other people it stays an “or”', () => {
+    expect(map({ or: [{ assignee: { isMe: { eq: true } } }, { subscribers: { some: { isMe: { eq: true } } } }] })).toMatchObject({ tree: and(is('subscribers', ME)), exact: true })
+    expect(map({ or: [{ assignee: { id: { eq: 'u-ana' } } }, { subscribers: { id: { eq: 'u-bob' } } }] })).toMatchObject({
+      tree: or(is('assignees', 'ana-n'), is('subscribers', 'bstone')),
+      exact: true,
+    })
+  })
+
+  test('groups: across fields, flattened where it means the same, deeper ones left out', () => {
+    // nested "and"s are one
+    expect(map({ and: [{ and: [{ and: [{ and: [{ priority: { eq: 1 } }] }] }, { project: { null: true } }] }] })).toMatchObject({
+      tree: and(is('priorities', 1), is('projects', null)),
+      exact: true,
+    })
+    // choices on one field join up, so the groups get shallower
+    const merged = map({ or: [{ priority: { eq: 1 } }, { and: [{ labels: { some: { id: { eq: 'l-bug' } } } }, { or: [{ assignee: { isMe: { eq: true } } }, { or: [{ assignee: { id: { eq: 'u-ana' } } }, { assignee: { id: { eq: 'u-bob' } } }] }] }] }] })
+    expect(merged).toMatchObject({ tree: or(is('priorities', 1), and(is('labels', 'id-l-bug'), is('assignees', ME, 'ana-n', 'bstone'))), exact: true })
+    // four levels: the deepest group goes
+    const deep = map({
+      or: [{ priority: { eq: 1 } }, { and: [{ labels: { some: { id: { eq: 'l-bug' } } } }, { or: [{ assignee: { isMe: { eq: true } } }, { and: [{ project: { null: true } }, { team: { key: { eq: 'ENG' } } }] }] }] }],
+    })
+    expect(deep).toMatchObject({ tree: or(is('priorities', 1), and(is('labels', 'id-l-bug'), is('assignees', ME))), exact: false, nothing: false })
+    // an empty "or" (Linear's app saves one now and then) says nothing
+    expect(map({ and: [{ or: [] }] })).toMatchObject({ tree: and(), exact: true, nothing: false })
+  })
+
+  test('dates, from now and from a day', () => {
+    expect(map({ createdAt: { gt: '-P2W' } }).tree).toEqual(and(date('created', 'within', { amount: 2, unit: 'weeks' })))
+    expect(map({ createdAt: { gt: '-P1Y' } }).tree).toEqual(and(date('created', 'within', { amount: 12, unit: 'months' })))
+    expect(map({ updatedAt: { lt: '-P1M' } }).tree).toEqual(and(date('updated', 'ago', { amount: 1, unit: 'months' })))
+    // between a week and a day ago
+    expect(map({ updatedAt: { gt: '-P1W', lt: '-P1D' } }).tree).toEqual(and(date('updated', 'within', { amount: 1, unit: 'weeks' }), date('updated', 'ago', { amount: 1, unit: 'days' })))
+    expect(map({ completedAt: { null: true } }).tree).toEqual(and(date('completed', 'empty')))
+    expect(map({ dueDate: { null: false } }).tree).toEqual(and(date('due', 'set')))
+    expect(map({ dueDate: { lt: 'P0D' } }).tree).toEqual(and(date('due', 'overdue')))
+    expect(map({ dueDate: { lte: 'P1W' } })).toMatchObject({ tree: or(date('due', 'overdue'), date('due', 'next', { amount: 1, unit: 'weeks' })), exact: true })
+    expect(map({ dueDate: { lt: '-P3D' } }).tree).toEqual(and(date('due', 'ago', { amount: 3, unit: 'days' })))
+    // a due date is a day: later than Oct 1 starts on Oct 2
+    expect(map({ dueDate: { gt: '2026-10-01' } }).tree).toEqual(and(date('due', 'after', { date: '2026-10-01' })))
+    expect(map({ dueDate: { gte: '2026-10-01' } }).tree).toEqual(and(date('due', 'after', { date: '2026-09-30' })))
+    expect(map({ dueDate: { lte: '2026-10-31' } }).tree).toEqual(and(date('due', 'before', { date: '2026-11-01' })))
+    // a time later than midnight on Oct 1 is on Oct 1 or after
+    expect(map({ createdAt: { gte: '2026-10-01T00:00:00.000Z', lt: '2026-11-01' } })).toMatchObject({
+      tree: and(date('created', 'after', { date: '2026-09-30' }), date('created', 'before', { date: '2026-11-01' })),
+      exact: true,
+    })
+    expect(map({ createdAt: { eq: '2026-10-01' } }).tree).toEqual(and(date('created', 'after', { date: '2026-09-30' }), date('created', 'before', { date: '2026-10-02' })))
+    // a time in the middle of a day is near enough, but not exact
+    expect(map({ createdAt: { lt: '2026-10-01T15:30:00Z' } })).toMatchObject({ tree: and(date('created', 'before', { date: '2026-10-01' })), exact: false })
+    // due later than a day ago takes in the future too: kept, not exact
+    expect(map({ dueDate: { gt: '-P1D' } })).toMatchObject({ tree: and(date('due', 'within', { amount: 1, unit: 'days' })), exact: false })
+    // what can't be said
+    expect(map({ createdAt: { gt: 'P1D' } })).toMatchObject({ exact: false, nothing: true })
+    expect(map({ createdAt: { gt: '-P1M2D' } })).toMatchObject({ exact: false, nothing: true })
+    expect(map({ createdAt: { neq: '2026-10-01' } })).toMatchObject({ exact: false, nothing: true })
+    expect(map({ canceledAt: { gt: '-P1D' } })).toMatchObject({ exact: false, nothing: true })
+  })
+
+  test('Linear’s durations', () => {
+    expect(duration('-P1D')).toEqual({ amount: 1, unit: 'days', sign: -1 })
+    expect(duration('P-2W')).toEqual({ amount: 2, unit: 'weeks', sign: -1 })
+    expect(duration('P1W2D')).toEqual({ amount: 9, unit: 'days', sign: 1 })
+    expect(duration('P1M')).toEqual({ amount: 1, unit: 'months', sign: 1 })
+    expect(duration('-PT12H')).toEqual({ amount: 12, unit: 'hours', sign: -1 })
+    expect(duration('P1DT2H')).toEqual({ amount: 26, unit: 'hours', sign: 1 })
+    expect(duration('P0D')).toEqual({ amount: 0, unit: 'days', sign: 0 })
+    for (const bad of ['PT90M', 'P1M2D', 'P', 'PT', '1D', '2026-10-01', 7]) expect(duration(bad)).toBeNull()
+  })
+
+  test('what can’t come over: one thing goes, a view with nothing left stays in Linear', () => {
+    expect(map({ and: [{ cycle: { number: { eq: 3 } } }, { priority: { eq: 1 } }] })).toMatchObject({ tree: and(is('priorities', 1)), exact: false, nothing: false })
+    expect(map({ searchableContent: { contains: 'logo' } })).toMatchObject({ exact: false, nothing: true })
+    expect(map({ estimate: { gte: 3 } })).toMatchObject({ exact: false, nothing: true })
+    // a view with no filter at all shows everything, in Linear too
+    expect(map({})).toMatchObject({ tree: and(), exact: true, nothing: false })
+  })
+
+  test('a team’s view leaves out “team is” at the top', () => {
+    const f = { and: [{ team: { key: { eq: 'ENG' } } }, { priority: { eq: 1 } }] }
+    expect(map(f, true).filters).toEqual({ priorities: [1] })
+    expect(map(f).filters).toEqual({ teams: ['ENG'], priorities: [1] })
+    expect(map({ team: { id: { eq: 't-eng' } } }, true)).toMatchObject({ tree: and(), exact: true, nothing: false })
+  })
+
+  test('running it again moves an imported view onto the tree', () => {
+    const first = run()
+    const ws = apply(empty(), first)
+    const launch = Object.values(ws.views!).find((x) => x.name === 'Recent launch work')!
+    // as an import from before the tree saved it
+    const before = { ...ws, views: { ...ws.views, [launch.id]: { ...launch, filters: { projects: launch.filters.projects } } } }
+    const again = run(data, choices, before, '2026-03-02T00:00:00.000Z')
+    expect(again.views.map((v) => v.id)).toEqual([launch.id])
+    expect(again.views[0].filters).toEqual(launch.filters)
+    expect(again.views[0].filters.tree).toBeDefined()
+    // and its filter changing in Linear changes it here
+    const completed = { ...data, views: data.views!.map((v) => (v.id === 'v-fuzzy' ? { ...v, name: 'Completed (1D)', filterData: { completedAt: { gt: '-P1D' } } } : v)) }
+    const third = run(completed, choices, apply(before, again), '2026-03-03T00:00:00.000Z')
+    expect(third.views).toHaveLength(1)
+    expect(third.views[0]).toMatchObject({ id: launch.id, name: 'Completed (1D)', filters: { tree: and(date('completed', 'within', { amount: 1, unit: 'days' })) } })
+    expect(third.views[0].filters.projects).toBeUndefined()
+    expect(third.inexactViews).not.toContain('Completed (1D)')
   })
 })

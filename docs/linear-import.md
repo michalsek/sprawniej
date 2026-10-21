@@ -83,26 +83,45 @@ Views of the picked teams come over, plus workspace views. The key's owner sees 
 those come over as well; a view here is shared with everyone. The icon becomes the view's emoji when it is one (🔎
 otherwise), and the owner is the matched person.
 
-A view's filters come over when they say "is" or "is any of" about these, joined with "and":
+A view's filter becomes a filter tree (docs/data-format.md, `filters.tree`): "is", "is any of", "is not" (`neq`,
+`nin`), "is set" (`null: false`) and "is empty" (`null: true`), joined with "and" and "or" across fields and inside
+one, in groups up to three levels deep. These fields come over:
 
 | Linear filter | Sprawniej filter |
 | --- | --- |
 | Status (a state, by id or name, or a type such as "started") | Status (a type brings every status of that kind) |
-| Assignee (a person, or "no assignee") | Assignee; someone set to "No one" can't come over |
-| Subscribers | Subscribers: people following the issue (who made it, are assigned, commented, were mentioned or subscribed) |
-| "Assigned to Jan" or "Jan is subscribed" | Subscribers: Jan (people follow what they're assigned to) |
-| Priority | Priority |
-| Labels (a label, or every label in a group) | Labels. Labels a view needs come over even if no issue uses them yet. |
+| Assignee (a person, "me" (`isMe`), or "no assignee") | Assignee (Me stays Me: whoever is looking); someone set to "No one" can't come over |
+| Subscribers (`some`, `none`, or right on the field) | Subscribers: people following the issue (who made it, are assigned, commented, were mentioned or subscribed) |
+| "Assigned to Jan" or "Jan is subscribed" | Subscribers: Jan (people follow what they're assigned to); with different people on each side, an "or" of both |
+| Priority (also "more urgent than", `lt` / `gt`) | Priority |
+| Labels (a label, every label in a group, `some`, `none`) | Labels. Labels a view needs come over even if no issue uses them yet. |
 | Project (a project, or "no project") | Project |
-| Team (on a workspace view) | Team |
+| Team | Team (left out at the top of a team's view: the view is about that team already) |
+| Created, updated, completed, due date | Dates (see below) |
 
 Linear's app saves each filter as a list of choices inside the field (`assignee: { or: [{ id: { in: [...] } }] }`), and
 a label filter also matches the label's sub-labels (`{ or: [{ name: … }, { parent: { name: … } }] }`); both are read.
+Choices on one field are joined into one line where that means the same ("is Ana" or "is Bob" is "is Ana or Bob").
 
-Anything else is left out: "is not", other "or"s across different fields, dates, cycles, creator, text search and
-so on. The view still comes over with the rest of its filters, so it may not show quite the same issues as in
-Linear. If none of a view's filters can come over, the view stays in Linear instead of arriving as a view that shows
-every issue (and a view an earlier import made for it is removed). The check step names both kinds of views.
+**Dates.** Linear counts from now with ISO-8601 durations (`-P1D` a day ago, `-P2W`, `P1M` in a month, `-PT12H`) or
+names a day. `createdAt`, `updatedAt` and `completedAt` later than `-P1D` become "in the last 1 day", earlier than
+`-P1M` "more than 1 month ago", and `null` "is empty" or "is set". `dueDate` earlier than now is "overdue", earlier
+than `P1W` "overdue, or in the next 1 week". A day becomes "before" or "after" (to the day: "later than Oct 1"
+starts on Oct 2 for a due date, on Oct 1 for a time), and "on" a day becomes "after the day before and before the day
+after". A duration mixing months and days, minutes, a time in the future for created, updated or completed, and a due
+date later than a day in the past (which takes in the future too, kept as "in the last" but not exact) don't fit.
+
+**What can't come over** is left out: cycles, estimates, text search, who made it, `canceledAt` and other dates,
+"has a label that isn't Bug", groups deeper than three levels, and a person set to "No one" ("assigned to Bob" can't
+become "assigned to nobody"; "not Bob" goes too). Leaving something out of an "and" shows more issues, out of an "or"
+fewer; either way the view still comes over with the rest of its filters, and the check step lists it as one that
+may not show quite the same issues as in Linear. If none of a view's filters can come over, the view stays in Linear
+instead of arriving as a view that shows every issue (and a view an earlier import made for it is removed). The check
+step names both kinds of views.
+
+The view keeps the tree, with the flat keys as a rougher copy for older versions of the app (`storedFilters`); a
+filter the flat keys can say exactly is kept as just those. Running the import again replaces an imported view's
+filters with what Linear has now, also moving a view an older import saved flat onto the tree.
 
 `src/features/import/linearFilters.ts` does the filter mapping (tested in `tests/linearImport.test.ts`). If reading
 views from Linear fails, the import goes on without them and says so.

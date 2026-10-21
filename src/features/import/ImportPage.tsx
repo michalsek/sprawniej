@@ -405,8 +405,8 @@ export function ImportPage() {
           <div className="mt-5 text-sm text-muted-foreground">
             <p>
               {result.skippedViews.length === 1 ? 'One view stays' : `${result.skippedViews.length} views stay`} in Linear: none of {result.skippedViews.length === 1 ? 'its' : 'their'} filters can
-              come over (like “is not”, dates, or people you set to “No one”), and without them {result.skippedViews.length === 1 ? 'it' : 'they'} would show
-              every issue.
+              come over (like cycles, estimates, searching the text, or a person you set to “No one”), and without them{' '}
+              {result.skippedViews.length === 1 ? 'it' : 'they'} would show every issue.
             </p>
             <p className="mt-1 text-foreground/80">{result.skippedViews.map((n) => `“${n}”`).join(', ')}</p>
           </div>

@@ -59,7 +59,7 @@ export const linearFixture: LinearData = {
     { id: 'v-bob', name: 'Bob’s urgent work', description: null, icon: null, shared: true, team: null, owner: { id: 'u-bob' }, createdAt: '2026-01-05T00:00:00.000Z',
       filterData: { assignee: { id: { eq: 'u-bob' } }, priority: { in: [1, 2] }, team: { key: { eq: 'ENG' } }, state: { id: { eq: 's-review' } } } },
     { id: 'v-fuzzy', name: 'Recent launch work', description: null, icon: null, shared: true, team: { id: 't-eng' }, owner: { id: 'u-old' }, createdAt: '2026-01-05T00:00:00.000Z',
-      filterData: { state: { type: { neq: 'completed' } }, createdAt: { gt: 'P-2W' }, project: { id: { eq: 'p-launch' } } } },
+      filterData: { state: { type: { neq: 'completed' } }, createdAt: { gt: 'P-2W' }, project: { id: { eq: 'p-launch' } }, estimate: { gte: 3 } } },
     { id: 'v-free', name: 'Nobody’s', description: null, icon: null, shared: false, team: { id: 't-eng' }, owner: null, createdAt: '2026-01-05T00:00:00.000Z',
       filterData: { assignee: { null: true } } },
     // the way Linear's app saves them: choices listed inside each field, labels matching their sub-labels too

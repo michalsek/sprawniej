@@ -668,14 +668,14 @@ export function buildImport(data: LinearData, choices: ImportChoices, ws: Existi
   for (const v of linear.views ?? []) {
     if (v.team && !teamIds.has(v.team.id)) continue
     const old = viewsByLinear.get(v.id)
-    const { filters, exact, nothing } = mapViewFilter(v.filterData, ctx)
+    // a team's view is about that team already: a "team is" at its top says nothing more
+    const { filters, exact, nothing } = mapViewFilter(v.filterData, ctx, { teamView: !!v.team })
     if (nothing) {
       // it would show every issue, which is worse than no view: leave it out (and drop what an earlier import made)
       out.skippedViews.push(v.name)
       if (old) out.removedViews.push(old.id)
       continue
     }
-    if (v.team) delete filters.teams // a team's view is about that team already
     const view = {
       ...old,
       id: old?.id ?? newId(),
